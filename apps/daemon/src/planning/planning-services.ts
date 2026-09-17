@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import {
-  applyApprovalCommand, decideApprovalAuthority, grantHumanAuthority, reducePlanningRun,
+  applyApprovalCommand, decideApprovalAuthority, reducePlanningRun,
 } from "@moe/core";
 import type {
   HumanAuthorityGate,
@@ -22,7 +22,6 @@ import type {
   CommandHandler,
   HandlerContext,
   HandlerTable,
-  HumanReviewWitness,
   ServiceOutcome,
 } from "../bootstrap/bootstrap-ledger.js";
 import { activateInitialGraph } from "./approval-activation.js";
@@ -34,6 +33,7 @@ import {
 } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
 import { verifyApprovedRunBinding } from "./approval-run-binding.js";
+import { operatorReviewAuthority } from "./operator-review-authority.js";
 import {
   callerSuppliedAuthorityBodies,
   classifyPlanningChain,
@@ -115,7 +115,7 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
    * THE OPTIMISTIC FENCE'S OBSERVATION, TAKEN ONCE AT HANDLER ENTRY.
    *
    * `readDurableLedger` keys `aggregates` by `decision.targetAggregateId`
-   * (bootstrap-ledger.ts:96-117), so a run minted as somebody ELSE'S SECONDARY leg is invisible
+   * (bootstrap-ledger.ts:90-111), so a run minted as somebody ELSE'S SECONDARY leg is invisible
    * to it: `versionOf` answers 0 forever while the store observes its real head. That is exactly
    * a REVISION successor, which `commitIntentRejection` commits as an `extraLegs` leg of the
    * REJECTED run's decision — its head is 1 and the ledger reads 0, so a propose fenced on
@@ -198,37 +198,6 @@ interface DurableRun {
   /** The whole durable record, carried so the run binding reads the SAME fold this gate did. */
   readonly record: JsonValue;
   readonly submissionHash: string;
-}
-
-/**
- * The operator's own dispatch IS the human review the policy is waiting for.
- *
- * Reached only when `decideApprovalAuthority` refused at the APPROVAL_POLICY
- * layer for want of a human AND the composition root attached a server-assembled
- * {@link HumanReviewWitness} — evidence that the AUTHENTICATED principal on this
- * very request is the configured operator, the same human seat
- * OPERATOR_PRINCIPAL_KINDS reserves `approval.decide` for. A gate-layer refusal
- * never reaches here: an explicit GO gate on the run outranks any click.
- *
- * The grant is minted from the witness through the core's own
- * `grantHumanAuthority` — never from caller bytes — and the verdict is then
- * RE-DERIVED by handing the granted gate back to `decideApprovalAuthority`,
- * which consults the gate first by construction. This module decides nothing
- * about the grant's validity; the kernel does, both ways.
- */
-function operatorReviewAuthority(
-  witness: HumanReviewWitness,
-  runId: string,
-  decidedAt: string,
-  policy: ReturnType<typeof readApprovalPolicySettings>,
-): ReturnType<typeof decideApprovalAuthority> {
-  const granted = grantHumanAuthority(
-    { gateId: `approval-review:${runId}`, grant: null, workRef: runId },
-    { kind: "HUMAN", principalId: witness.principalId },
-    Date.parse(decidedAt),
-  );
-  if (!granted.ok) return granted;
-  return decideApprovalAuthority({ gate: granted.gate, policy });
 }
 
 /**

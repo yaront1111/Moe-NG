@@ -93,9 +93,9 @@ export interface DispatchEffortInput {
 }
 
 /**
- * One live attachment is one operator's session — `live-app.tsx` states that the live
- * attachment is a single daemon workspace — so the account of what that operator had to
- * do is held once, here, rather than rebuilt per render and lost on every repaint.
+ * One live attachment is one operator's session — `v2/cordum-app.tsx` attaches exactly
+ * one daemon workspace per page — so the account of what that operator had to do is
+ * held once, here, rather than rebuilt per render and lost on every repaint.
  */
 const collector = createEffortCollector();
 const refusals: LiveEffortRefusal[] = [];

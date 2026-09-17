@@ -1,7 +1,7 @@
 import { Fragment, useId, useState } from "react";
 import type { JSX } from "react";
 
-import { MIDDOT } from "../glyphs.js";
+import { ELLIPSIS, MIDDOT } from "../glyphs.js";
 
 /**
  * STATEMENT ROSTERS THAT MOUNT BY GROUP, NOT BY STATEMENT.
@@ -34,7 +34,6 @@ import { MIDDOT } from "../glyphs.js";
 
 export const FLAT_LIMIT = 20;
 export const CHUNK_SIZE = 25;
-const ELLIPSIS = "…";
 
 /**
  * The family of an identifier is everything before its last `-` segment:

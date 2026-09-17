@@ -15,9 +15,9 @@
  * mock-backed, and no component was created to give a scenario something to find.
  *
  * THE ROOT CAUSES ARE DELIBERATELY DISTINCT (see `UnknownCause`). Collapsing
- * them into one "not covered" bucket would hide the most surprising finding on this
- * task: two surfaces EXIST as files and are still unreachable in a browser, so a
- * file-existence check passes for them while a reachability check does not.
+ * them into one "not covered" bucket would hide which owner a gap needs: a surface
+ * nobody has written, a component nothing mounts, and a lane nobody has seeded are
+ * three different pieces of missing work, and each row names its own.
  */
 
 /** Spec section 12 declares exactly this many scenarios. Hand-counted from the table. */
@@ -32,8 +32,8 @@ export type JourneyId = "J1" | "J2" | "J3" | "J4" | "J5" | "S9" | "S10" | "S11"
  * - SURFACE_NOT_COMPOSED: the component exists but nothing mounts it into the
  *   served application, so a browser can never reach it. A file check passes here.
  * - NO_DAEMON_BACKED_BROWSER_LANE: the surface renders, but the scenario needs
- *   daemon-side fixture setup, a kill/restart harness, or state transitions that a
- *   presentation-only fixture build cannot perform.
+ *   daemon-side fixture setup, a kill/restart harness, or state transitions that the
+ *   v2 fixture route (CordumApp under ?fixtures=1, frozen example data) cannot perform.
  * - REFERENCE_MACHINE_UNDEFINED: reserved for the latency obligation below.
  */
 export type UnknownCause = "SURFACE_ABSENT" | "SURFACE_NOT_COMPOSED"
@@ -64,14 +64,6 @@ export const GRAPH_OWNER = "task-779d6804d4a44440ad4d48a832a351d6 (ARCHIVED — 
  */
 export const DAEMON_LANE_OWNER =
   "task-3767f2cd8ac94e4b9e9e82a3dc29af11 (OWNED — tests/e2e/control-room/daemon-board.spec.ts)";
-
-/**
- * The two SURFACE_NOT_COMPOSED rows are NOT this task's, and pointing them at the
- * lane owner would be a false claim: a component nothing mounts stays unreachable
- * in a browser no matter which lane serves it.
- */
-export const UNCOMPOSED_OWNER =
-  "UNOWNED — no board task composes these surfaces into a served entry point";
 
 export interface CoveredScenario {
   readonly id: string;
@@ -121,17 +113,11 @@ const noLane = (
   owner: DAEMON_LANE_OWNER, status: "UNKNOWN",
 });
 
-const uncomposed = (
-  id: string, journey: JourneyId, missingInput: string,
-): UnknownScenario => Object.freeze({
-  cause: "SURFACE_NOT_COMPOSED", id, journey, missingInput,
-  owner: UNCOMPOSED_OWNER, status: "UNKNOWN",
-});
-
 export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
   noLane("CR-J1-001", "J1",
-    "cr.goals.form is not rendered by the fixture build and the preview performs no state "
-    + "transitions, so the three-human-action journey cannot be completed end to end."),
+    "cr.goals.form is rendered by no v2 module, and the v2 fixture route (CordumApp under "
+    + "?fixtures=1) serves frozen example data with no state transitions, so the "
+    + "three-human-action journey cannot be completed end to end."),
   Object.freeze({
     bar: "Production Cordum v2 mounts its real shell and no cr.graph.* surface or canvas.",
     id: "CR-J1-002", journey: "J1",
@@ -143,8 +129,9 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     "cr.board.joinstrip and cr.inspector.section.findings need a seeded decomposable goal "
     + "and an integrator-independence policy fixture; no daemon lane can seed either."),
   noLane("CR-J2-003", "J2",
-    "cr.review.surface is not rendered by the fixture build; proving it excludes transcripts "
-    + "requires the surface to exist in the DOM first."),
+    "cr.review.surface has zero production carriers: the v1 review surface went with the "
+    + "legacy UI on 2026-09-17 and no v2 screen renders one. Proving it excludes transcripts "
+    + "requires the surface to exist in the DOM first, on top of a seeded review."),
   noLane("CR-J3-001", "J3",
     "needs a daemon kill/restart harness; cr.timeline.row.restart and cr.health.outbox do not "
     + "render. NOTE: this scenario's bar — the disconnected banner never coexisting with an "
@@ -160,16 +147,28 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     "cr.inspector.loopcounter and cr.approvals.item.escalation need three scripted rejections "
     + "against a live policy bound."),
   noLane("CR-J5-001", "J5",
-    "cr.board.card.silence.* does not render; the preview board card carries name and phase only."),
-  uncomposed("CR-J5-002", "J5",
-    "cr.runs.suspect lives in apps/control-room/src/runs/runs-surface.tsx, which EXISTS but is "
-    + "imported by no production module — RunsSurface is never mounted, so a browser cannot "
-    + "reach it. The served bundle renders a separate hand-written cr.surface.runs panel."),
+    "cr.board.card.silence.* does not render; the v2 work-board card (v2/goals/work-board.tsx) "
+    + "carries no silence marker, and one needs a seeded stalled node behind it."),
+  Object.freeze({
+    cause: "SURFACE_ABSENT",
+    id: "CR-J5-002", journey: "J5",
+    missingInput: "cr.runs.suspect has zero production files: the legacy v1 runs surface that "
+      + "carried it was removed with the v1 UI on 2026-09-17, and the Cordum v2 runs screen "
+      + "(apps/control-room/src/v2/runs/runs-screen.tsx) renders no suspect marker.",
+    owner: "UNOWNED — no board task gives the v2 runs screen a suspect marker",
+    status: "UNKNOWN",
+  } as const),
   absent("CR-S9-001", "S9", "cr.graph.refusal.* has zero production files."),
-  uncomposed("CR-S10-001", "S10",
-    "cr.banner.circuitbreaker IS mounted via shell-chrome.tsx, but ControlRoomPreview supplies "
-    + "no breaker fact and the component fails closed on an absent one, so it renders null. "
-    + "It also needs a fault-injected correlated-failure fixture."),
+  Object.freeze({
+    cause: "SURFACE_ABSENT",
+    id: "CR-S10-001", journey: "S10",
+    missingInput: "cr.banner.circuitbreaker has zero production files: the v1 shell chrome that "
+      + "mounted the breaker banner was removed with the v1 UI on 2026-09-17, and no Cordum v2 "
+      + "module renders the id (measured at zero carriers across apps/*/src and packages/*/src). "
+      + "It also needs a fault-injected correlated-failure fixture.",
+    owner: "UNOWNED — no board task gives Cordum v2 a circuit-breaker banner",
+    status: "UNKNOWN",
+  } as const),
   absent("CR-S11-001", "S11",
     "cr.banner.revision, cr.graph.disposition.* and cr.graph.revisiondiff have zero production files."),
   Object.freeze({
@@ -196,9 +195,11 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     status: "UNKNOWN",
   } as const),
   noLane("CR-LAG-001", "LAG",
-    "needs a relay-stall fixture where the view is stale but mutations stay ENABLED. The "
-    + "fixture build boots DISCONNECTED, where actions are correctly disabled — a different "
-    + "state, and asserting it here would certify the wrong thing."),
+    "needs a relay-stall fixture where the view is stale but mutations stay ENABLED. Neither "
+    + "served route reproduces it: the v2 fixture route (?fixtures=1) renders frozen example "
+    + "data behind a simulated CONNECTED shell, and the live route with no daemon boots "
+    + "DISCONNECTED (LIVE_BOOTSTRAP_UNAVAILABLE), where actions are correctly disabled — a "
+    + "different state, and asserting it here would certify the wrong thing."),
   noLane("CR-DOC-001", "DOC",
     "cr.health.doctor and the offline banner need the doctor harness with the daemon stopped."),
 ]);
@@ -209,7 +210,7 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
  * still has to pass the flag, and today none does on either path.
  */
 export const LOADING_OWNER =
-  "UNOWNED — no board task composes a pending state into either served entry point";
+  "UNOWNED — no board task composes a pending state into any served entry point";
 
 /**
  * DoD 2's LOADING invariant, recorded rather than proven — and it is recorded here
@@ -217,34 +218,37 @@ export const LOADING_OWNER =
  * NOTHING ABOUT THIS ONE. Silence read exactly like coverage, which is the failure
  * this whole task exists to prevent, so the record is the fix.
  *
- * THE COMPONENTS ARE REAL. `cr.board.skeleton` (board-surface.tsx:101),
- * `cr.goals.loading` (goals-home.tsx:231), `cr.health.loading` and
- * `cr.health.skeleton` (doctor-console.tsx:231/233) are all committed production,
- * and spec 11.3 specifies a loading state per primary surface. So this is
- * SURFACE_NOT_COMPOSED, never SURFACE_ABSENT — a file-existence check passes for
- * every one of them.
+ * WHAT THE v1 REMOVAL CHANGED (2026-09-17). The v1 carriers of `cr.board.skeleton`,
+ * `cr.goals.loading` and `cr.health.skeleton` went with the legacy UI, so those three
+ * ids now resolve to zero production files. `cr.health.loading` survives in ONE v2
+ * module: v2/ops/ops-screens.tsx renders it while the Health screen read is null.
+ * Spec 11.3 still specifies a loading state per primary surface, and no v2 board or
+ * goals surface renders one, so the invariant stays UNKNOWN.
  *
- * IT IS UNREACHABLE ON EVERY SERVED PATH, measured rather than assumed:
- *   main.tsx -> shell-mode-view.tsx -> ControlRoomScaffold -> kernel.tsx ->
- *   ControlRoomPreview, which contains no `loading` at all; and the default arm into
- *   live/live-app.tsx, which contains none either. The only production module that
- *   ever sets `loading: true` is a11y/ui-wide-core-fixtures.tsx, imported solely by
- *   tests and by another fixture module.
+ * THE CAUSE IS KEPT AS SURFACE_NOT_COMPOSED, NOT RE-MEASURED. The sweep in
+ * journey-coverage.test.ts only asserts that no served entry point passes a
+ * `loading=` prop; it does not ask whether a v2 screen composes its own pending
+ * state internally (ops-screens.tsx does, from a null read rather than a prop). The
+ * LOADING invariant must be RE-MEASURED AGAINST v2 — which surfaces render a pending
+ * state, and whether any served path can reach it — before this record is read as a
+ * reachability finding rather than a v1-era one.
  *
- * NO BROWSER ASSERTION IS WRITTEN. Driving a loading state would require wiring the
- * flag into the served preview, and a surface created to give an assertion something
- * to find is fabricated evidence under Clause 2 — worse than no proof, because it
- * would retire the invariant while certifying nothing.
+ * NO BROWSER ASSERTION IS WRITTEN. Driving a loading state would require wiring a
+ * pending state into a served route, and a surface created to give an assertion
+ * something to find is fabricated evidence under Clause 2 — worse than no proof,
+ * because it would retire the invariant while certifying nothing.
  */
 export const LOADING_RECORD = Object.freeze({
   cause: "SURFACE_NOT_COMPOSED" as const,
   id: "CR-LOADING",
   missingInput:
-    "No served entry point ever passes loading=true. ControlRoomPreview (the ?fixtures=1 path) "
-    + "and live/live-app.tsx (the default live path) both contain zero references to `loading`, so "
-    + "cr.board.skeleton, cr.goals.loading, cr.health.loading and cr.health.skeleton render in "
-    + "no browser despite existing as committed production. Needs a served composition that "
-    + "supplies a pending state; creating one from this gate would be fabricated evidence.",
+    "No served entry point passes loading=true: main.tsx, v2/cordum-app.tsx, "
+    + "v2/goals/live-goals.tsx and v2/projects/project-manager-app.tsx contain zero `loading=` "
+    + "props. The v1 carriers of cr.board.skeleton, cr.goals.loading and cr.health.skeleton were "
+    + "removed with the v1 UI on 2026-09-17; cr.health.loading is rendered by "
+    + "v2/ops/ops-screens.tsx while its health read is null, and no v2 board or goals surface "
+    + "renders a pending state. RE-MEASURE AGAINST v2 before relying on this record; creating a "
+    + "pending state from this gate would be fabricated evidence.",
   owner: LOADING_OWNER,
   status: "UNKNOWN" as const,
 });
@@ -276,26 +280,11 @@ export const LATENCY_RECORD = Object.freeze({
 export const ABSENT_PRODUCTION_IDS: readonly string[] = Object.freeze([
   "cr.graph.ghost", "cr.graph.refusal", "cr.graph.disposition", "cr.graph.revisiondiff",
   "cr.graph.canvas", "cr.banner.revision",
-]);
-
-/**
- * The other half of the rot guard, for surfaces that EXIST but are unreachable.
- * `importedBySpecifier` is the module specifier a production module would have to
- * import for the surface to become mountable; the test asserts nothing does.
- */
-export const UNCOMPOSED_SURFACES: readonly {
-  readonly file: string;
-  readonly importedBySpecifier: string;
-  readonly scenario: string;
-}[] = Object.freeze([
-  Object.freeze({
-    file: "apps/control-room/src/runs/runs-surface.tsx",
-    importedBySpecifier: "runs-surface", scenario: "CR-J5-002",
-  }),
-  Object.freeze({
-    file: "apps/control-room/src/resources/resources-surface.tsx",
-    importedBySpecifier: "resources-surface", scenario: "CR-J5-002",
-  }),
+  // Measured at zero production carriers on 2026-09-17, once the v1 UI was removed: the
+  // v1 runs surface, review surface and shell chrome that rendered these are gone, and no
+  // v2 module renders them. Guarded here so CR-J5-002, CR-J2-003 and CR-S10-001 cannot
+  // quietly outlive the gaps they describe.
+  "cr.runs.suspect", "cr.review.surface", "cr.banner.circuitbreaker",
 ]);
 
 export const isCovered = (record: ScenarioRecord): record is CoveredScenario =>

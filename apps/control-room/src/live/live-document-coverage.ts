@@ -8,6 +8,8 @@
  * map is the daemon's ADVISORY derivation and is carried with that flag intact.
  */
 
+import { exactDataRecord, listOf } from "./live-wire-primitives.js";
+
 const LIVE_COVERAGE_LAYER = "CONTROL_ROOM_LIVE_COVERAGE";
 const INVALID_RESPONSE_CODE = "DOCUMENT_COVERAGE_RESPONSE_INVALID";
 const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
@@ -95,31 +97,6 @@ function invalidResponse(): DocumentCoverageOutcome {
   return errored(INVALID_RESPONSE_CODE, LIVE_COVERAGE_LAYER);
 }
 
-/** An own-enumerable EXACT-key snapshot (copied verbatim from live-planning-run.ts). */
-function exactDataRecord(
-  value: unknown, expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-        return null;
-      }
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
-}
-
 /** The refusal envelopes this route can emit, each carried out at its own layer. */
 function refusalFrom(response: unknown): DocumentCoverageOutcome | null {
   const listener = exactDataRecord(response, ["code", "layer"]);
@@ -156,18 +133,6 @@ const nullableString = (value: unknown): value is string | null =>
   value === null || typeof value === "string";
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
-
-/** Maps every item or returns null the moment one item fails its guard. */
-function listOf<T>(value: unknown, itemOf: (item: unknown) => T | null): readonly T[] | null {
-  if (!Array.isArray(value)) return null;
-  const items: T[] = [];
-  for (const raw of value) {
-    const item = itemOf(raw);
-    if (item === null) return null;
-    items.push(item);
-  }
-  return Object.freeze(items);
-}
 
 function criterionOf(value: unknown): CoverageCriterionView | null {
   const record = exactDataRecord(value, ["criterionId", "nodeKey", "nodeTestStatus", "statement", "status"]);

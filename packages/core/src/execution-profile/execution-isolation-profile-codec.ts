@@ -10,7 +10,7 @@ import {
   EXECUTION_ISOLATION_PROFILE_DIGEST_DOMAIN,
   EXECUTION_ISOLATION_PROFILE_LIMITS,
   EXECUTION_ISOLATION_PROFILE_VERSION,
-  executionIsolationProfileRefusal,
+  executionIsolationProfileRefusal as refusal,
   type ExecutionIsolationProfileEncodeResult,
   type ExecutionIsolationProfileRefusal,
   type ExecutionIsolationProfileRevision,
@@ -57,10 +57,6 @@ export type {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const DIGEST_PLACEHOLDER = "0".repeat(64);
-const refusal = (
-  code: Parameters<typeof executionIsolationProfileRefusal>[0],
-  layer: Parameters<typeof executionIsolationProfileRefusal>[1],
-): ExecutionIsolationProfileRefusal => executionIsolationProfileRefusal(code, layer);
 
 function canonicalText(value: unknown): string {
   if (value === null) return "null";

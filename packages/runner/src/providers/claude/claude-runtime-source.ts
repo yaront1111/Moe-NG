@@ -19,12 +19,13 @@ import type { ClaudeRuntimePinErrorCode } from "./claude-runtime-pin-closure.js"
  *
  * One authority answers "is this caller-named path a real, contained, unchanged
  * plain file, and what are its bytes" for both the quote path (`resolveSources`)
- * and caller-named discovery (`discoverSources`). Two copies of a Windows
- * path/reparse/containment rule drift apart, and the one that drifts is the one
- * an attacker gets to choose. It validates BEFORE it reads and re-proves identity
- * AFTER it reads, so a path swapped between the check and the stream cannot be
- * reported as proven. It holds no authority: it returns an internal code/message
- * failure for its caller to convert, and never enumerates, spawns, or logs.
+ * and caller-named discovery (the host observer's `inspectClosure`). Two copies of
+ * a Windows path/reparse/containment rule drift apart, and the one that drifts is
+ * the one an attacker gets to choose. It validates BEFORE it reads and re-proves
+ * identity AFTER it reads, so a path swapped between the check and the stream
+ * cannot be reported as proven. It holds no authority: it returns an internal
+ * code/message failure for its caller to convert, and never enumerates, spawns,
+ * or logs.
  *
  * Consuming task: task-32eddfd3c9644558b7218778e1f07e92.
  */

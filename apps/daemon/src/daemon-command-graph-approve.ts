@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
-import { applyApprovalCommand, decideApprovalAuthority, grantHumanAuthority } from "@moe/core";
+import { applyApprovalCommand, decideApprovalAuthority } from "@moe/core";
 
 import { payloadObject, payloadRef, refuse, stateOf }
   from "./bootstrap/bootstrap-ledger.js";
@@ -11,6 +11,7 @@ import { readApprovalPolicySettings } from "./planning/approval-policy-settings.
 import { verifyApprovedRunBinding } from "./planning/approval-run-binding.js";
 import { activateApprovedGraph } from "./planning/graph-activation-service.js";
 import type { GraphActivationInput } from "./planning/graph-activation-service.js";
+import { operatorReviewAuthority } from "./planning/operator-review-authority.js";
 import { graphHandlerContext } from "./daemon-command-graph-contracts.js";
 import type { GraphCommandRequest } from "./daemon-command-graph-contracts.js";
 
@@ -53,30 +54,6 @@ function durableApprovedRun(ledger: DurableLedger, runId: string): DurableApprov
   const goalRef = state === null ? null : payloadRef(state, "goalRef");
   if (submissionHash === null || goalRef === null) return null;
   return { gate: readApprovalGate(run, runId).gate, goalRef, record: run, submissionHash };
-}
-
-/**
- * The operator's own dispatch IS the human review the policy waits for.
- *
- * Reached only when the policy refused for want of a human AND the registry attached a
- * server-assembled witness — which for this kind is doubly fenced, because
- * `OPERATOR_PRINCIPAL_KINDS` has already refused every principal that is not the configured
- * operator. The grant is minted through the core's own `grantHumanAuthority` from that witness,
- * never from caller bytes, and the verdict is RE-DERIVED by handing the granted gate back to
- * `decideApprovalAuthority`. An explicit GO gate on the run outranks any click and never reaches
- * here.
- */
-function operatorReviewAuthority(
-  witness: HumanReviewWitness, runId: string, decidedAt: string,
-  policy: ReturnType<typeof readApprovalPolicySettings>,
-): ReturnType<typeof decideApprovalAuthority> {
-  const granted = grantHumanAuthority(
-    { gateId: `approval-review:${runId}`, grant: null, workRef: runId },
-    { kind: "HUMAN", principalId: witness.principalId },
-    Date.parse(decidedAt),
-  );
-  if (!granted.ok) return granted;
-  return decideApprovalAuthority({ gate: granted.gate, policy });
 }
 
 interface ApproveEdgeInput {
@@ -124,6 +101,8 @@ export function runGraphApproveEdge(input: ApproveEdgeInput): ServiceOutcome {
   // from the allow-list next door.
   const policy = readApprovalPolicySettings(process.env);
   const decided = decideApprovalAuthority({ gate: run.gate, policy });
+  // The witness is doubly fenced for this kind: `OPERATOR_PRINCIPAL_KINDS` has already refused
+  // every principal that is not the configured operator.
   const authority = !decided.ok && decided.code === "APPROVAL_HUMAN_REVIEW_REQUIRED"
     && decided.layer === "APPROVAL_POLICY" && input.humanReview !== undefined
     ? operatorReviewAuthority(input.humanReview, intent.runId, request.decidedAt, policy)

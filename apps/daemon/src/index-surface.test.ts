@@ -208,6 +208,10 @@ import type {
   V2CompilerResolutionTokenMintResult,
 } from "@moe/daemon";
 import type {
+  EffectInventoryConfiguration,
+  EffectInventoryHeld,
+  EffectInventoryOutcome,
+  EffectInventoryRequest,
   RecoveryCompleteRequest,
   RecoveryCompletionAccepted,
   RecoveryCompletionApprovalSubject,
@@ -425,6 +429,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["readRecoveryReconciliation", "function"],
   ["readReviewLedger", "function"],
   ["readSuccessionChain", "function"],
+  ["reconcileEffectInventory", "function"],
   ["reconcileOnRestart", "function"],
   ["recordRecoveryReconciliation", "function"],
   ["recoveryCompletionApprovalDigest", "function"],
@@ -509,7 +514,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(155);
+    expect(EXPECTED_EXPORTS.length).toBe(156);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -878,6 +883,17 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<RecoveryReconciliationFound | RecoveryInventoryRefusal>();
     expectTypeOf<RecoveryReconciliationWriteResult>()
       .toEqualTypeOf<RecoveryReconciliationRecorded | RecoveryInventoryRefusal>();
+    // ...and the ledger's producer is reachable too, so a composer can write the
+    // record `recovery.complete` consumes without a deep import.
+    expectTypeOf<Parameters<typeof daemon.reconcileEffectInventory>>().toEqualTypeOf<
+      [store: SqliteEventStore, request: EffectInventoryRequest,
+        configuration: EffectInventoryConfiguration]>();
+    expectTypeOf<ReturnType<typeof daemon.reconcileEffectInventory>>()
+      .toEqualTypeOf<Promise<EffectInventoryOutcome>>();
+    expectTypeOf<EffectInventoryOutcome>().toEqualTypeOf<
+      RecoveryReconciliationRecorded | RecoveryInventoryRefusal | EffectInventoryHeld>();
+    expectTypeOf<EffectInventoryHeld["authority"]>().toEqualTypeOf<"NONE">();
+    expectTypeOf<EffectInventoryRequest["projectId"]>().toEqualTypeOf<string>();
     expectTypeOf<RecoveryReconciliationRecord["items"]>()
       .toEqualTypeOf<readonly RecoveryReconciliationItem[]>();
     expectTypeOf<RecoveryReconciliationRecord["proofs"]>()

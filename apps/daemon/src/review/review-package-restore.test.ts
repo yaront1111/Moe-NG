@@ -1,9 +1,10 @@
 import { afterEach, expect, it } from "vitest";
 
 import { readReviewLedger } from "./review-read-model.js";
+import type { ReviewRoundRecord } from "./review-read-model.js";
 import {
   REVIEW_PACKAGE_RESTORE_CODES,
-  restoreReviewPackage,
+  verifyStoredPackageItems,
 } from "./review-package-restore.js";
 import type { ReviewPackageRestoreResult } from "./review-package-restore.js";
 import {
@@ -76,6 +77,14 @@ function stageAgainstHonestDigest(store: SqliteEventStore, items: unknown): void
   if (!staged.ok) throw new Error(`staging failed: ${staged.code}`);
 }
 
+/** The round as the ledger reads it back, which is what every product consumer hands the check. */
+function storedRound(store: SqliteEventStore, round: number): ReviewRoundRecord {
+  const ledger = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
+  const record = ledger.rounds.find((entry) => entry.round === round);
+  if (record === undefined) throw new Error(`round ${round} did not read back`);
+  return record;
+}
+
 const codeOf = (result: ReviewPackageRestoreResult): string | null => result.ok ? null : result.code;
 const layerOf = (result: ReviewPackageRestoreResult): string | null =>
   result.ok ? null : result.refusedBy;
@@ -84,7 +93,7 @@ it("accepts a round whose stored items reproduce the digest recorded beside them
   const store = openStore();
   const honest = honestRound(store);
 
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 1);
+  const restored = verifyStoredPackageItems(storedRound(store, 1));
 
   expect(restored.ok, restored.ok ? "" : restored.code).toBe(true);
   if (!restored.ok) throw new Error("expected an accepted restore");
@@ -101,7 +110,7 @@ it("refuses when one stored item's digest was substituted after the fact", () =>
   stageAgainstHonestDigest(store, BOUND_ITEMS.map((item) =>
     item.kind === "RUBRIC" ? { ...item, digest: hex64("ab") } : item));
 
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 2);
+  const restored = verifyStoredPackageItems(storedRound(store, 2));
 
   expect(codeOf(restored)).toBe("REVIEW_PACKAGE_DIGEST_MISMATCH");
   expect(layerOf(restored)).toBe("DAEMON_PREREQUISITE");
@@ -113,7 +122,7 @@ it("refuses when a stored item's locator was substituted, digest untouched", () 
   stageAgainstHonestDigest(store, BOUND_ITEMS.map((item) =>
     item.kind === "CRITERION" ? { ...item, locator: "criterion-2" } : item));
 
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 2);
+  const restored = verifyStoredPackageItems(storedRound(store, 2));
 
   expect(codeOf(restored)).toBe("REVIEW_PACKAGE_DIGEST_MISMATCH");
   expect(layerOf(restored)).toBe("DAEMON_PREREQUISITE");
@@ -123,7 +132,7 @@ it("surfaces the kernel's own code when the restored set is not a package at all
   const store = openStore();
   stageAgainstHonestDigest(store, BOUND_ITEMS.filter((item) => item.kind !== "DAEMON_RECEIPT"));
 
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 2);
+  const restored = verifyStoredPackageItems(storedRound(store, 2));
 
   // The kernel decides package validity, not this module and not the read model.
   expect(codeOf(restored)).toBe("PACKAGE_BINDING_INCOMPLETE");
@@ -140,7 +149,7 @@ it("refuses a round recorded before items were stored as ABSENT, not as an empty
   );
   expect(staged.ok).toBe(true);
 
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 1);
+  const restored = verifyStoredPackageItems(storedRound(store, 1));
 
   expect(codeOf(restored)).toBe("REVIEW_PACKAGE_ITEMS_ABSENT");
   expect(layerOf(restored)).toBe("DAEMON_PREREQUISITE");
@@ -156,49 +165,22 @@ it("refuses a stored empty item set at the kernel, so PRESENT-and-empty is not a
   // because it IS structurally present; the kernel is what denies it authority.
   stageAgainstHonestDigest(store, []);
 
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 2);
+  const restored = verifyStoredPackageItems(storedRound(store, 2));
 
   expect(codeOf(restored)).toBe("PACKAGE_BINDING_INCOMPLETE");
   expect(layerOf(restored)).toBe("REVIEW_KERNEL");
   expect(restored.ok ? null : restored.kernelLayer).toBe("PACKAGE");
 });
 
-it("refuses a round number nothing was ever recorded under", () => {
-  const store = openStore();
-  honestRound(store);
-
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 7);
-
-  expect(codeOf(restored)).toBe("REVIEW_PACKAGE_ROUND_NOT_FOUND");
-  expect(layerOf(restored)).toBe("DAEMON_PREREQUISITE");
-});
-
-it("refuses every round of a subject holding one unreadable round", () => {
-  const store = openStore();
-  const staged = commitRaw(
-    store,
-    envelope("review.submit", 0, submitPayload(1), "cmd-unreadable-round"),
-    { ...tamperedRoundResult(), packageItems: "not-an-array" },
-  );
-  expect(staged.ok).toBe(true);
-
-  const restored = restoreReviewPackage(store, PROJECT_ID, SUBJECT_REF, 1);
-
-  expect(codeOf(restored)).toBe("REVIEW_PACKAGE_ROUND_UNREADABLE");
-  expect(layerOf(restored)).toBe("DAEMON_PREREQUISITE");
-});
-
 /**
  * Both directions, against a HAND-WRITTEN list. Deriving the expectation from the frozen
- * vocabulary would put the same array on both sides, and a fifth code appended to production
+ * vocabulary would put the same array on both sides, and a third code appended to production
  * would appear on both and stay green.
  */
 it("declares exactly the codes this surface emits and no dead one", () => {
   const expected = [
     "REVIEW_PACKAGE_DIGEST_MISMATCH",
     "REVIEW_PACKAGE_ITEMS_ABSENT",
-    "REVIEW_PACKAGE_ROUND_NOT_FOUND",
-    "REVIEW_PACKAGE_ROUND_UNREADABLE",
   ];
 
   expect(new Set<string>(REVIEW_PACKAGE_RESTORE_CODES)).toEqual(new Set(expected));

@@ -1,11 +1,10 @@
-import { createHash } from "node:crypto";
-
 import { evaluatePolicy } from "@moe/core";
 import type { PolicyEvaluationInput } from "@moe/core";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
+import type { JsonValue } from "@moe/contracts";
 import { buildReviewPackage } from "@moe/review";
 import type { ReviewPackageItemInput, ReviewerCalibration } from "@moe/review";
+import { exact, freezeDeep, hash, isObject, ref } from "../json-record-shape.js";
 import { decodeVerifiedWorkspaceBinding } from "../repository/verified-workspace-contracts.js";
 import type { VerifiedWorkspaceBinding } from "../repository/verified-workspace-contracts.js";
 
@@ -72,26 +71,8 @@ const EXECUTION_KEYS = [
 const CALIBRATION_KEYS = ["corpusRevision", "sentinelPassed", "staleness"] as const;
 const ITEM_KEYS = ["digest", "kind", "locator"] as const;
 
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
 function hex64(value: JsonValue | undefined): value is string {
   return typeof value === "string" && HEX64.test(value);
-}
-
-function hash(parts: readonly JsonValue[]): string {
-  return createHash("sha256").update(JSON.stringify(parts), "utf8").digest("hex");
 }
 
 export function verifierReceiptId(
@@ -191,16 +172,6 @@ function parseItems(value: JsonValue | undefined): readonly ReviewPackageItemInp
     items.push({ digest: entry["digest"], kind: entry["kind"], locator: entry["locator"] });
   }
   return items;
-}
-
-function freezeDeep<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      freezeDeep((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
 }
 
 /** Strict receipt decode. Every value later cast to a kernel type was validated by its owner. */

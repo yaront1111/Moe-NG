@@ -39,8 +39,6 @@ const IDENTITY_DOMAIN = "moe.unactivated-journal-identity.v1";
 export const DIGEST = "a".repeat(64);
 export const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 export const DECIDED_AT_MS = Date.parse(DECIDED_AT);
-export const LIVE_DEADLINE = Math.floor(DECIDED_AT_MS / 1_000) + 3_600;
-export const EXPIRED_DEADLINE = Math.floor(DECIDED_AT_MS / 1_000) - 3_600;
 export const SESSION_ID = "session-1";
 export const OTHER_SESSION_ID = "session-2";
 export const NODE_KEY = "dev-done";
@@ -52,7 +50,6 @@ const sha256Hex = (value: string): string =>
   createHash("sha256").update(value, "utf8").digest("hex");
 
 export interface ActivationOptions {
-  readonly deadlineSeconds?: number;
   readonly sessionId?: string;
 }
 

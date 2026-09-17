@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
+import type { JsonValue } from "@moe/contracts";
 
+import { exact, freezeDeep, isObject, ref } from "../json-record-shape.js";
 import { PREVIEW_CODE_LAYERS } from "./preview-contracts.js";
-import type { PreviewCode, PreviewLayer } from "./preview-contracts.js";
+import type { PreviewCode } from "./preview-contracts.js";
 
 /**
  * The durable shape of A PREVIEW RUN: what the runner records when it starts the product's own
@@ -38,9 +39,10 @@ import type { PreviewCode, PreviewLayer } from "./preview-contracts.js";
  *
  * WHY THE CODE IS A `PreviewCode` AND NOT A STRING. `preview-contracts.ts` owns the closed
  * `PREVIEW_CODE_LAYERS` map and `previewRefusal` takes no layer argument, so a call site cannot
- * mint a code/layer pair that disagrees. This module re-derives the layer from that same map
- * instead of storing it, so a receipt cannot record a refusal whose layer contradicts the
- * vocabulary either — there is exactly one statement of which layer answers which code.
+ * mint a code/layer pair that disagrees. This module validates the code against that same map
+ * and never stores a layer beside it, so a receipt cannot record a refusal whose layer
+ * contradicts the vocabulary either — there is exactly one statement of which layer answers
+ * which code.
  */
 
 export const PREVIEW_RUNNER_PRINCIPAL_ID = "daemon:preview-runner" as const;
@@ -97,35 +99,6 @@ export function previewReceiptId(projectId: string, goalId: string, sha: string)
   return createHash("sha256")
     .update(JSON.stringify([PREVIEW_RECEIPT_VERSION, "receipt-id", projectId, goalId, sha]), "utf8")
     .digest("hex");
-}
-
-/** The layer that answers a recorded refusal, re-derived from the vocabulary's closed map. */
-export function previewReceiptLayer(receipt: PreviewReceiptV1): PreviewLayer | null {
-  return receipt.code === null ? null : PREVIEW_CODE_LAYERS[receipt.code];
-}
-
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function freezeDeep<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      freezeDeep((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
 }
 
 /**

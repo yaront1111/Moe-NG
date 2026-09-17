@@ -32,6 +32,7 @@ import type {
   EffectsCommittedDecision, StoredEvent,
 } from "@moe/store";
 
+import { sameBinaryBytes } from "../byte-equality.js";
 import { decodeProviderRunRecord } from "./provider-run-codec.js";
 import {
   PROVIDER_RUN_COMMAND_KIND, PROVIDER_RUN_RECORD_VERSION, deriveProviderRunAggregateId,
@@ -78,13 +79,6 @@ export const refuseRead = (
 export const refuseThrown = (error: unknown): ProviderRunRefusal =>
   refuseRead(UNREADABLE, error instanceof DurableStoreError ? error.code : null);
 
-/** The `instanceof` pair is load-bearing: two non-binary payloads both report an
- *  `undefined` byteLength, so without it a contract-breaking store would reach
- *  `.every` and CRASH where this module has to refuse. */
-const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
-  left instanceof Uint8Array && right instanceof Uint8Array &&
-  left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
-
 /** The DECISION half. Its `requestSha256` is the SCOPED-COMMAND digest and is
  *  compared to the TRACE's, never to the event's. */
 function decisionAgrees(
@@ -102,7 +96,7 @@ function decisionAgrees(
     decision.businessEventIds.length === 1 && decision.businessEventIds[0] === event.eventId &&
     decision.outboxMessageIds.length === 0 &&
     decision.requestSha256 === trace.requestSha256 &&
-    sameBytes(decision.resultBytes, event.payload);
+    sameBinaryBytes(decision.resultBytes, event.payload);
 }
 
 /** The EFFECT half. Its `requestSha256` is the EFFECT digest, a DIFFERENT domain,

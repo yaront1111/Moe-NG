@@ -10,10 +10,7 @@ import {
   MIRRORED_SOURCE_OPERATION_CLASSES,
   parseMirroredDependencyContract,
 } from "./dependency-witness-mirror.js";
-import {
-  effectiveStability,
-  recheckMaterializationSealWitnesses,
-} from "./witness-recheck.js";
+import { recheckMaterializationSealWitnesses } from "./witness-recheck.js";
 
 const digest = (character: string): string => character.repeat(64);
 
@@ -195,7 +192,7 @@ describe("hostile contract shapes", () => {
   });
 
   it("refuses two registry proofs for one predicate rather than picking by order", () => {
-    // dependency-contract.ts:189 dedupes on exactly this key and refuses a
+    // dependency-contract.ts:176 dedupes on exactly this key and refuses a
     // duplicate. Without the same check, two disagreeing proofs would resolve by
     // list order and this mirror would accept a registry the authority rejects.
     const conflicting = [proofEntry(), proofEntry({ sourceOperationClass: "SCOPE_OBSERVATION" })];
@@ -259,28 +256,22 @@ describe("hostile contract shapes", () => {
 });
 
 describe("MONOTONIC normalization", () => {
-  it("downgrades MONOTONIC to REVOCABLE when no registry proof is supplied", () => {
-    // dependency-contract.ts:248. A mirror that skipped this would exempt from
-    // recheck a witness the authority treats as revocable.
-    const parsed = parseMirroredDependencyContract(contract({ stability: "MONOTONIC" }));
-    expect(parsed?.stability).toBe("MONOTONIC");
-    expect(effectiveStability(parsed!, [])).toEqual({ ok: true, stability: "REVOCABLE" });
-  });
-
-  it("keeps MONOTONIC when a matching registry proof is supplied", () => {
-    const parsed = parseMirroredDependencyContract(contract({ stability: "MONOTONIC" }));
-    expect(effectiveStability(parsed!, [proofEntry()])).toEqual({ ok: true, stability: "MONOTONIC" });
-  });
-
   it("downgrades when the registry proof matches on ref but not on schema version", () => {
-    const parsed = parseMirroredDependencyContract(contract({ stability: "MONOTONIC" }));
-    expect(effectiveStability(parsed!, [proofEntry({ schemaVersion: 2 })])).toEqual({
-      ok: true,
-      stability: "REVOCABLE",
+    const result = recheck(
+      [contract({ stability: "MONOTONIC" })],
+      [proofEntry({ schemaVersion: 2 })],
+      [currentFact({ witnessVersion: 4 })],
+    );
+    expect(refusal(result)).toEqual({
+      code: "RUNNER_MATERIALIZATION_WITNESS_VERSION_CHANGED",
+      layer: "WITNESS",
+      detail: WITNESS_A,
     });
   });
 
   it("rechecks a downgraded MONOTONIC contract instead of exempting it", () => {
+    // dependency-contract.ts:235. A mirror that skipped this would exempt from
+    // recheck a witness the authority treats as revocable.
     const result = recheck([contract({ stability: "MONOTONIC" })], [], [currentFact({ witnessVersion: 4 })]);
     expect(refusal(result)).toEqual({
       code: "RUNNER_MATERIALIZATION_WITNESS_VERSION_CHANGED",
@@ -299,7 +290,7 @@ describe("MONOTONIC normalization", () => {
   });
 
   it("refuses a proven MONOTONIC contract whose witness operation class disagrees", () => {
-    // Parity with dependency-contract.ts:245: a mirror that accepted this would
+    // Parity with dependency-contract.ts:232: a mirror that accepted this would
     // be more permissive than the authority it mirrors.
     const result = recheck(
       [contract({ stability: "MONOTONIC" })],

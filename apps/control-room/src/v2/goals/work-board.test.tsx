@@ -173,12 +173,12 @@ describe("the work board says what the daemon said, in the owner's words", () =>
   });
 
   it("keeps the legacy 'cr.board.column.' prefix on the three column roots ONLY", () => {
-    // src/styles/preview-board.css:27 and src/board/board-layout.css:21 style
-    // EVERY element whose test id starts with "cr.board.column." as a v1 lane box
-    // - min-block-size: 18rem, a border, a background, min-width 18rem. Both ship
-    // in the same bundle as v2, so a NESTED id under that prefix silently inflates
-    // a one-line heading into a 288px box on the live page (measured: the column
-    // head, its meaning line and its status token each became 288px tall).
+    // The v1 stylesheets that styled EVERY element whose test id starts with
+    // "cr.board.column." as a lane box (min-block-size: 18rem, a border, a
+    // background) are gone with the legacy UI, but the prefix is still a contract:
+    // only the three column roots carry it, so no selector keyed on the prefix can
+    // inflate a one-line heading into a 288px box again (measured under v1: the
+    // column head, its meaning line and its status token each became 288px tall).
     render(<WorkBoard frame={surface([READY_STEP, BLOCKED_STEP, COMMITTED_STEP])} />);
     const ids = [...screen.getByTestId("cr.board.root")
       .querySelectorAll("[data-testid^='cr.board.column.']")]

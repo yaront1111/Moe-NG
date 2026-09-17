@@ -17,7 +17,7 @@ import { CONTROLLED_PROFILE_VERSION }
   from "../repository/controlled-profile/controlled-profile-generator.js";
 import { deploymentInfrastructureFiles }
   from "../repository/deployment/deployment-infrastructure-templates.js";
-import { readDeployLedger, readPreviousDeployReceipt } from "./deploy-ledger.js";
+import { readDeployLedger } from "./deploy-ledger.js";
 import { productionDeployPorts } from "./deploy-command.js";
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -391,7 +391,7 @@ describe("the deploy receipt is durable and keeps its predecessor (DoD 5)", () =
 
     // The rollback row resolves through exactly this pair and cannot depend on this one, so
     // BOTH receipts are asserted here rather than only the current.
-    const previous = readPreviousDeployReceipt(context.store, PROJECT_ID, STAGING);
+    const previous = readDeployLedger(context.store, PROJECT_ID).get(STAGING)?.previous;
     expect([previous?.sha, previous?.decisionId]).toEqual([SHA, "cmd-deploy-one"]);
     expect(readDeployLedger(context.store, PROJECT_ID).get(STAGING)?.current.sha).toBe(NEXT_SHA);
     expect(readDeployLedger(context.store, PROJECT_ID).get(STAGING)?.receipts).toHaveLength(2);

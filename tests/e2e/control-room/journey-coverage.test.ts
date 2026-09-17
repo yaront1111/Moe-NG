@@ -9,7 +9,6 @@ import {
   LATENCY_RECORD,
   LOADING_RECORD,
   SCENARIO_MATRIX,
-  UNCOMPOSED_SURFACES,
   coveredScenarios,
   unknownScenarios,
 } from "./journey-coverage.js";
@@ -25,12 +24,13 @@ import {
  * runs in the fast `pnpm test:e2e` lane and never launches a browser — the ledger's
  * arithmetic should fail in milliseconds, not behind a bundle build.
  *
- * WHAT THIS FILE IS FOR. A ledger that records seventeen UNKNOWNs is only honest while
+ * WHAT THIS FILE IS FOR. A ledger that records eighteen UNKNOWNs is only honest while
  * its entries are true. Two kinds of rot are guarded here:
  *   1. SHRINKAGE — a case deleted, a status flipped, a missing input blanked.
  *   2. STALENESS — a gap silently closing. The day someone ships `cr.graph.ghost` or
- *      mounts `RunsSurface`, these tests go RED and demand the matrix be updated,
- *      instead of the UNKNOWN quietly outliving the gap it described.
+ *      gives the v2 runs screen a `cr.runs.suspect` marker, these tests go RED and
+ *      demand the matrix be updated, instead of the UNKNOWN quietly outliving the gap
+ *      it described.
  */
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
@@ -164,19 +164,20 @@ describe("the scenario ledger's own arithmetic", () => {
 });
 
 /**
- * Every module main.tsx can mount, including the default Cordum v2 live route and
- * the explicit legacy v1 route. All served paths are listed, because the sweep below
- * asks whether a `loading` prop
- * could reach a browser down ANY served path — and a path missing from this list is a
- * path the guard silently stops watching. Named as a constant so the sweep can assert
- * it is non-empty rather than generating no cases.
+ * Every module main.tsx can mount: the Cordum v2 shell, which serves the live route by
+ * default and frozen fixtures (v2/workspace/fixtures/*) under ?fixtures=1, and the
+ * manager-origin root. The legacy v1 route and its preview were removed on 2026-09-17,
+ * so no separate fixture entry point exists. All served paths are listed, because the
+ * sweep below asks whether a `loading` prop could reach a browser down ANY served path
+ * — and a path missing from this list is a path the guard silently stops watching.
+ * Named as a constant so the sweep can assert it is non-empty rather than generating
+ * no cases.
  */
 const SERVED_ENTRY_POINTS: readonly (readonly [string, string])[] = Object.freeze([
   ["apps/control-room/src/main.tsx", "the production composition root"],
-  ["apps/control-room/src/v2/cordum-app.tsx", "the default v2 shell"],
+  ["apps/control-room/src/v2/cordum-app.tsx", "the default v2 shell, live or ?fixtures=1"],
   ["apps/control-room/src/v2/goals/live-goals.tsx", "the default live goals route"],
   ["apps/control-room/src/v2/projects/project-manager-app.tsx", "the manager-origin root"],
-  ["apps/control-room/src/preview/control-room-preview.tsx", "the fixture path"],
 ] as const);
 
 describe("the ledger's UNKNOWNs still describe real gaps", () => {
@@ -186,7 +187,7 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
    */
   it("scanned a real production corpus", () => {
     expect(SOURCES.length).toBeGreaterThan(400);
-    expect(SOURCES.some((path) => relative(path) === "apps/control-room/src/kernel.tsx")).toBe(true);
+    expect(SOURCES.some((path) => relative(path) === "apps/control-room/src/v2/cordum-app.tsx")).toBe(true);
   });
 
   it.each([...ABSENT_PRODUCTION_IDS])("%s still resolves to zero production files", (id) => {
@@ -197,43 +198,13 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
   }, PRODUCTION_SOURCE_SCAN_TIMEOUT_MS);
 
   /**
-   * The subtler half, and the one a file-existence check cannot catch: these
-   * components EXIST but nothing mounts them, so a browser can never reach them.
-   * Asserted as an import-specifier match rather than a text match, so a comment
-   * naming the module does not read as a composition.
-   */
-  it.each([...UNCOMPOSED_SURFACES])(
-    "$file exists but is composed by nothing ($scenario)",
-    ({ file, importedBySpecifier }) => {
-      expect(existsSync(join(repoRoot(), file)), `${file} should exist`).toBe(true);
-      const specifier = new RegExp(`from\\s+["'][^"']*${importedBySpecifier}[^"']*["']`, "u");
-      const importers = SOURCES
-        .filter((path) => relative(path) !== file && specifier.test(readFileSync(path, "utf8")))
-        .map(relative);
-      expect(importers).toEqual([]);
-    },
-    PRODUCTION_SOURCE_SCAN_TIMEOUT_MS,
-  );
-
-  /**
-   * CR-S10-001's own reason, which is different again: the banner IS mounted, but the
-   * served preview supplies no breaker fact and the component fails closed on an
-   * absent one. The day the preview passes a breaker, this goes red.
-   */
-  it("the served preview still supplies no circuit-breaker fact", () => {
-    const preview = join(repoRoot(), "apps/control-room/src/preview/control-room-preview.tsx");
-    expect(existsSync(preview)).toBe(true);
-    expect(readFileSync(preview, "utf8")).not.toMatch(/\bbreaker=/u);
-  });
-
-  /**
    * The loading gap's rot guard, and it covers EVERY served entry point because
-   * main.tsx composes the product workspace and the manager-origin route.
-   * Guarding only the preview
-   * would leave the invariant able to become reachable down the live path while the
-   * ledger still called it UNKNOWN — the exact rot this file exists to prevent.
+   * main.tsx composes the product workspace and the manager-origin route. Guarding
+   * only one route would leave the invariant able to become reachable down another
+   * while the ledger still called it UNKNOWN — the exact rot this file exists to
+   * prevent.
    *
-   * The day either path passes a loading prop, this goes RED and demands the record
+   * The day any path passes a loading prop, this goes RED and demands the record
    * be re-measured rather than letting the UNKNOWN outlive its gap.
    */
   it("guards every served entry point, so the sweep below cannot cover nothing", () => {
@@ -245,7 +216,6 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
       "apps/control-room/src/v2/cordum-app.tsx",
       "apps/control-room/src/v2/goals/live-goals.tsx",
       "apps/control-room/src/v2/projects/project-manager-app.tsx",
-      "apps/control-room/src/preview/control-room-preview.tsx",
     ]);
   });
 

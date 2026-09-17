@@ -20,7 +20,6 @@
 import { createHash } from "node:crypto";
 
 const RECORD_VERSION = "moe-foundation-activation-transition/1" as const;
-export const FOUNDATION_TRANSITION_RECORD_VERSION = RECORD_VERSION;
 
 export const FOUNDATION_TRANSITION_TAGS = Object.freeze([
   "GRANT_CONSUMED", "PREFLIGHT_REGISTERED", "PROCESS_OBSERVED",

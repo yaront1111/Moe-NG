@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
-
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
+
+import { exact, freezeDeep, hash, isObject, ref } from "../json-record-shape.js";
 
 /**
  * The durable shapes of the RELEASE DOSSIER: the evidence a goal's release
@@ -135,34 +134,6 @@ const HEX64 = /^[0-9a-f]{64}$/u;
 const DOSSIER_KEYS = [
   "dossierId", "goalId", "markdown", "projectId", "sha", "version",
 ] as const;
-
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function hash(parts: readonly JsonValue[]): string {
-  return createHash("sha256").update(JSON.stringify(parts), "utf8").digest("hex");
-}
-
-function freezeDeep<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      freezeDeep((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
 
 /** The aggregate every release fact for a goal lands on: beside the goal, never on it. */
 export function releaseDossierAggregateId(goalId: string): string {

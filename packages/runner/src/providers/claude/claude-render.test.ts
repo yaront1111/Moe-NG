@@ -272,6 +272,48 @@ describe("hostile skill snapshots", () => {
     expect(result.code).toBe("CLAUDE_RENDER_CONTEXT_LIMIT_UNKNOWN");
   });
 
+  it("refuses when only the full payload defeats the tokenizer, rather than dropping the advisory layer", () => {
+    const advisoryOnly = (bytes: Uint8Array) =>
+      Buffer.from(bytes).toString("utf8").includes("layer=SKILLS_ADVISORY");
+    const tokenizers = [
+      (bytes: Uint8Array) => {
+        if (advisoryOnly(bytes)) throw new Error("tokenizer unavailable");
+        return bytes.byteLength;
+      },
+      (bytes: Uint8Array) => (advisoryOnly(bytes) ? Number.NaN : bytes.byteLength),
+    ];
+    for (const countTokens of tokenizers) {
+      const result = renderClaudeContext(
+        renderInput({ contextLimit: { kind: "EXACT_TOKENS", tokens: 200_000 }, tokenizer: { countTokens } }),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.code).toBe("CLAUDE_RENDER_CONTEXT_LIMIT_UNKNOWN");
+    }
+  });
+
+  it("refuses a skill file whose content is not a string instead of throwing on it", () => {
+    const tampered = snapshot();
+    for (const contentBase64 of [undefined, 7]) {
+      const result = renderClaudeContext(
+        renderInput({
+          skillSnapshot: {
+            ...tampered,
+            skills: [
+              {
+                ...tampered.skills[0]!,
+                files: [{ ...tampered.skills[0]!.files[0]!, contentBase64: contentBase64 as unknown as string }],
+              },
+            ],
+          },
+        }),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.code).toBe("CLAUDE_RENDER_SKILL_SNAPSHOT_INVALID");
+    }
+  });
+
   it("refuses a skill file whose bytes do not match its declared digest", () => {
     const tampered = snapshot();
     const result = renderClaudeContext(

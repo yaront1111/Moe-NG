@@ -1,4 +1,5 @@
 import { bump, compareStrings } from "./graph-traversal.js";
+import { frame } from "./kernel-primitives.js";
 import type {
   GraphEdge,
   GraphIssue,
@@ -148,15 +149,6 @@ export function buildHardGraphIndex(
     hardIn: inArcs,
     hardEdgeCount,
   };
-}
-
-export function edgeKeysOf(edges: readonly GraphEdge[]): string[] {
-  return edges.map((edge) => edge.edgeKey);
-}
-
-/** Length-frame a token so concatenation is collision-free (no forged boundary). */
-function frame(token: string): string {
-  return `${token.length}:${token}`;
 }
 
 /**

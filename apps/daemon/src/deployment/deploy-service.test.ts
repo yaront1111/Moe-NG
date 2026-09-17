@@ -20,7 +20,7 @@ import {
 import type {
   DockerDouble, DockerDoubleOptions, DeployMigrationPort, DeployTarget, DockerRunner,
 } from "./deploy-ports.js";
-import { readDeployLedger, readPreviousDeployReceipt } from "./deploy-ledger.js";
+import { readDeployLedger } from "./deploy-ledger.js";
 import { BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF }
   from "../bootstrap/activation-receipts-measure.js";
 import { MIGRATION_LOCK_LEAF, migrateWithBackup } from "../repository/migrations/migration-service.js";
@@ -353,10 +353,8 @@ describe("the previous receipt is kept and readable (DoD 6)", () => {
     });
 
     expect(later.outcome).toBe("DEPLOYED");
-    // THE CALL task-da60dc4b39c SHOULD USE:
-    // readPreviousDeployReceipt(store, projectId, environment): DeployReceiptV1 | null
-    const previous = readPreviousDeployReceipt(first.store, PROJECT, ENVIRONMENT);
     const state = readDeployLedger(first.store, PROJECT).get(ENVIRONMENT);
+    const previous = state?.previous;
     expect(previous?.sha).toBe(SHA);
     expect(state?.current.sha).toBe(OTHER_SHA);
     expect(previous?.sha).not.toBe(state?.current.sha);
@@ -400,8 +398,8 @@ describe("the previous receipt is kept and readable (DoD 6)", () => {
 
     // Null means "nothing to roll back TO" — never the CURRENT receipt, which
     // would make a rollback a no-op wearing a success.
-    expect(readPreviousDeployReceipt(context.store, PROJECT, ENVIRONMENT)).toBeNull();
-    expect(readPreviousDeployReceipt(context.store, PROJECT, STAGING)).toBeNull();
+    expect(readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.previous ?? null).toBeNull();
+    expect(readDeployLedger(context.store, PROJECT).get(STAGING)?.previous ?? null).toBeNull();
   });
 });
 

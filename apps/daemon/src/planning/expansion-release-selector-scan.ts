@@ -25,6 +25,7 @@ import type {
   CommandDecisionKey, CommandDecisionRecord, CommandReceipt, CursorPage, StoredEvent,
 } from "@moe/store";
 
+import { sameBinaryBytes } from "../byte-equality.js";
 import {
   FOUNDATION_CONTEXT_EVENT_TYPE, readFoundationContextManifest,
 } from "../work/foundation-context-manifest-reader.js";
@@ -71,13 +72,6 @@ const unreadable = (source: string | null = null): ExpansionReleaseSelectorRefus
 const spliced = (): ExpansionReleaseSelectorRefused =>
   refuseExpansionReleaseSelection("EXPANSION_RELEASE_SELECTOR_LOCATOR_BINDING_MISMATCH");
 
-/** Byte equality, length first: a prefix must not read as a match. The `instanceof`
- *  pair is load-bearing — two non-binary payloads both report an undefined byteLength
- *  and would reach `.every` and CRASH where this reader has to refuse. */
-const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
-  left instanceof Uint8Array && right instanceof Uint8Array
-  && left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
-
 /** A filtered scan has no positional contiguity, so the pager's contract IS the
  *  completeness proof and its shape is re-checked here before it is trusted. */
 function wellShaped(page: unknown): page is CursorPage<StoredEvent, bigint> {
@@ -114,7 +108,7 @@ function verifyRow(
     inputManifestDigest: record.inputManifestDigest, nodeKey: record.nodeKey,
   });
   if (!durable.ok) return unreadable(durable.code);
-  if (!sameBytes(durable.bytes, event.payload)) return unreadable("PAGED_ROW_DIVERGED");
+  if (!sameBinaryBytes(durable.bytes, event.payload)) return unreadable("PAGED_ROW_DIVERGED");
   const items = canonicalItems(durable.record.manifest.binding.exactBytes);
   if (items === null) return unreadable("CANONICAL_ITEMS_UNUSABLE");
   if (!namesThisParent(durable.record, expected)) return null;

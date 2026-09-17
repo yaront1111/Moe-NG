@@ -7,10 +7,8 @@ import type {
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
-import { contractGateKey, notDecidedYet, useContractGates } from "./contract-gates.js";
-import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
-import { sameDossier, useLiveCoverage } from "./live-coverage.js";
-import type { CoverageSurface } from "./live-coverage.js";
+import { contractGateKey, notDecidedYet } from "./contract-gates.js";
+import type { ContractGateMap } from "./contract-gates.js";
 import { FoldedRoster } from "./statement-folds.js";
 
 /**
@@ -36,13 +34,6 @@ import { FoldedRoster } from "./statement-folds.js";
  * attribute). Requirements fold by identifier family, each with its criteria nested, and a
  * family mounts its rows only once opened.
  */
-
-const DEFAULT_POLL_MS = 10_000;
-/** What this dossier shows of a coverage answer (live-coverage.ts). */
-const DOSSIER_COVERAGE: CoverageSurface = {
-  readFailed: { code: "CONTRACT_DOSSIER_COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_GOALS" },
-  same: sameDossier,
-};
 
 export interface ContractDossierProps {
   readonly coverage: DocumentCoverageOutcome | null;
@@ -205,23 +196,4 @@ export function ContractDossier({ coverage, gates }: ContractDossierProps): JSX.
       )}
     </section>
   );
-}
-
-export interface LiveContractDossierProps {
-  readonly goalId: string;
-  readonly pollMs?: number | undefined;
-  readonly readCoverage: (goalId: string) => Promise<DocumentCoverageOutcome>;
-  readonly readGate: Gate1Reader | undefined;
-}
-
-/**
- * Reads coverage on the goal (live-coverage.ts: a poll that answers the same dossier keeps
- * the same state), then one Gate 1 verdict per cited revision (contract-gates.ts, likewise).
- */
-export function LiveContractDossier(
-  { goalId, pollMs, readCoverage, readGate }: LiveContractDossierProps,
-): JSX.Element {
-  const coverage = useLiveCoverage(goalId, readCoverage, pollMs ?? DEFAULT_POLL_MS, DOSSIER_COVERAGE);
-  const gates = useContractGates(coverage, readGate, pollMs ?? DEFAULT_POLL_MS);
-  return <ContractDossier coverage={coverage} gates={gates} />;
 }

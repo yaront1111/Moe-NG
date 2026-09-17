@@ -38,14 +38,7 @@ const CLAIM_EFFECT_COMMAND = Object.freeze({ kind: "claim" } as const);
 const OUTER_KEYS = ["budget", "effect", "lease", "liveClaims", "slot"] as const;
 const LEASE_KEYS = ["proof", "record"] as const;
 const SLOT_KEYS = ["dimension", "requestId", "rows", "slotRef"] as const;
-/**
- * EXPORTED so the activation lane can read the caller's GATE — and nothing else — out of the
- * same section this module admits. The narrow return type is the fence: `mirrorDeep(section,
- * BUDGET_KEYS)` yields a record whose only reachable keys are these three, so no downstream
- * expression there can name `view` or `admission` even by accident. Restating the list at that
- * call site would let the two drift, and the drift would be silent.
- */
-export const BUDGET_KEYS = ["admission", "gate", "view"] as const;
+const BUDGET_KEYS = ["admission", "gate", "view"] as const;
 const EFFECT_KEYS = ["command", "intent"] as const;
 const COMMAND_KEYS = ["kind"] as const;
 
@@ -85,7 +78,7 @@ export interface ClaimPrefix {
  * Mirrors outer routing values only. Each section stays unread until its own
  * deep snapshot; liveClaims is deep-snapshotted here before the ceiling reads it.
  */
-export function readClaimSections(payload: unknown): ClaimSections | null {
+function readClaimSections(payload: unknown): ClaimSections | null {
   const outer = mirror(payload, OUTER_KEYS, true);
   if (outer === null) return null;
   const liveClaims = mirrorList(outer["liveClaims"]);

@@ -1,4 +1,4 @@
-import { canonicalDigest, deepFreeze, isHex64, isSafeByteCount, sha256Hex } from "../../canonical.js";
+import { deepFreeze, isHex64, isSafeByteCount, sha256Hex } from "../../canonical.js";
 import { claudeFailure, type ClaudeFailure } from "./claude-observation.js";
 import type { ClaudeContextLimit } from "./claude-capabilities.js";
 
@@ -179,6 +179,12 @@ function advisoryBytes(snapshot: MirroredSkillRendererInput): Uint8Array | Claud
       left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
     );
     for (const file of files) {
+      if (typeof file.contentBase64 !== "string") {
+        return claudeFailure(
+          "CLAUDE_RENDER_SKILL_SNAPSHOT_INVALID",
+          `skill file ${JSON.stringify(file.path)} carries no base64 content`,
+        );
+      }
       const bytes = new Uint8Array(Buffer.from(file.contentBase64, "base64"));
       if (!isSafeByteCount(file.byteLength) || bytes.byteLength !== file.byteLength) {
         return claudeFailure(
@@ -267,6 +273,18 @@ function withinTokenBudget(
   return count <= limit.tokens ? "WITHIN" : "EXCEEDED";
 }
 
+/**
+ * UNTRUSTWORTHY is a refusal wherever it appears, not a "does not fit": an
+ * advisory layer dropped on a bound nobody proved would record an exclusion
+ * reason nothing measured.
+ */
+function unenforceableBound(): ClaudeFailure<ClaudeRenderErrorCode> {
+  return claudeFailure(
+    "CLAUDE_RENDER_CONTEXT_LIMIT_UNKNOWN",
+    "the tokenizer did not return a usable count, so the declared token bound cannot be enforced",
+  );
+}
+
 export function renderClaudeContext(input: RenderClaudeContextInput): RenderClaudeContextResult {
   const snapshot = input.skillSnapshot;
   if (snapshot.rendererInputVersion !== MIRRORED_SKILL_RENDERER_INPUT_VERSION) {
@@ -313,10 +331,7 @@ export function renderClaudeContext(input: RenderClaudeContextInput): RenderClau
   const mandatoryBytes = concat([instructions, task]);
   const mandatoryVerdict = withinTokenBudget(input.contextLimit, input.tokenizer, mandatoryBytes);
   if (mandatoryVerdict === "UNTRUSTWORTHY") {
-    return claudeFailure(
-      "CLAUDE_RENDER_CONTEXT_LIMIT_UNKNOWN",
-      "the tokenizer did not return a usable count, so the declared token bound cannot be enforced",
-    );
+    return unenforceableBound();
   }
   if (mandatoryBytes.byteLength > budget || mandatoryVerdict === "EXCEEDED") {
     return claudeFailure(
@@ -325,9 +340,14 @@ export function renderClaudeContext(input: RenderClaudeContextInput): RenderClau
     );
   }
   const full = concat([mandatoryBytes, advisoryFramed]);
-  const advisoryFits =
-    full.byteLength <= budget &&
-    withinTokenBudget(input.contextLimit, input.tokenizer, full) === "WITHIN";
+  const fullVerdict =
+    full.byteLength <= budget
+      ? withinTokenBudget(input.contextLimit, input.tokenizer, full)
+      : "EXCEEDED";
+  if (fullVerdict === "UNTRUSTWORTHY") {
+    return unenforceableBound();
+  }
+  const advisoryFits = fullVerdict === "WITHIN";
   const renderedBytes = advisoryFits ? full : mandatoryBytes;
   const rendered = deepFreeze({
     rendererEnvelopeVersion: CLAUDE_RENDERER_ENVELOPE_VERSION,
@@ -352,21 +372,4 @@ export function renderClaudeContext(input: RenderClaudeContextInput): RenderClau
     enforcedBound: { ...input.contextLimit },
   } satisfies ClaudeRenderedContext);
   return Object.freeze({ ok: true as const, rendered });
-}
-
-/**
- * The renderer-envelope tuple design 6.4 binds alongside the digest. Exported so
- * a caller can record what produced the bytes without re-deriving it.
- */
-export function rendererEnvelopeIdentity(rendered: ClaudeRenderedContext): string {
-  return canonicalDigest({
-    rendererEnvelopeVersion: rendered.rendererEnvelopeVersion,
-    providerInputDigest: rendered.providerInputDigest,
-    layerManifest: rendered.layerManifest.map((entry) => ({
-      layer: entry.layer,
-      included: entry.included,
-      byteLength: entry.byteLength,
-      sha256: entry.sha256,
-    })),
-  });
 }

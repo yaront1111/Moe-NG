@@ -6,11 +6,20 @@ import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "../operator-identity.js";
 import { createProjectReviewDrainPort } from "../projects/project-review-drain.js";
 import { createRepositoryRecoveryService } from "../repository/repository-recovery-service.js";
 import { resolveRepositoryExecutionIdentity } from "../repository/repository-execution-identity.js";
+import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { existingStore } from "./moe-cli-review-recovery.js";
 import type { ReviewRecoveryRequest, ReviewRecoveryResult } from "./moe-cli-main.js";
 
 type RecoveryService = ReturnType<typeof createRepositoryRecoveryService>;
-const refused = (code: string): ReviewRecoveryResult => ({ ok: false, code });
+/**
+ * `released` is how many owners were ALREADY freed before this refusal. It exists because the
+ * loop releases each owner in turn: a failure on the second leaves the first genuinely released,
+ * and `moe start`'s refusal line used to say "every repository reservation is kept as it was",
+ * which the multi-owner loop can make untrue. A refusal that misreports what it did is worse
+ * than the failure it reports.
+ */
+const refused = (code: string, released = 0): ReviewRecoveryResult =>
+  released > 0 ? { code, ok: false, released } : { code, ok: false };
 
 /**
  * Every checkout this project's reservations can live in: its own working tree, plus each node
@@ -29,15 +38,29 @@ const refused = (code: string): ReviewRecoveryResult => ({ ok: false, code });
  */
 export function reservationWorkspaces(projectRoot: string): readonly string[] {
   const workspaces = [projectRoot];
+  const port = createRepositoryExecutionPort();
   try {
     const worktrees = join(projectRoot, ".git", "worktrees");
     for (const entry of readdirSync(worktrees)) {
-      if (!existsSync(join(worktrees, entry, "moe-repository-execution.sqlite"))) continue;
-      // Git records the linked worktree's own `.git` file here; its parent is the checkout.
-      const gitdir = readFileSync(join(worktrees, entry, "gitdir"), "utf8").trim();
-      if (gitdir !== "") workspaces.push(dirname(gitdir));
+      // EACH TREE IS GUARDED ALONE. `scan` turns any single read failure into a view-wide code,
+      // and this function's caller refuses on that code before looking at one reservation — so a
+      // tree removed with `rm -rf` instead of `git worktree remove` (routine enough that
+      // `git worktree prune` exists for it) would make the project root's own owner unreleasable.
+      try {
+        const gitdir = readFileSync(join(worktrees, entry, "gitdir"), "utf8").trim();
+        if (gitdir === "") continue;
+        // HOLDS a reservation, not EVER held one. The database is created on first acquire and
+        // release only clears the row — nothing ever unlinks the file — so its mere existence
+        // means "this tree has worked at some point". With 70 node trees that named 70
+        // workspaces, `scan` refused REPOSITORY_RECOVERY_SCOPE_UNBOUNDED past 32, and EVERY
+        // replan recovery failed, including the project root's, which recovered fine before.
+        // `inspect` answers the real question and refuses a checkout that is no longer there.
+        const tree = dirname(gitdir);
+        const read = port.inspect(tree);
+        if (read.ok && read.reservation !== null) workspaces.push(tree);
+      } catch { continue; }
     }
-  } catch { /* No linked worktrees, or one unreadable: the project root still recovers. */ }
+  } catch { /* No linked worktrees at all: the project root still recovers. */ }
   return workspaces;
 }
 /** The durable human REPLAN authorizes this retirement; startup grants no review or acceptance authority. */
@@ -63,8 +86,8 @@ export async function executeReplanRecovery(service: RecoveryService, operator: 
     // Ordinary nonterminal work follows normal startup. It is never drained by this preflight.
     if (automatic && (action?.code === "REPOSITORY_REPLAN_EVIDENCE_INVALID"
       || action?.code === "REPOSITORY_REVIEW_PHASE_UNSUPPORTED")) continue;
-    if (action === undefined || !action.available || action.offer === null) return refused(action?.code ?? "MOE_CLI_REPLAN_RECOVERY_UNAVAILABLE");
-    if (!Number.isSafeInteger(action.expectedReviewVersion) || action.expectedReviewDigest === undefined) return refused("MOE_CLI_REPLAN_RECOVERY_OFFER_INVALID");
+    if (action === undefined || !action.available || action.offer === null) return refused(action?.code ?? "MOE_CLI_REPLAN_RECOVERY_UNAVAILABLE", released);
+    if (!Number.isSafeInteger(action.expectedReviewVersion) || action.expectedReviewDigest === undefined) return refused("MOE_CLI_REPLAN_RECOVERY_OFFER_INVALID", released);
     const { offer } = action;
     log("moe recover-replan: preserving the reviewed commit and verifying the retired runtime's Windows Job");
     const result = await service.recover({ principalId: operator, operatorPrincipalId: operator,
@@ -73,8 +96,8 @@ export async function executeReplanRecovery(service: RecoveryService, operator: 
         nodeRef: reservation.nodeRef, expectedReservationRevision: reservation.expectedReservationRevision,
         expectedReviewVersion: action.expectedReviewVersion, expectedReviewDigest: action.expectedReviewDigest,
         reason: "Retire the exact human-replanned owner while preserving the reviewed committed tree." } });
-    if (!result.ok) return refused(result.code);
-    if (result.resultCode !== "REPOSITORY_RECOVERY_RELEASED") return refused("MOE_CLI_REPLAN_RECOVERY_RESULT_INVALID");
+    if (!result.ok) return refused(result.code, released);
+    if (result.resultCode !== "REPOSITORY_RECOVERY_RELEASED") return refused("MOE_CLI_REPLAN_RECOVERY_RESULT_INVALID", released);
     released += 1;
   }
   // Automatic startup may legitimately release nothing: every owner was ordinary work it skipped.

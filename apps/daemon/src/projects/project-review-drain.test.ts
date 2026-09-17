@@ -24,6 +24,11 @@ describe("drain observer result contract", () => {
   it.each(["RUNTIME_REVIEW_DRAIN_ACCESS_DENIED", "RUNTIME_REVIEW_DRAIN_UNPROVEN", "RUNTIME_REVIEW_DRAIN_IDENTITY_MISMATCH"])("preserves stable refusal %s", (code) => {
     expect(decodeProjectReviewDrainFrame({ ok: false, code }, input)).toMatchObject({ ok: false, code });
   });
+  // The grain the observer's own birth check shares (addendum 2026-09-17): the cutoff's millisecond, no wider.
+  it("bounds the controller's birth at the millisecond the cutoff carries", () => {
+    expect(decodeProjectReviewDrainFrame({ ok: true, evidence: { ...evidence, controllerStartedAt: input.notStartedAfter } }, input)).toMatchObject({ ok: true });
+    expect(decodeProjectReviewDrainFrame({ ok: true, evidence: { ...evidence, controllerStartedAt: "2026-09-14T09:00:00.001Z" } }, input)).toBeNull();
+  });
   it.each([null, {}, { ok: true, evidence: { ...evidence, jobEmpty: false } }, { ok: true, evidence: { ...evidence, controllerPid: 45 } },
     { ok: true, evidence: { ...evidence, controllerStartedAt: "2026-09-14T09:00:01.000Z" } },
     { ok: true, evidence: { ...evidence, daemonPid: 44 } }, { ok: true, evidence: { ...evidence, brokerStartedAt: evidence.observedAt } },

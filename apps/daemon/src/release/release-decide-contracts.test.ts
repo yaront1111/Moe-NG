@@ -9,7 +9,6 @@ import {
   RELEASE_DECIDE_CODE_LAYER_MAP,
   RELEASE_DECIDE_CODES,
   RELEASE_DECIDE_COMMAND_KIND,
-  isReleaseDecideRefusal,
   releaseRefusal,
   type ReleaseDecideCode,
   type ReleaseDecideRefusal,
@@ -100,9 +99,10 @@ describe("release.decide refusal vocabulary", () => {
    * pair of independent unions, so the wrong layer is a COMPILE error.
    *
    * These arms are graded by `pnpm typecheck`, not by vitest — vitest strips types. If the
-   * correlation were ever weakened back to `{code: ReleaseDecideCode; layer: ReleaseDecideLayer}`,
-   * the `@ts-expect-error` directives would become unused and typecheck would red on them,
-   * which is exactly the alarm wanted.
+   * correlation were ever weakened back to
+   * `{code: ReleaseDecideCode; layer: <union of map values>}`, the `@ts-expect-error`
+   * directives would become unused and typecheck would red on them, which is exactly the
+   * alarm wanted.
    */
   it("makes a disagreeing (code, layer) pair inexpressible, even without the factory", () => {
     const honest: ReleaseDecideRefusal = {
@@ -130,37 +130,6 @@ describe("release.decide refusal vocabulary", () => {
   it("names a kind that the runtime vocabulary actually carries", () => {
     expect(RELEASE_DECIDE_COMMAND_KIND).toBe("release.decide");
     expect(new Set<string>(RUNTIME_COMMAND_KINDS).has(RELEASE_DECIDE_COMMAND_KIND)).toBe(true);
-  });
-
-  describe("isReleaseDecideRefusal", () => {
-    it("admits a minted refusal", () => {
-      for (const code of RELEASE_DECIDE_CODES) {
-        expect(isReleaseDecideRefusal(releaseRefusal(code))).toBe(true);
-      }
-    });
-
-    it("rejects non-refusals", () => {
-      expect(isReleaseDecideRefusal(null)).toBe(false);
-      expect(isReleaseDecideRefusal(undefined)).toBe(false);
-      expect(isReleaseDecideRefusal({})).toBe(false);
-      expect(isReleaseDecideRefusal({ ok: true })).toBe(false);
-      expect(isReleaseDecideRefusal("RELEASE_PR_FAILED")).toBe(false);
-    });
-
-    /**
-     * A refusal from ANOTHER vocabulary is not one of ours. The guard checks the code against
-     * the closed roster, so `ok === false` alone does not admit a foreign code.
-     */
-    it("rejects a foreign refusal that merely carries ok:false", () => {
-      expect(isReleaseDecideRefusal({ code: "PREVIEW_DECISION_INVALID", ok: false })).toBe(false);
-      expect(isReleaseDecideRefusal({ ok: false })).toBe(false);
-    });
-
-    it("does not admit a code inherited from the prototype chain", () => {
-      const inherited = Object.create({ code: "RELEASE_PR_FAILED" }) as { ok?: unknown };
-      inherited.ok = false;
-      expect(isReleaseDecideRefusal(inherited)).toBe(false);
-    });
   });
 
   /** The roster is the compile-time code set too, so a typo cannot reach the factory. */

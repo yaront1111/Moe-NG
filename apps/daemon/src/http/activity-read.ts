@@ -39,11 +39,6 @@ export function isSeatRecord(commandKind: string, targetAggregateId: string): bo
   return SEAT_KINDS.has(commandKind) || commandKind.startsWith("session.") || targetAggregateId.startsWith(SEAT_TARGET_PREFIX);
 }
 
-export const ACTIVITY_READ_CODES = Object.freeze([
-  "ACTIVITY_READ_CAPABILITY_DENIED", "ACTIVITY_READ_GOAL_UNKNOWN",
-  "ACTIVITY_READ_PROJECT_MISMATCH", "ACTIVITY_READ_UNREADABLE",
-] as const);
-
 export type ActivityDisposition = "COMMITTED" | "VERSION_CONFLICT";
 export interface ActivityEntry {
   readonly commandKind: string;
@@ -99,7 +94,7 @@ const VERDICT_KINDS: ReadonlySet<string> = new Set([
 
 /** A REJECT commits the run record with `decision` on it, so the word is READ. An APPROVE commits
  *  a GoalState - no decision word, a `lifecycle` - and the approval seams admit APPROVE ONLY
- *  (planning-services.ts:290), so for those kinds a lifecycle IS the verdict. Narrow on purpose,
+ *  (planning-services.ts:289-291), so for those kinds a lifecycle IS the verdict. Narrow on purpose,
  *  and not offered to `escalation.decide`: wider, and an unrelated record renders as an approval. */
 function decisionWord(commandKind: string, record: Record<string, unknown>): unknown {
   const decision = record["decision"];

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { isAsyncPackConsumerResult } from "./pack-source-consumer.js";
 import { PACK_SOURCE_ARCHIVE_PATHSPEC, PackSourceError, materializedPaths, parseRoster, sameRoster, verifyMaterializedContents,
   type PackSourceCode, type PackSourceIntegrityResolution } from "./pack-source-integrity.js";
@@ -8,6 +8,7 @@ import { postConsumerPackSourceRefusal } from "./pack-source-post-consumer.js";
 import { type WindowsLeaseEntry } from "./pack-windows-process-lease.js";
 import { materializedPackSourceLeaseEntries } from "./pack-source-lease.js";
 import { makePackSourceTemporaryRoot, removePackSourceTemporaryRoot, resolveOwnedPackSourceTemporaryRoot } from "./pack-source-owner.js";
+import { pathInside } from "./pack-tool-identity.js";
 export { PACKAGING_SOURCE_LAYER, PACK_SOURCE_ERROR_CODES, PackSourceError } from "./pack-source-integrity.js";
 export type { PackSourceCode } from "./pack-source-integrity.js";
 export interface PackSourceCommandResult { readonly error?: unknown; readonly status: number | null;
@@ -74,16 +75,12 @@ interface ResolvedDependencies {
   readonly removeTemporaryRoot?: (root: string) => void; readonly tarExecutable: string;
   readonly reportCleanupFailure?: (code: "PACK_SOURCE_CLEANUP_FAILED") => void; readonly tarFlavor: "bsdtar" | "gnu";
 }
-function inside(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-}
 function resolveDependencies(dependencies: PackSourceDependencies, repositoryRoot: string): Readonly<ResolvedDependencies> {
   try {
     const executable = (value: unknown): string => {
       if (typeof value !== "string" || !isAbsolute(value)) throw new Error();
       const canonical = realpathSync(value);
-      if (!statSync(canonical).isFile() || inside(repositoryRoot, canonical)) throw new Error();
+      if (!statSync(canonical).isFile() || pathInside(repositoryRoot, canonical)) throw new Error();
       return canonical;
     };
     const command = dependencies.command ?? nodeCommand;

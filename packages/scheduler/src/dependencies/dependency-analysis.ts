@@ -1,5 +1,6 @@
 import type { RedundancyCandidate } from "../graph-model.js";
 import { isGraphKey } from "../graph-key.js";
+import { deepFreeze, isRef, isSafeCount } from "../kernel-primitives.js";
 import { hasExactDenseArrayShape, hasOnlyOwnStringKeys, isPlainArray, isPlainRecord,
   readOwnArrayElement, readOwnDataProperty, readPlainArrayLength } from "../runtime-shape.js";
 import { validateDependencyContract, type DependencyContract } from "./dependency-contract.js";
@@ -49,23 +50,13 @@ export type DependencyChallengeResult =
   | { readonly ok: false; readonly issues: readonly DependencyAnalysisIssue[] };
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const MAX_ITEMS = 128;
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) deepFreeze((value as Record<string, unknown>)[key]);
-  return value;
-}
 function issue(code: DependencyAnalysisIssueCode, message: string, nodeKeys: readonly string[] = [], edgeKeys: readonly string[] = []): DependencyAnalysisIssue {
   return deepFreeze({ code, message, nodeKeys: [...nodeKeys], edgeKeys: [...edgeKeys] });
 }
 function failure<T extends ContractRedundancyResult | DependencyChallengeResult>(value: DependencyAnalysisIssue): T {
   return deepFreeze({ ok: false, issues: [value] }) as unknown as T;
 }
-function isRef(value: unknown): value is string { return typeof value === "string" && value.length > 0; }
 function isDigest(value: unknown): value is string { return typeof value === "string" && HEX_64.test(value); }
-function isVersion(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
-}
 function record(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
   if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, keys)) return null;
   const output: Record<string, unknown> = {};
@@ -151,7 +142,7 @@ function parseFactVersions(value: unknown) {
   const output: { sourceFactRef: string; version: number }[] = []; const seen = new Set<string>();
   for (const value of values) {
     const item = record(value, ["sourceFactRef", "version"]);
-    if (item === null || !isRef(item.sourceFactRef) || seen.has(item.sourceFactRef) || !isVersion(item.version)) return null;
+    if (item === null || !isRef(item.sourceFactRef) || seen.has(item.sourceFactRef) || !isSafeCount(item.version)) return null;
     seen.add(item.sourceFactRef); output.push(item as unknown as { sourceFactRef: string; version: number });
   }
   return output.sort((a, b) => a.sourceFactRef < b.sourceFactRef ? -1 : a.sourceFactRef > b.sourceFactRef ? 1 : 0);
@@ -176,7 +167,7 @@ function parseSubject(value: unknown): DependencyChallengeSubject | null {
     const item = record(value, ["kind", "producerNodeKey", "consumerNodeKey", "holdNodeKey", "edgeHash", "truthClass", "callerLeaseRef", "callerLeaseVersion"]);
     return item !== null && isGraphKey(item.producerNodeKey) && isGraphKey(item.consumerNodeKey) && isGraphKey(item.holdNodeKey) &&
       item.producerNodeKey !== item.consumerNodeKey && isDigest(item.edgeHash) && item.truthClass === "AGENT_REPORTED" &&
-      isRef(item.callerLeaseRef) && isVersion(item.callerLeaseVersion) ? item as unknown as DependencyChallengeSubject : null;
+      isRef(item.callerLeaseRef) && isSafeCount(item.callerLeaseVersion) ? item as unknown as DependencyChallengeSubject : null;
   }
   if (tagged.value === "EXISTING_EDGE_NECESSITY") {
     const item = record(value, ["kind", "edgeKey", "contractHash", "blockerKind"]);
@@ -203,7 +194,7 @@ function parseContext(value: unknown) {
   const lease = item === null ? null : record(item.callerLease, ["nodeKey", "leaseRef", "leaseVersion"]);
   const contracts = item === null ? null : dense(item.currentHardContracts);
   const challenges = item === null ? null : dense(item.openChallenges);
-  if (lease === null || contracts === null || challenges === null || !isGraphKey(lease.nodeKey) || !isRef(lease.leaseRef) || !isVersion(lease.leaseVersion)) return null;
+  if (lease === null || contracts === null || challenges === null || !isGraphKey(lease.nodeKey) || !isRef(lease.leaseRef) || !isSafeCount(lease.leaseVersion)) return null;
   const current = contracts.map((entry) => record(entry, ["edgeKey", "contractHash"]));
   const open = challenges.map(parseOpenChallenge);
   if (current.some((entry) => entry === null || !isGraphKey(entry.edgeKey) || !isDigest(entry.contractHash)) ||
@@ -223,7 +214,7 @@ export function validateDependencyChallenge(input: unknown, contextInput: unknow
   const subject = item === null ? null : parseSubject(item.subject); const status = item === null ? null : parseStatus(item.status);
   const context = parseContext(contextInput);
   if (item === null || binding === null || facts === null || subject === null || status === null || context === null ||
-    !isRef(item.challengeRef) || !isVersion(binding.graphEpoch) || !isRef(item.successorPlanningRunRef) || !isVersion(item.successorPlanningRunVersion))
+    !isRef(item.challengeRef) || !isSafeCount(binding.graphEpoch) || !isRef(item.successorPlanningRunRef) || !isSafeCount(item.successorPlanningRunVersion))
     return failure(issue("DEPENDENCY_CHALLENGE_MALFORMED", "dependency challenge is malformed"));
   const hash = subject.kind === "MISSING_EDGE_DISCOVERY" ? subject.edgeHash : subject.contractHash;
   const dedupKey = JSON.stringify(["moe-dependency-challenge/1", subject.kind, hash, binding.graphEpoch,

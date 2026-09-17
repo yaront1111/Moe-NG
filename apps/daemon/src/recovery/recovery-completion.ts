@@ -1,6 +1,8 @@
 import { applyApprovalCommand, reduceProject } from "@moe/core";
 import type { ApprovalDecisionRecord, RecoveryCompletionWitness } from "@moe/core";
-import { DurableStoreError } from "@moe/store";
+import {
+  DurableStoreError, ExpectedVersionConflictError, IdempotencyConflictError,
+} from "@moe/store";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import {
@@ -13,6 +15,7 @@ import type { RecoveryCompletionRefused } from "./recovery-completion-digest.js"
 import {
   CORE_APPROVAL_LAYER,
   PROJECT_REDUCER_LAYER,
+  completionIdempotencyConflict,
   completionStale,
   decodeRecoveryCompleteRequest,
   evidenceAbsent,
@@ -180,6 +183,27 @@ function verifyApproval(
   return { ok: true, approval };
 }
 
+/**
+ * A commit that THREW. Only the store's own CAS loss is "the project moved",
+ * and only its identity refusal is "these bytes differ": a second writer bound
+ * this command identity between the replay lookup and this commit, the same
+ * benign answer the replay path gives. Every other fault keeps the store's
+ * code under STORE_UNAVAILABLE, the same rule the evidence reads apply.
+ * OUTCOME_UNKNOWN is named for what it is: the store poisoned itself because
+ * it cannot say whether the decision and ProjectRecovered landed, so this
+ * layer may not say "nothing was written" — the caller reopens and reconciles
+ * by command identity instead of retrying.
+ */
+function commitFailed(error: unknown): RecoveryCompletionRefused {
+  if (error instanceof ExpectedVersionConflictError) return completionStale(error.code);
+  if (error instanceof IdempotencyConflictError) return completionIdempotencyConflict();
+  const unproven = error instanceof DurableStoreError && error.code === "OUTCOME_UNKNOWN";
+  return storeUnavailable(error, unproven
+    ? "The durable store could not prove whether this completion committed; "
+      + "reopen and reconcile by command identity before any retry."
+    : "The durable store could not perform the commit this completion depends on.");
+}
+
 /** (F)+(G) The pure lifecycle authority, then ONE commit carrying its event. */
 function commit(
   store: SqliteEventStore,
@@ -229,9 +253,7 @@ function commit(
       targetAggregateId: request.projectId,
     });
   } catch (error) {
-    return error instanceof DurableStoreError
-      ? completionStale(error.code)
-      : storeUnavailable(error);
+    return commitFailed(error);
   }
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     return completionStale(response.decision.resultCode);

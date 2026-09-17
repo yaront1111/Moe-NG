@@ -2,10 +2,7 @@ import { SQLITE_SCHEMA_MANIFEST_VERSION } from "@moe/store";
 import type { StoredEvent } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
-import {
-  deriveCutoverActivationMarkerAggregateId,
-  deriveLegacyCutoverActivationMarkerAggregateId,
-} from "./cutover-activation-marker.js";
+import { deriveCutoverActivationMarkerAggregateId } from "./cutover-activation-marker.js";
 import {
   V2_READINESS_MANIFEST_EVENT_TYPE,
   V2_READINESS_MANIFEST_KEYS,
@@ -182,12 +179,11 @@ describe("v2 readiness manifest bytes", () => {
 });
 
 describe("v2 readiness manifest durable reader", () => {
-  it("uses a server-derived namespace distinct from both marker generations", () => {
+  it("uses a server-derived namespace distinct from the activation marker's", () => {
     const readiness = deriveV2ReadinessManifestAggregateId("project-1");
     expect(deriveV2ReadinessManifestAggregateId("project-1")).toBe(readiness);
     expect(deriveV2ReadinessManifestAggregateId("project-2")).not.toBe(readiness);
     expect(readiness).not.toBe(deriveCutoverActivationMarkerAggregateId("project-1"));
-    expect(readiness).not.toBe(deriveLegacyCutoverActivationMarkerAggregateId("project-1"));
     expect(deriveV2ReadinessManifestAggregateId("p".repeat(4096)).length).toBeLessThanOrEqual(512);
   });
 

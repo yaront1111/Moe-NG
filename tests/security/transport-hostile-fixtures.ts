@@ -30,10 +30,6 @@ import {
   EFFORT_ADMISSION_LAYER, EFFORT_COLLECTOR_LAYER, EFFORT_LAYERS,
 } from "../../apps/control-room/src/performance/effort-records.js";
 import {
-  TIMELINE_REFUSAL_LAYERS,
-} from "../../apps/control-room/src/timeline/timeline-contract.js";
-import type { TimelineSourcePage } from "../../apps/control-room/src/timeline/timeline-contract.js";
-import {
   APPROVAL_COMMAND_KIND, PLAN_APPROVAL_BUILD_LAYER, PLAN_APPROVAL_TRANSPORT_LAYER,
   createPlanApprovalPort,
 } from "../../apps/control-room/src/v2/goals/plan-approval.js";
@@ -150,15 +146,6 @@ export const INTERVAL_OPEN_AWAY = Object.freeze({
   commandId: "cmd-1", intervalKind: "AWAY", observedAt: 9,
   source: "CONTROL_ROOM_DOM", type: "INTERVAL_OPEN",
 });
-
-// ── timeline ──────────────────────────────────────────────────────────────────────────────
-// INPUT answers before any page is read, so every PAGING fixture carries a VALID `maxRows`.
-export const LIMIT_INVALID =
-  at("TIMELINE_LIMIT_INVALID", layerOf(TIMELINE_REFUSAL_LAYERS, "INPUT"));
-export const CURSOR_NOT_ADVANCING =
-  at("TIMELINE_CURSOR_NOT_ADVANCING", layerOf(TIMELINE_REFUSAL_LAYERS, "PAGING"));
-export const stalling = (): TimelineSourcePage => ({ hasMore: true, nextCursor: null, rows: [] });
-export const drained = (): TimelineSourcePage => ({ hasMore: false, nextCursor: null, rows: [] });
 
 // ── daemon entry ──────────────────────────────────────────────────────────────────────────
 // No fixture reaches a listener bind, so a ListenerRefused can never stand in for the entry

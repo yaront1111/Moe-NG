@@ -160,10 +160,12 @@ export function createRecoveryKeyProvider(
   };
 
   /**
-   * `readSuccessionChain` is the authority on the origin, not the pointer. When
-   * the two disagree the pointer has drifted, and a drifted pointer is refused
-   * rather than believed — believing it would rename the epoch identity that
-   * everything downstream fences against.
+   * Re-read from the SUCCESSOR, after the writes: the chain an OPENED epoch
+   * reports is the one that actually got written, never the one `establish`
+   * read a moment earlier. A drifted pointer is refused there before any write;
+   * a disagreement that appears only now is still refused rather than believed,
+   * because believing it would rename the epoch identity that everything
+   * downstream fences against.
    */
   const finish = (
     store: SqliteEventStore,
@@ -209,6 +211,17 @@ export function createRecoveryKeyProvider(
     const { pointer } = read;
     const head = resolveHead(store, pointer.headIncarnationRef);
     if (head === null) return KEY_EPOCH_POINTER_UNREADABLE;
+    // `readSuccessionChain` is the authority on the origin, not the pointer,
+    // and it is readable from the head BEFORE anything is minted. A pointer
+    // whose origin is not the one its chain resolves to has drifted, and is
+    // refused here with nothing anchored, recorded or advanced: refusing it
+    // after those writes would grow the store on every daemon start, copy the
+    // drift into the new pointer, and never heal.
+    const chain = readSuccessionChain(store, request.projectId, head);
+    if (!chain.ok) return chain;
+    if (chain.originIncarnationRef !== pointer.originIncarnationRef) {
+      return KEY_EPOCH_POINTER_UNREADABLE;
+    }
     const successor = await succeedFrom(store, request, head);
     if (!("binding" in successor)) return successor;
     return {

@@ -1,7 +1,7 @@
 import { byCodeUnit } from "./canonical-bytes.js";
 import type { LegacySourceRecord } from "./import-canonical.js";
-import { AMBIGUITY_OUTCOME } from "./import-contract.js";
-import type { AmbiguityClass, ImportProvenance, ReconciliationFinding } from "./import-contract.js";
+import { reconciliationFinding } from "./import-contract.js";
+import type { ReconciliationFinding } from "./import-contract.js";
 // TYPE-ONLY, and deliberately so: `import type` is erased, so this leaves no runtime edge
 // back to the module that calls graphFindings. `ReconcileEntry` describes the whole
 // reconciliation input, not the graph, so it stays where the rest of that vocabulary lives.
@@ -11,17 +11,9 @@ import type { ReconcileEntry } from "./import-reconcile.js";
  * The `dependsOn` graph walk (design §21.6: dangling refs and cycles).
  *
  * Extracted from import-reconcile.ts so the walk has room to be written without recursion.
- * It carries its own `finding` factory rather than importing one, matching what
- * import-skill-assets.ts and import-duplicate-identity.ts already do — a value import from
- * the caller would be a genuine runtime cycle.
+ * It takes its finding factory from import-contract.ts, never from import-reconcile.ts — a
+ * value import from the caller would be a genuine runtime cycle.
  */
-function finding(
-  ambiguityClass: AmbiguityClass,
-  provenance: ImportProvenance,
-  detail: string,
-): ReconciliationFinding {
-  return Object.freeze({ ambiguityClass, detail, outcome: AMBIGUITY_OUTCOME, provenance });
-}
 
 function dependsOn(record: LegacySourceRecord): readonly string[] {
   const declared = record.payload["dependsOn"];
@@ -95,7 +87,7 @@ export function graphFindings(entries: readonly ReconcileEntry[]): readonly Reco
       if (target === undefined) {
         if (entry !== undefined && !reported.has(`${legacyId}->${ref}`)) {
           reported.add(`${legacyId}->${ref}`);
-          found.push(finding(
+          found.push(reconciliationFinding(
             "DANGLING_REF",
             entry.provenance,
             `record ${legacyId} depends on ${ref}, which was not imported`,
@@ -107,7 +99,7 @@ export function graphFindings(entries: readonly ReconcileEntry[]): readonly Reco
       if (seen === "OPEN") {
         if (entry !== undefined && !reported.has(`cycle:${ref}`)) {
           reported.add(`cycle:${ref}`);
-          found.push(finding(
+          found.push(reconciliationFinding(
             "CYCLE",
             entry.provenance,
             `record ${legacyId} closes a dependsOn cycle back to ${ref}`,

@@ -385,12 +385,11 @@ export type {
  * The core half of the expansion admission protocol: bind one scheduler-admitted
  * expansion to an approval identity, then approve it manually.
  *
- * CURATED, NOT COMPLETE. `canonicalBytes`, `expansionIdentityOf` and
- * `refuseExpansionPreparation` are exported from their modules so the approval
- * module can re-derive and refuse, and they stay unpublished on purpose: a
- * consumer that could recompute the canonical identity itself would be able to
- * fork the identity authority these two modules exist to hold, and a consumer
- * never needs to construct a refusal it is supposed to receive.
+ * CURATED, NOT COMPLETE. `canonicalBytes` is exported from its module only so
+ * the approval module can re-derive the identity, and it stays unpublished on
+ * purpose: a consumer that could recompute the canonical identity itself would
+ * be able to fork the identity authority these two modules exist to hold. The
+ * identity and refusal builders are module-private for the same reason.
  */
 export {
   EXPANSION_PREPARATION_CODES, EXPANSION_PREPARATION_COMPONENTS, EXPANSION_PREPARATION_LAYERS,

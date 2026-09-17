@@ -44,7 +44,15 @@ export interface ReviewRecoveryRequest extends StartRequest {
   readonly config: MoeConfig;
   readonly log: (line: string) => void;
 }
-export type ReviewRecoveryResult = { readonly ok: true } | { readonly ok: false; readonly code: string };
+/**
+ * `released` counts owners freed BEFORE a refusal. A replan release walks every replanned owner
+ * in turn, so a failure on the second leaves the first genuinely released — and the startup line
+ * below used to promise that every reservation was kept. A refusal that misreports what it did
+ * is worse than the failure it reports, so the count travels with it. Absent means none.
+ */
+export type ReviewRecoveryResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly code: string; readonly released?: number };
 
 export interface CliIo {
   /** The extracted artifact root (or the repository root in a checkout). */
@@ -187,7 +195,10 @@ async function runStart(invocation: CliStart, io: CliIo): Promise<number> {
     // A startup release that cannot be proved keeps every reservation exactly as it was. Refusing
     // to start never made one provable: it left the whole project unstartable (addendum 2026-09-15).
     if (!recovered.ok) {
-      io.log(`moe start: ${recovered.code}: the startup replan release was not proved; every repository reservation is kept as it was and the project starts`);
+      const freed = recovered.released ?? 0;
+      io.log(freed > 0
+        ? `moe start: ${recovered.code}: the startup replan release stopped after freeing ${String(freed)} replanned owner(s); the rest are kept as they were and the project starts`
+        : `moe start: ${recovered.code}: the startup replan release was not proved; every repository reservation is kept as it was and the project starts`);
     }
     const current = readConfig(targetDir, io);
     if (current === null || JSON.stringify(current) !== JSON.stringify(config)) {

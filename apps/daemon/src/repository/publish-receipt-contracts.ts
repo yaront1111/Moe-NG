@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
-
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
+
+import { exact, freezeDeep, hash, isObject, ref } from "../json-record-shape.js";
 
 /**
  * The durable shapes of PUBLISHING: the human's `repository.publish` decision
@@ -94,34 +93,6 @@ export function publishLinkFor(remoteUrl: string, branch: string): string | null
   const match = https ?? ssh;
   if (match === null) return null;
   return `https://github.com/${match[1] as string}/${match[2] as string}/tree/${encodeURIComponent(branch)}`;
-}
-
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function hash(parts: readonly JsonValue[]): string {
-  return createHash("sha256").update(JSON.stringify(parts), "utf8").digest("hex");
-}
-
-function freezeDeep<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      freezeDeep((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
 }
 
 /** Every publish fact for a goal lands beside the goal, never on it. */

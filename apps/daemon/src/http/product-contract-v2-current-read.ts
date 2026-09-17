@@ -20,8 +20,6 @@ import {
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
 
-export const PRODUCT_CONTRACT_V2_CURRENT_QUERY_KIND =
-  "product_contract.current_revision" as const;
 export const PRODUCT_CONTRACT_V2_CURRENT_READ_PATH =
   "/v2/product-contract/current" as const;
 const LAYER = "PRODUCT_CONTRACT_V2_CURRENT_READ" as const;

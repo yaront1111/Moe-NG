@@ -25,10 +25,10 @@ import { produceLaunchTemplateFields } from "../work/launch-template-producer.js
 import { nodeClosureOf, readCurrentNodeClosure } from "./node-closure-reader.js";
 import type { NodeClosureResult } from "./node-closure-reader.js";
 import {
-  NODE_BRIEF_PRODUCER_CODES, admitBriefWorkspace, briefProseOf, produceNodeBrief,
+  NODE_BRIEF_PRODUCER_CODES, briefProseOf, produceNodeBrief,
 } from "./node-mission-producer.js";
 import type {
-  NodeBriefRefusal, NodeBriefRequest, NodeBriefResult, NodeBriefWorkspaceResult,
+  NodeBriefRefusal, NodeBriefRequest, NodeBriefResult,
 } from "./node-mission-producer.js";
 import {
   ABSENT_NODE_KEY, CATALOG_ARGV, CATALOG_TEST_STRING, NODE_CAPABILITY, NODE_KEY, PROJECT_ID,
@@ -50,7 +50,7 @@ const MODULE_SOURCE = fileURLToPath(new URL("./node-mission-producer.ts", import
  * published code is covered by a named arm below, and no arm asserts a code the module does not
  * publish. Deleting a member of either side reds this; `length > 0` would not.
  *
- * All seven are driven through `produceNodeBrief`. The objective arm holds the readable closure
+ * All six are driven through `produceNodeBrief`. The objective arm holds the readable closure
  * fixed at its direct dependency seam while varying only the admissible durable objective; that
  * pins this producer's exact refusal without redundantly re-sealing the full activation journey.
  */
@@ -60,7 +60,6 @@ const DRIVEN_CODES = Object.freeze([
   "NODE_MISSION_OBJECTIVE_UNUSABLE",
   "NODE_MISSION_REQUEST_MALFORMED",
   "NODE_MISSION_TEST_UNAVAILABLE",
-  "NODE_MISSION_WORKSPACE_DISAGREEMENT",
   "NODE_MISSION_WORKSPACE_UNAVAILABLE",
 ] as const);
 
@@ -77,7 +76,7 @@ vi.mock("./node-closure-reader.js", async (importOriginal) => {
   };
 });
 
-function refusalOf(result: NodeBriefResult | NodeBriefWorkspaceResult): NodeBriefRefusal {
+function refusalOf(result: NodeBriefResult): NodeBriefRefusal {
   if (result.ok) throw new Error("expected a refusal, got an accepted answer");
   return result;
 }
@@ -278,25 +277,6 @@ describe("node mission producer (task-d8bb8a98)", () => {
     expect(refusal.upstream?.layer).toBe(SCOPE_LAYER);
   });
 
-  it("admits the ASSIGNMENT root and never the proposal when the two agree", () => {
-    const admitted = admitBriefWorkspace(SOURCE_ROOT, SOURCE_ROOT);
-
-    expect(admitted.ok).toBe(true);
-    if (!admitted.ok) throw new Error("expected an admitted workspace");
-    expect(admitted.workspace).toBe(SOURCE_ROOT);
-  });
-
-  it("refuses DISAGREEMENT rather than letting the proposal select", () => {
-    const assignment = "D:\\projexts\\moe-worktrees\\attempt-1";
-
-    const refusal = refusalOf(admitBriefWorkspace(SOURCE_ROOT, assignment));
-
-    expect(refusal.code).toBe("NODE_MISSION_WORKSPACE_DISAGREEMENT");
-    expect(refusal.layer).toBe(PRODUCER_LAYER);
-    // The proposal must not have won, and must not have been silently discarded either.
-    expect("workspace" in refusal).toBe(false);
-  });
-
   it("states the objective mapping in one production function that refuses a blank first line", () => {
     expect(briefProseOf("Land node-a.")).toStrictEqual({
       instructions: "Land node-a.", title: "Land node-a.",
@@ -330,9 +310,9 @@ describe("node mission producer (task-d8bb8a98)", () => {
     expect(refusal.upstream).toBeNull();
   });
 
-  it("publishes exactly seven refusal codes, and exactly the seven driven here", () => {
-    expect(NODE_BRIEF_PRODUCER_CODES).toHaveLength(7);
-    expect(DRIVEN_CODES).toHaveLength(7);
+  it("publishes exactly six refusal codes, and exactly the six driven here", () => {
+    expect(NODE_BRIEF_PRODUCER_CODES).toHaveLength(6);
+    expect(DRIVEN_CODES).toHaveLength(6);
     expect([...NODE_BRIEF_PRODUCER_CODES].sort()).toStrictEqual([...DRIVEN_CODES].sort());
     expect(Object.isFrozen(NODE_BRIEF_PRODUCER_CODES)).toBe(true);
   });

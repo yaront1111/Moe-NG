@@ -107,23 +107,6 @@ export function durableGoalMatches(
     && goal["projectId"] === projectId;
 }
 
-export function planningGoalRef(
-  ledger: DurableLedger,
-  projectId: string,
-  runId: string,
-): string | null {
-  const run = record(record(stateOf(ledger, runId))?.["state"]);
-  const bound = run?.["goalRef"];
-  if (typeof bound === "string") {
-    return durableGoalMatches(ledger, bound, projectId, runId) ? bound : null;
-  }
-  const candidates: string[] = [];
-  for (const [aggregateId] of ledger.aggregates) {
-    if (durableGoalMatches(ledger, aggregateId, projectId, runId)) candidates.push(aggregateId);
-  }
-  return candidates.length === 1 ? candidates[0] ?? null : null;
-}
-
 export function planReviewable(ledger: DurableLedger, runId: string): boolean {
   const run = record(record(stateOf(ledger, runId))?.["state"]);
   return run?.["lifecycle"] === REVIEWABLE_LIFECYCLE;

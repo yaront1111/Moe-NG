@@ -6,6 +6,8 @@ import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
+import { hostBootPortsOf, hostRebootedSince } from "./agent-staffing-host-boot.js";
+import type { HostBootIdPort, HostUptimePort } from "./agent-staffing-host-boot.js";
 import {
   actualVersionOf,
   createReclaimDispatch,
@@ -29,10 +31,10 @@ import type { LiveChildRecord } from "./agent-wrapper-reclaim-records.js";
  * retires the record. That ORDER is load-bearing: release before close and the
  * daemon still sees a live holder and refuses.
  *
- * FAIL CLOSED, exactly like the fence: an alive pid, an unknown pid, a probe
- * outage, an unreadable record or any refusal leaves every aggregate untouched
- * and says so on the log. Nothing here invents a verdict; every effect is a
- * normal dispatch through the committed command adapter.
+ * FAIL CLOSED, exactly like the fence: an alive pid inside its own boot, an
+ * unknown pid, a probe outage, an unreadable record or any refusal leaves every
+ * aggregate untouched and says so on the log. Nothing here invents a verdict;
+ * every effect is a normal dispatch through the committed command adapter.
  */
 
 export const RECLAIM_OUTCOMES = Object.freeze([
@@ -58,6 +60,9 @@ export interface ReclaimReport {
 export interface ReclaimPassConfig {
   readonly clock: () => number;
   readonly deps: CommandAdapterDeps;
+  /** The host's boot identity and uptime, injected like the probe; the host's own when absent. */
+  readonly hostBootId?: HostBootIdPort;
+  readonly hostUptimeMs?: HostUptimePort;
   readonly isProcessAlive: (pid: number) => boolean;
   readonly log: (line: string) => void;
   /** Correlates one boot's commands in the audit log; command ids stay derived. */
@@ -193,13 +198,15 @@ function releaseClaim(
 
 export function runReclaimPass(config: ReclaimPassConfig): readonly ReclaimReport[] {
   const { isProcessAlive, log, store } = config;
+  const host = hostBootPortsOf(config);
   const dispatch = createReclaimDispatch(
     config.deps, config.operatorCredential,
     `wrap-reclaim-${config.mintSecret().slice(0, 18)}`,
   );
   const now = new Date(config.clock()).toISOString();
   const fence = createAgentSessionFence({
-    isProcessAlive, projectId: config.projectId, store,
+    hostBootId: host.bootId, hostUptimeMs: host.uptimeMs, isProcessAlive,
+    projectId: config.projectId, store,
   });
   const reports: ReclaimReport[] = [];
   const keep = (
@@ -226,7 +233,11 @@ export function runReclaimPass(config: ReclaimPassConfig): readonly ReclaimRepor
           sessionDead === null ? "pid unknown, session ledger unreadable" : "pid unknown");
         continue;
       }
-    } else {
+    } else if (!hostRebootedSince(child.hostBoot, host)) {
+      // A pid speaks only for the boot that issued it. Once the host has rebooted since the
+      // row was written the child is certainly gone, and an alive answer would be a stranger's,
+      // kept for ever since nothing else retires the row. Only a row inside its boot is probed,
+      // and "inside" is read from the boot identity and the uptime, never from a clock.
       let alive: boolean;
       try {
         alive = isProcessAlive(child.childPid);

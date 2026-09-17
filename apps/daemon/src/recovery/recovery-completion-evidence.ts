@@ -130,10 +130,13 @@ export const completionIdempotencyConflict = (): RecoveryCompletionRefused =>
   });
 
 /** A genuine store fault is never reported as a benign refusal of the request. */
-export const storeUnavailable = (error: unknown): RecoveryCompletionRefused =>
+export const storeUnavailable = (
+  error: unknown,
+  reason = "The durable store could not answer a read this completion depends on.",
+): RecoveryCompletionRefused =>
   recoveryCompletionRefusal({
     code: "RECOVERY_COMPLETION_STORE_UNAVAILABLE",
-    reason: "The durable store could not answer a read this completion depends on.",
+    reason,
     refusedBy: RECOVERY_COMPLETION_LAYER,
     upstream: error instanceof DurableStoreError
       ? { code: error.code, layer: DURABLE_STORE_LAYER }

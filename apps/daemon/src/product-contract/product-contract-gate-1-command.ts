@@ -1,5 +1,5 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
+import type { JsonObject } from "@moe/contracts";
 import { admitProductContractRevisionRef, grantHumanAuthority,
   productContractGate1Authority } from "@moe/core";
 import type { HumanAuthorityGate, ProductContractRevisionRef } from "@moe/core";
@@ -9,6 +9,7 @@ import type { CommandDecisionRecord, ExpectedVersionDecisionLeg,
 
 import type { SessionAuthorityService } from "../identity/session-authority-contracts.js";
 import { isTransportOrigin } from "../http/http-contract.js";
+import { isObject as isPlainJsonObject, ref as isRef } from "../json-record-shape.js";
 import { readPresentedAuthentication, readSessionProof }
   from "../identity/session-authority-protocol.js";
 import {
@@ -95,16 +96,6 @@ const upstream = (code: string, layer: string): ProductContractGate1Refused =>
   productContractGate1Refusal({
     code, reason: "An upstream authority refused this approval.", refusedBy: layer,
   });
-
-/** `decodeBoundedJsonBytes` yields null-prototype objects; anything else is untrusted. */
-function isPlainJsonObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function isRef(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function hasExactKeys(record: JsonObject, roster: ReadonlySet<string>, size: number): boolean {
   const keys = Object.keys(record);

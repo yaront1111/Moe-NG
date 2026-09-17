@@ -6,6 +6,7 @@ import {
   GOVERNANCE_FENCE_END,
   createGovernorSeat,
   governorPrompt,
+  governorRunnerArgs,
   readGovernorAnswer,
 } from "./governor-seat.js";
 import type { GovernorRunner } from "./governor-seat.js";
@@ -26,6 +27,7 @@ const BRIEF: GovernanceBrief = Object.freeze({
       detail: "Should shared.obligation.description be FUNCTIONAL or SET? An agent cannot decide.",
       findingId: "registry-review-obligation-description-cardinality",
       severity: "MAJOR",
+      subject: "CRITERION:CRT-REG-03-A",
     }),
   ]),
   reviewVersion: 4,
@@ -51,7 +53,7 @@ const CITED = {
   rationale: "",
 };
 
-const answered = (output: string): GovernorRunner => () => ({ ok: true, output });
+const answered = (output: string): GovernorRunner => () => Promise.resolve({ ok: true, output });
 const seatOver = (run: GovernorRunner) => {
   const lines: string[] = [];
   return { lines, seat: createGovernorSeat({ log: (line) => lines.push(line), run }) };
@@ -140,33 +142,38 @@ describe("what the governor is not allowed to get away with", () => {
 });
 
 describe("running the seat", () => {
-  it("answers when the seat answers", () => {
+  it("answers when the seat answers", async () => {
     const { lines, seat } = seatOver(answered(fenced({
       decisions: [CITED], guidance: "The PRD already answers this: SET.",
     })));
 
-    expect(seat(BRIEF)?.decisions).toHaveLength(1);
+    expect((await seat(BRIEF))?.decisions).toHaveLength(1);
     expect(lines[0]).toContain("1 from the product record");
   });
 
-  it("gives no answer when the seat fails, times out, or dies", () => {
-    const failed = seatOver(() => ({ ok: false, output: "killed" }));
-    expect(failed.seat(BRIEF)).toBeNull();
+  it("gives no answer when the seat fails, times out, or dies", async () => {
+    const failed = seatOver(() => Promise.resolve({ ok: false, output: "killed" }));
+    expect(await failed.seat(BRIEF)).toBeNull();
     expect(failed.lines[0]).toContain("failed");
 
+    // A runner that REJECTS, which is how the real one reports a command it cannot launch.
+    const rejected = seatOver(() => Promise.reject(new Error("ENOENT")));
+    expect(await rejected.seat(BRIEF)).toBeNull();
+    expect(rejected.lines[0]).toContain("could not be run");
+
     const died = seatOver(() => { throw new Error("ENOENT"); });
-    expect(died.seat(BRIEF)).toBeNull();
+    expect(await died.seat(BRIEF)).toBeNull();
     expect(died.lines[0]).toContain("could not be run");
   });
 
-  it("gives no answer when the seat says nothing usable", () => {
+  it("gives no answer when the seat says nothing usable", async () => {
     const { lines, seat } = seatOver(answered("I would rather not say."));
 
-    expect(seat(BRIEF)).toBeNull();
+    expect(await seat(BRIEF)).toBeNull();
     expect(lines[0]).toContain("no usable decision");
   });
 
-  it("still answers when the product record cannot be read", () => {
+  it("still answers when the product record cannot be read", async () => {
     // Background is background. Losing it means the seat will usually have to decide rather
     // than cite, which is a worse answer — but not no answer.
     const lines: string[] = [];
@@ -176,7 +183,23 @@ describe("running the seat", () => {
       run: answered(fenced({ decisions: [DECIDED], guidance: "SET." })),
     });
 
-    expect(seat(BRIEF)?.decisions).toHaveLength(1);
+    expect((await seat(BRIEF))?.decisions).toHaveLength(1);
+  });
+});
+
+describe("how the provider is launched", () => {
+  it("reads the command's leaf, never the path that led to it", () => {
+    expect(governorRunnerArgs("codex", "Q")).toEqual(["exec", "Q"]);
+    expect(governorRunnerArgs("/usr/local/bin/codex", "Q")).toEqual(["exec", "Q"]);
+    expect(governorRunnerArgs("C:\\tools\\Codex.exe", "Q")).toEqual(["exec", "Q"]);
+    expect(governorRunnerArgs("claude", "Q")).toEqual(["-p", "Q"]);
+
+    // The defect: matching the WHOLE command string matched any directory on the way to the
+    // binary, so a project whose agent lives under a codex-named folder is still `claude` — and
+    // `claude exec <prompt>` is not a print mode, so it prints nothing that can be parsed and
+    // the node is handed back to the human for no reason at all.
+    expect(governorRunnerArgs("D:/codex-tools/claude.exe", "Q")).toEqual(["-p", "Q"]);
+    expect(governorRunnerArgs("C:\\codex\\bin\\claude.cmd", "Q")).toEqual(["-p", "Q"]);
   });
 });
 
@@ -187,6 +210,9 @@ describe("what the governor is asked", () => {
     expect(prompt).toContain("registry-review-obligation-description-cardinality");
     expect(prompt).toContain("Should shared.obligation.description be FUNCTIONAL or SET?");
     expect(prompt).toContain("CRT-REG-03-A");
+    // The subject, because a rule id names the check and not the thing checked: a seat shown
+    // only the rule would answer two findings of one rule as though they were one question.
+    expect(prompt).toContain("Subject: CRITERION:CRT-REG-03-A");
     expect(prompt).toContain("THE PRODUCT RECORD DECIDES FIRST");
     expect(prompt).toContain("PRD 26.1: obligations carry descriptions.");
     expect(prompt).toContain(GOVERNANCE_FENCE_BEGIN);

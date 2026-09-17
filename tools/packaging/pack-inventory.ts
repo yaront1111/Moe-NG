@@ -18,7 +18,6 @@ export const PACK_TEST_ARTIFACT_PRESENT = "PACK_TEST_ARTIFACT_PRESENT" as const;
 export const PACK_VCS_ARTIFACT_PRESENT = "PACK_VCS_ARTIFACT_PRESENT" as const;
 export const PACK_DEV_DEPENDENCY_PRESENT = "PACK_DEV_DEPENDENCY_PRESENT" as const;
 export const PACK_BRIDGE_MISSING = "PACK_BRIDGE_MISSING" as const;
-export const PACK_WORKTREE_DIRTY = "PACK_WORKTREE_DIRTY" as const;
 export const PACK_DANGLING_IMPORT = "PACK_DANGLING_IMPORT" as const;
 export const PACK_DEV_DEPENDENCY_IMPORT = "PACK_DEV_DEPENDENCY_IMPORT" as const;
 export const PACK_SENSITIVE_PATH_PRESENT = "PACK_SENSITIVE_PATH_PRESENT" as const;
@@ -31,8 +30,7 @@ export type PackRefusalCode =
   | typeof PACK_REQUIRED_PATH_MISSING
   | typeof PACK_SENSITIVE_PATH_PRESENT
   | typeof PACK_TEST_ARTIFACT_PRESENT
-  | typeof PACK_VCS_ARTIFACT_PRESENT
-  | typeof PACK_WORKTREE_DIRTY;
+  | typeof PACK_VCS_ARTIFACT_PRESENT;
 
 /**
  * Which gate refused. The pack runs several in series and each has its own layer
@@ -223,57 +221,4 @@ export function inspectStagedTree(input: PackInventoryInput): PackInventoryResul
 
   if (refusals.length > 0) return Object.freeze({ ok: false, refusals: Object.freeze(refusals) });
   return Object.freeze({ fileCount: input.paths.length, ok: true });
-}
-
-/**
- * Every repo path whose bytes decide what the zip contains; dirt in any of them
- * stops the pack. The source trees and the licence are copied in directly, while
- * `tools/packaging/` builds, stages, inventories and documents the artifact. The
- * four root files are NOT copied, which is why they were once missing here, but
- * they are inputs all the same: `pnpm deploy` resolves the shipped third-party
- * closure from the lockfile, the workspace definition and `.npmrc`, and the root
- * manifest supplies the version stamped into INSTALL.md and MANIFEST-CLOSURE.txt.
- * A modified lockfile or packer ships bytes no commit describes.
- *
- * Porcelain paths are repo-relative, so `package.json` names the ROOT manifest
- * only; a package's own manifest is already under `apps/` or `packages/`.
- */
-export const SHIPPED_PREFIXES = Object.freeze([
-  "apps/",
-  "packages/",
-  "adapters/",
-  "tools/packaging/",
-  "LICENSE",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  ".npmrc",
-]);
-
-/** `git status --porcelain` codes are two columns; the path starts at column 3. */
-function porcelainPath(line: string): string {
-  const raw = line.slice(3).trim();
-  // A rename reports `origin -> destination`; the DESTINATION is what would ship.
-  const arrow = raw.lastIndexOf(" -> ");
-  const path = arrow < 0 ? raw : raw.slice(arrow + 4);
-  return path.replace(/^"|"$/gu, "").replaceAll("\\", "/");
-}
-
-/**
- * Six agents share this worktree, so it WILL be dirty. Refusing is the pinned
- * policy: a zip that quietly carries a peer's uncommitted bytes is forged
- * evidence about what the release commit contains.
- */
-export function inspectWorktree(
-  porcelain: readonly string[], shippedPrefixes: readonly string[],
-): PackRefusal | null {
-  const dirty = porcelain
-    .filter((line) => line.trim() !== "")
-    .map(porcelainPath)
-    .filter((path) => shippedPrefixes.some(
-      (prefix) => path === prefix || path.startsWith(prefix),
-    ))
-    .sort();
-  if (dirty.length === 0) return null;
-  return refuse(PACK_WORKTREE_DIRTY, dirty.join(", "));
 }

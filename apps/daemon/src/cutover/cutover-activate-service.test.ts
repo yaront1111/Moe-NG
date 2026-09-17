@@ -12,11 +12,8 @@ import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 
 import {
   CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
-  LEGACY_CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
   decodeCutoverActivationMarker,
   deriveCutoverActivationMarkerAggregateId,
-  deriveLegacyCutoverActivationMarkerAggregateId,
-  encodeLegacyCutoverActivationMarker,
 } from "./cutover-activation-marker.js";
 import {
   CUTOVER_ACTIVATE_CODES,
@@ -702,40 +699,6 @@ describe("the first v2 authoritative command waits for the marker", () => {
       expect(refused.ok).toBe(false);
       if (refused.ok) return;
       expect(refused.code).toBe("CUTOVER_V2_COMMAND_UNKNOWN");
-    });
-  });
-
-  it("never treats a forensic /1 marker as v2 authority", () => {
-    withHarness((harness) => {
-      const generations = liveGenerations(harness);
-      const payload = encodeLegacyCutoverActivationMarker({
-        activatedAtEpochMs: ACTIVATED_AT,
-        generations,
-        schemaVersion: "moe-cutover-activation-marker/1",
-        sourceCommit: SOURCE_COMMIT,
-      });
-      const aggregateId = deriveLegacyCutoverActivationMarkerAggregateId(PROJECT_ID);
-      harness.store.commit({
-        aggregateId,
-        commandBytes: payload,
-        commandId: "legacy-marker",
-        committedAt: DECIDED_AT,
-        events: [{
-          eventId: "legacy-marker-event",
-          eventType: LEGACY_CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
-          payload,
-        }],
-        expectedVersion: 0,
-      });
-
-      expect(admitV2AuthoritativeCommand(harness.store, {
-        commandKind: "product_contract.propose_revision",
-        projectId: PROJECT_ID,
-      })).toEqual({
-        code: "CUTOVER_V2_NOT_ACTIVE",
-        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
-        ok: false,
-      });
     });
   });
 

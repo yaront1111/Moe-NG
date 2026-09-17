@@ -20,6 +20,7 @@ import type { PreparedReviewSubmission } from "./review-submission-package.js";
 import type { ReviewVerifierFailureSource } from "./review-verifier-failure.js";
 
 /** Re-exported so a handler imports its whole composition surface from one module. */
+export { payloadRef } from "../json-record-shape.js";
 export { readReviewLedger } from "./review-read-model.js";
 export type { ReviewLedger, ReviewRoundRecord } from "./review-read-model.js";
 
@@ -245,18 +246,6 @@ export function replayOf(store: SqliteEventStore, request: ReviewRequest): Revie
     kind: request.kind,
     ok: true as const,
   });
-}
-
-export function payloadRef(payload: JsonObject, key: string): string | null {
-  const value = payload[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-export function payloadObject(payload: JsonObject, key: string): JsonObject | null {
-  const value = payload[key];
-  if (value === null || value === undefined || typeof value !== "object") return null;
-  if (Array.isArray(value)) return null;
-  return value as JsonObject;
 }
 
 export function payloadArray(payload: JsonObject, key: string): readonly JsonValue[] | null {

@@ -8,6 +8,7 @@ import type {
 import type {
   DurableInventoryObservation,
 } from "./durable-recovery-inventory-contract.js";
+import { durableObservationIdentity } from "./durable-recovery-inventory-shape.js";
 import {
   recoveryInventoryRefusal,
 } from "./recovery-inventory-contract.js";
@@ -43,6 +44,7 @@ export type RestoredIntentProof =
 
 export interface RestoredEffectIntent {
   readonly class: RecoveryProofClass;
+  /** A node item's path or opaque id; a durable row's `durableObservationIdentity`. */
   readonly externalIdentity: string;
   readonly population: RecoveryInventoryPopulation;
   readonly proof: RestoredIntentProof;
@@ -124,14 +126,22 @@ function nodeObserved(
   });
 }
 
+/**
+ * A durable subject is the ROW, keyed exactly as the durable inventory keys it:
+ * (attemptRef, targetRef, effectIntentRef) or (resourceId, effectIntentRef).
+ * One sealed window legitimately holds two attempts onto one target and one
+ * resource reserved under two request ids, so keying by the bare target or
+ * resource name would refuse every such window as a duplicate subject.
+ */
 function durableObserved(
   item: DurableInventoryObservation,
   proofDigests: ReadonlyMap<RecoveryProofClass, string>,
 ): ObservedSubject {
+  const identity = durableObservationIdentity(item);
   if (item.class === "INTEGRATION_TARGET") {
     return Object.freeze({
       class: item.class,
-      identity: item.targetRef,
+      identity,
       population: "INTEGRATION_TARGET" as const,
       sourceProofDigest: digestFor(proofDigests, item.class),
     });
@@ -145,7 +155,7 @@ function durableObserved(
   return Object.freeze({
     class: item.class,
     ...(evidence === null ? {} : { evidence }),
-    identity: item.resourceId,
+    identity,
     population: "RESOURCE" as const,
     sourceProofDigest: digestFor(proofDigests, item.class),
   });

@@ -1,17 +1,22 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { NODE_TREES_DIRECTORY, ensureNodeTree, forgetNodeTrees, nodeTreeName } from "./node-worktrees.js";
+import type { NodeTree } from "./node-worktrees.js";
 
 const roots: string[] = [];
 afterEach(() => {
   forgetNodeTrees();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-function project(): string {
+function scratch(): string {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-node-trees-"))); roots.push(root);
+  return root;
+}
+function project(): string {
+  const root = scratch();
   const git = (...args: string[]) => execFileSync("git", args, { cwd: root, windowsHide: true, stdio: "ignore" });
   git("init", "--quiet");
   git("config", "user.email", "tree@example.test");
@@ -23,6 +28,18 @@ function project(): string {
 }
 const gitIn = (cwd: string, ...args: string[]): string =>
   execFileSync("git", args, { cwd, encoding: "utf8", windowsHide: true }).trim();
+function land(tree: NodeTree, file: string): void {
+  writeFileSync(join(tree.path, file), "landed\n", "utf8");
+  execFileSync("git", ["add", file], { cwd: tree.path, windowsHide: true, stdio: "ignore" });
+  execFileSync("git", ["commit", "--quiet", "-m", file], { cwd: tree.path, windowsHide: true, stdio: "ignore" });
+}
+/** The spellings a launcher hands for one project: Git reports the canonical one for all of them. */
+const spellings: ReadonlyArray<readonly [string, (root: string) => string]> = [
+  ["through a link", (root) => { const link = join(scratch(), "project"); symlinkSync(root, link, "junction"); return link; }],
+  ...(process.platform === "win32"
+    ? [["with a lower-case drive letter", (root: string) => `${root[0]!.toLowerCase()}${root.slice(1)}`] as const]
+    : []),
+];
 
 /** One working tree per node, so nodes hold their own checkouts (owner decision 2026-09-16). */
 describe("a node's own working tree", () => {
@@ -79,9 +96,7 @@ describe("a node's own working tree", () => {
     const root = project();
     const tree = ensureNodeTree({ nodeRef: "node:v1:kept", projectRoot: root });
     if (tree === null) throw new Error("expected a tree");
-    writeFileSync(join(tree.path, "kept.txt"), "landed\n", "utf8");
-    execFileSync("git", ["add", "kept.txt"], { cwd: tree.path, windowsHide: true, stdio: "ignore" });
-    execFileSync("git", ["commit", "--quiet", "-m", "landed"], { cwd: tree.path, windowsHide: true, stdio: "ignore" });
+    land(tree, "kept.txt");
     const landed = gitIn(root, "rev-parse", tree.branch);
     // The tree is gone (a cleaned scratch directory), but the branch and its work are not.
     execFileSync("git", ["worktree", "remove", "--force", tree.path], { cwd: root, windowsHide: true, stdio: "ignore" });
@@ -91,6 +106,33 @@ describe("a node's own working tree", () => {
     expect(again).toEqual(tree);
     expect(gitIn(again!.path, "rev-parse", "HEAD")).toBe(landed);
     expect(existsSync(join(again!.path, "kept.txt"))).toBe(true);
+  }, 120_000);
+
+  it("makes the tree again after its directory went without telling Git", () => {
+    const root = project();
+    const tree = ensureNodeTree({ nodeRef: "node:v1:swept", projectRoot: root });
+    if (tree === null) throw new Error("expected a tree");
+    land(tree, "swept.txt");
+    const landed = gitIn(root, "rev-parse", tree.branch);
+    // Deleted outright (a cleanup, not `git worktree remove`): Git still registers the tree.
+    rmSync(tree.path, { recursive: true, force: true });
+
+    const again = ensureNodeTree({ nodeRef: "node:v1:swept", projectRoot: root });
+
+    expect(again).toEqual(tree);
+    expect(gitIn(again!.path, "rev-parse", "HEAD")).toBe(landed);
+    expect(existsSync(join(again!.path, "swept.txt"))).toBe(true);
+  }, 120_000);
+
+  it.each(spellings)("accepts the project root spelled %s", (_label, spell) => {
+    const root = project();
+
+    const tree = ensureNodeTree({ nodeRef: "node:v1:spelled", projectRoot: spell(root) });
+
+    expect(tree).not.toBeNull();
+    expect(tree!.path).toBe(join(root, NODE_TREES_DIRECTORY, nodeTreeName("node:v1:spelled")!));
+    // One project however it is spelled: the canonical root names the same tree, not a second one.
+    expect(ensureNodeTree({ nodeRef: "node:v1:spelled", projectRoot: root })).toEqual(tree);
   }, 120_000);
 
   it.each([

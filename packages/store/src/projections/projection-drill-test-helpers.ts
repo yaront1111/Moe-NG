@@ -93,9 +93,6 @@ export interface DrillCommit {
 export interface DurableProjection {
   readonly digest: string | null; readonly position: bigint;
 }
-export interface DatabaseInvariants {
-  readonly foreignKeyViolations: number; readonly integrity: string;
-}
 export interface IncrementalBuild {
   readonly checkpoint: bigint; readonly digest: string;
   readonly deliveries: number; readonly state: ProjectionState;
@@ -182,15 +179,6 @@ export function readDurableProjection(
     digest: typeof digest === "string" ? digest : null,
     position: BigInt(String(row["last_applied_position"])),
   });
-}
-
-/** SQLite's own verdict on the file after a hard kill, read on a fresh connection so no
- *  in-process cache can answer for the bytes on disk. */
-export function inspectDrillDatabase(path: string): DatabaseInvariants {
-  return withDrillDatabase(path, (database) => Object.freeze({
-    foreignKeyViolations: database.prepare("PRAGMA foreign_key_check").all().length,
-    integrity: String(database.prepare("PRAGMA integrity_check").get()?.["integrity_check"]),
-  }));
 }
 
 export function ledgerEnd(database: DatabaseSync): bigint {

@@ -1,5 +1,7 @@
 import type { FetchLike } from "@moe/control-room-client";
 
+import { exactDataRecord } from "./live-wire-primitives.js";
+
 /**
  * Reads the project-bound durable goal catalog from POST /goals/read.
  *
@@ -87,37 +89,6 @@ function frame(
 
 function unreadable(): GoalCatalogFrame {
   return frame("CONNECTED", "UNREADABLE", LIVE_GOAL_CATALOG_UNREADABLE);
-}
-
-/**
- * Returns an own-enumerable exact-key snapshot and rejects prototypes,
- * symbols, non-enumerable fields, and accessors. A decoded network object is
- * ordinarily plain; accepting anything richer would let unvouched behavior run
- * while the UI is deciding which project goal to open.
- */
-function exactDataRecord(
-  value: unknown,
-  expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-        return null;
-      }
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
 }
 
 function nonEmptyString(value: unknown): value is string {

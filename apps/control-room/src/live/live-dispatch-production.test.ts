@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { dispatchAffordancePayload } from "./live-command-dispatch.js";
+import { dispatchPreparedPayload } from "./live-command-dispatch.js";
 import { DEV_PAYLOADS } from "./live-dispatch-payloads.js";
 
-describe("dispatchAffordancePayload", () => {
+describe("dispatchPreparedPayload", () => {
   it("hands an explicit operator payload through the daemon offer without consulting dev defaults", async () => {
     const builder = vi.fn((affordance: unknown, caller: unknown) => ({
       envelope: { ...(affordance as Record<string, unknown>), caller }, ok: true as const,
@@ -34,15 +34,14 @@ describe("dispatchAffordancePayload", () => {
       witness: {},
     };
 
-    const result = await dispatchAffordancePayload({
+    const result = await dispatchPreparedPayload({
       affordance,
       aggregateId: "goal-operator-1",
       client: { commands: { "goal.create": builder } } as never,
       kind: "goal.create",
-      payload,
       sessionCredential: "credential-operator",
       transport: { sendCommand } as never,
-    });
+    }, payload);
 
     expect(result).toEqual({ detail: "DECIDED GOAL_CREATED", ok: true, stage: "ANSWERED" });
     expect(builder).toHaveBeenCalledTimes(1);
@@ -62,7 +61,7 @@ describe("dispatchAffordancePayload", () => {
       },
       status: 200,
     }));
-    const result = await dispatchAffordancePayload({
+    const result = await dispatchPreparedPayload({
       affordance: {
         commandId: "daemon-command-1", commandKind: "goal.create",
         expectedVersion: 0, targetAggregateId: "goal-operator-1",
@@ -72,10 +71,9 @@ describe("dispatchAffordancePayload", () => {
         envelope: { commandId: "substituted-command" }, ok: true,
       }) } } as never,
       kind: "goal.create",
-      payload: {},
       sessionCredential: "credential-operator",
       transport: { sendCommand } as never,
-    });
+    }, {});
 
     expect(result).toEqual({
       detail: "unreadable answer", ok: false, stage: "ANSWER_UNREADABLE",
@@ -118,7 +116,7 @@ describe("dispatchAffordancePayload", () => {
       httpStatus: 200, ok: true, outcome: "ACCEPTED",
     }],
   ] as const)("does not accept a malformed success: %s", async (_name, status, response) => {
-    const result = await dispatchAffordancePayload({
+    const result = await dispatchPreparedPayload({
       affordance: {
         commandId: "daemon-command-1", commandKind: "goal.create",
         expectedVersion: 0, targetAggregateId: "goal-operator-1",
@@ -126,10 +124,9 @@ describe("dispatchAffordancePayload", () => {
       aggregateId: "goal-operator-1",
       client: { commands: { "goal.create": () => ({ envelope: {}, ok: true }) } } as never,
       kind: "goal.create",
-      payload: {},
       sessionCredential: "credential-operator",
       transport: { sendCommand: async () => ({ delivered: true, response, status }) } as never,
-    });
+    }, {});
 
     expect(result).toEqual({
       detail: "unreadable answer", ok: false, stage: "ANSWER_UNREADABLE",
@@ -137,12 +134,11 @@ describe("dispatchAffordancePayload", () => {
   });
 
   it("preserves an exact port refusal code and refusing layer", async () => {
-    const result = await dispatchAffordancePayload({
+    const result = await dispatchPreparedPayload({
       affordance: {},
       aggregateId: "goal-operator-1",
       client: { commands: { "goal.create": () => ({ envelope: {}, ok: true }) } } as never,
       kind: "goal.create",
-      payload: {},
       sessionCredential: "credential-operator",
       transport: {
         sendCommand: async () => ({
@@ -162,7 +158,7 @@ describe("dispatchAffordancePayload", () => {
           status: 409,
         }),
       } as never,
-    });
+    }, {});
 
     expect(result).toEqual({
       detail: "EXPECTED_VERSION_CONFLICT @ CORE_REDUCER",

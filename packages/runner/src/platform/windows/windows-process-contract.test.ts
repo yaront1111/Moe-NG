@@ -11,8 +11,6 @@ import {
   WINDOWS_PROCESS_CODES,
   WINDOWS_PROCESS_LAYERS,
   WINDOWS_PROCESS_TRUTH_CLASSES,
-  isWindowsProcessCode,
-  isWindowsProcessLayer,
   processIdentity,
   provenRun,
   unknownOutcome,
@@ -43,18 +41,6 @@ describe("the closed vocabularies", () => {
       "WINDOWS_PROCESS_TRANSPORT",
     ]);
     expect(broker.length + local.length).toBe(WINDOWS_PROCESS_LAYERS.length);
-  });
-
-  it("recognises exactly its own members", () => {
-    for (const code of WINDOWS_PROCESS_CODES) {
-      expect(isWindowsProcessCode(code)).toBe(true);
-    }
-    for (const layer of WINDOWS_PROCESS_LAYERS) {
-      expect(isWindowsProcessLayer(layer)).toBe(true);
-    }
-    expect(isWindowsProcessCode("PROCESS_BOUNDARY_")).toBe(false);
-    expect(isWindowsProcessLayer("BROKER_NATIVE ")).toBe(false);
-    expect(isWindowsProcessCode(1)).toBe(false);
   });
 });
 

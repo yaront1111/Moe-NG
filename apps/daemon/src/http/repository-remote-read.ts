@@ -24,6 +24,7 @@ import { decodePublicationCandidate } from "../repository/publication-approval-c
 import type { PublicationApproval, PublicationCandidateReader } from "../repository/publication-approval-contracts.js";
 import { admitRemoteUrl } from "../repository/publish-receipt-contracts.js";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import { emptyBody } from "./empty-read-body.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
 
@@ -110,13 +111,6 @@ export function createRepositoryRemoteReadPort(
 export type RepositoryRemoteReadDispatch =
   | { readonly body: RepositoryRemoteReadResult | PublicationCandidateView | HttpPortRefused | HttpRefused; readonly httpStatus: number; readonly kind: "REPLY" }
   | { readonly code: "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID" | "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE"; readonly kind: "LISTENER_REFUSAL" };
-
-function emptyBody(body: unknown): boolean {
-  if (body instanceof Uint8Array && body.length === 0) return true;
-  const decoded = decodeBoundedJsonBytes(body);
-  return decoded.ok && typeof decoded.value === "object" && decoded.value !== null
-    && !Array.isArray(decoded.value) && Object.keys(decoded.value).length === 0;
-}
 
 export function handleRepositoryRemoteReadRequest(
   dependencies: { readonly authenticator: Authenticator; readonly repositoryRemote?: RepositoryRemoteReadPort | undefined },

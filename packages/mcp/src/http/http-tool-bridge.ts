@@ -78,11 +78,11 @@ export interface HttpDispatchPort {
 const encoder = new TextEncoder();
 
 /** Every adapter-side refusal routes through the registry, never through invented codes. */
-export function refuse(error: RuntimeError): never {
+function refuse(error: RuntimeError): never {
   throw new McpError(error.transport.mcpCode, error.code, error);
 }
 
-export function refuseInvalidInput(): never {
+function refuseInvalidInput(): never {
   refuse(createRuntimeError({ code: "INPUT_INVALID" }));
 }
 
@@ -91,7 +91,7 @@ export function refuseInvalidInput(): never {
  * `UNKNOWN_ERROR`, so host paths and connection strings in an arbitrary `Error` message cannot
  * reach an MCP client's logs.
  */
-export function refuseUnknown(): never {
+function refuseUnknown(): never {
   refuse(createRuntimeError({ code: "UNKNOWN_ERROR" }));
 }
 

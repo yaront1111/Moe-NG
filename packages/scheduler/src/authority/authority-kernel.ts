@@ -5,33 +5,20 @@
  * deliberate string-identical clone of the runtime contract registry. Each one
  * carries its source so a drift test can compare them by value.
  */
+import { compareStrings, deepFreeze, isRef } from "../kernel-primitives.js";
 import {
-  hasOnlyOwnStringKeys,
   isPlainArray,
-  isPlainRecord,
   readOwnArrayElement,
-  readOwnDataProperty,
   readPlainArrayLength,
 } from "../runtime-shape.js";
 
 /**
- * CONSOLIDATION NOTE: `deepFreeze`/`compareStrings` are cloned here for the
- * third time (see `../graph-internal.ts` and `../dependencies/`). A follow-up
- * consolidation task should hoist them into one internal module; reuse of
- * `graph-internal`'s issue helpers is impossible today because they are typed
- * against the closed `GraphIssueCode` union owned by another task.
+ * The code-free primitives live in `../kernel-primitives.ts` and are re-exported
+ * here for the expansion, fairness and supersession kernels that import them
+ * through this module. Reuse of `graph-internal`'s issue helpers is impossible
+ * because they are typed against the closed `GraphIssueCode` union.
  */
-export function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
-export function compareStrings(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
+export { compareStrings, deepFreeze, exactRecord, isRef, oneOf } from "../kernel-primitives.js";
 
 /** String-identical to `RUNTIME_LIFECYCLES.LEASE` (runtime-vocabulary.ts). */
 export const LEASE_STATES = ["ACTIVE", "SUSPECT", "DRAINING", "RELEASED", "REVOKED"] as const;
@@ -141,32 +128,12 @@ export type AuthorityOutcome<T> = { readonly ok: true; readonly value: T } | Aut
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
 
-export function isRef(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 export function isDigest(value: unknown): value is string {
   return typeof value === "string" && HEX_64.test(value);
 }
 export function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     && value <= MAX_AUTHORITY_COUNT && !Object.is(value, -0);
-}
-export function oneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
-  return typeof value === "string" && (values as readonly string[]).includes(value);
-}
-/** Accepts only a plain record carrying exactly `keys` as own data properties. */
-export function exactRecord(
-  value: unknown,
-  keys: readonly string[],
-): Record<string, unknown> | null {
-  if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, keys)) return null;
-  const output: Record<string, unknown> = {};
-  for (const key of keys) {
-    const read = readOwnDataProperty(value, key);
-    if (!read.ok || !read.present) return null;
-    output[key] = read.value;
-  }
-  return output;
 }
 export function stringList(value: unknown, maximum: number): readonly string[] | null {
   if (!isPlainArray(value)) return null;

@@ -548,17 +548,6 @@
   color: var(--cr-ink-soft);
 }
 
-/* ------------------------------------------------------------------ board stub */
-
-.cr2-boardstub {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  max-width: 620px;
-  padding: 24px 4px;
-}
-
 /* --------------------------------------------------------------- plan review */
 
 .cr2-approve {
@@ -995,22 +984,7 @@
   }
 }
 
-/* PRD coverage card (goal detail): the daemon-proven share of the contract that is built. */
-.cr2-coverage-bar {
-  width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--cr-line, rgba(0, 0, 0, 0.12));
-  overflow: hidden;
-}
-
-.cr2-coverage-bar > span {
-  display: block;
-  height: 100%;
-  background: var(--cr-ink);
-  transition: width 240ms ease;
-}
-
+/* Coverage rows (contract dossier and the goal cards beside it): each criterion with its status. */
 .cr2-coverage-criteria {
   list-style: none;
   margin: 6px 0 0;
@@ -1472,82 +1446,6 @@
   margin-bottom: 12px;
 }
 
-/* WHERE THIS GOAL STANDS: the strip above every card on an opened goal. Two columns on a
-   wide screen (the state, then the one next step), stacked below 720px. */
-.cr2-goal-status {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr);
-  gap: 16px 24px;
-  align-items: start;
-  margin: 0 0 16px;
-  padding: 16px 20px;
-  border: 1px solid var(--cr-line);
-  border-left: 4px solid var(--cr-accent);
-  border-radius: 10px;
-  background: var(--cr-panel-bg);
-}
-.cr2-goal-status[data-stage="CONTRACT"],
-.cr2-goal-status[data-stage="PLAN"],
-.cr2-goal-status[data-stage="ESCALATION"] {
-  border-left-color: var(--cr-truth-agent, #b7791f);
-}
-.cr2-goal-status[data-stage="READY_TO_CLOSE"],
-.cr2-goal-status[data-stage="CLOSED"] {
-  border-left-color: var(--cr-truth-verified, var(--cr-accent));
-}
-.cr2-goal-status-stage {
-  display: inline-block;
-  margin-bottom: 6px;
-  font-family: var(--cr-font-mono);
-  font-size: var(--cr-fs-mono);
-  letter-spacing: 0.04em;
-  color: var(--cr-ink-soft);
-}
-.cr2-goal-status-headline {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--cr-ink);
-}
-.cr2-goal-status-facts {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--cr-ink-soft);
-}
-.cr2-goal-status-next {
-  display: grid;
-  gap: 4px;
-  padding-left: 16px;
-  border-left: 1px solid var(--cr-hairline);
-}
-.cr2-goal-status-next-kicker {
-  font-family: var(--cr-font-mono);
-  font-size: var(--cr-fs-mono);
-  letter-spacing: 0.04em;
-  color: var(--cr-ink-soft);
-}
-.cr2-goal-status-next-label {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--cr-accent-text);
-  text-decoration: none;
-}
-a.cr2-goal-status-next-label:hover,
-a.cr2-goal-status-next-label:focus-visible {
-  text-decoration: underline;
-}
-.cr2-goal-status-next-detail {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--cr-ink-soft);
-}
-@media (max-width: 720px) {
-  .cr2-goal-status { grid-template-columns: 1fr; }
-  .cr2-goal-status-next { padding-left: 0; border-left: 0; border-top: 1px solid var(--cr-hairline); padding-top: 12px; }
-}
-
 /* A folded section on the opened goal: the summary is a full-width, readable target. */
 .cr2-goal-fold {
   margin: 0 0 16px;
@@ -1572,16 +1470,3 @@ a.cr2-goal-status-next-label:focus-visible {
 .cr2-goal-fold[open] > .cr2-goal-fold-summary::before { content: "\25BE"; }
 .cr2-goal-fold[open] > .cr2-goal-fold-summary { border-bottom: 1px solid var(--cr-hairline); }
 .cr2-goal-fold > :not(summary) { padding: 0 20px 8px; }
-
-.cr2-goal-status-next-button {
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  text-align: left;
-}
-.cr2-goal-status-next-button:hover,
-.cr2-goal-status-next-button:focus-visible { text-decoration: underline; }

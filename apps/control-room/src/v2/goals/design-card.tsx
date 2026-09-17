@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import { readDesign } from "../../live/live-design.js";
 import type { DesignOutcome, DesignRevisionView } from "../../live/live-design.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 
@@ -71,28 +69,4 @@ export function DesignCard({ outcome }: { readonly outcome: DesignOutcome | null
   return <section className="cr2-ops-panel" data-testid="cr.design.card" aria-label="Design">
     <h3 className="cr2-approve-heading">Design</h3><DesignAnswer outcome={outcome} />
   </section>;
-}
-
-interface LiveDesignProps {
-  readonly goalRef: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly read?: ((goalRef: string) => Promise<DesignOutcome>) | undefined;
-}
-
-/** Read on mount/subject change; an old goal or session cannot publish a late answer. */
-export function LiveDesign(props: LiveDesignProps): JSX.Element {
-  const { goalRef, headers, read } = props;
-  const [answer, setAnswer] = useState<{ readonly subject: LiveDesignProps; readonly outcome: DesignOutcome } | null>(null);
-  useEffect(() => {
-    let live = true;
-    const publish = (outcome: DesignOutcome): void => { if (live) setAnswer({ subject: { goalRef, headers, read }, outcome }); };
-    void Promise.resolve().then(() => read === undefined ? readDesign(headers, goalRef) : read(goalRef)).then(
-      publish,
-      () => publish({ code: "DESIGN_READ_FAILED", layer: "CONTROL_ROOM_GOALS", status: "ERROR" }),
-    );
-    return (): void => { live = false; };
-  }, [goalRef, headers, read]);
-  const current = answer !== null && answer.subject.goalRef === goalRef
-    && answer.subject.headers === headers && answer.subject.read === read;
-  return <DesignCard outcome={current ? answer.outcome : null} />;
 }

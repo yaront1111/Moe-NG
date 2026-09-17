@@ -2,6 +2,7 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { flag } from "./argv-flag.js";
 import { isDependencyProvider, refuseEntry, startDaemon } from "./daemon-entry.js";
 import type {
   DaemonDependencyProvider, DaemonEntryRefused, DaemonPairingApprovalResult, ShutdownResult,
@@ -33,12 +34,6 @@ export interface MainOptions {
 
 function presentEnv(value: string | undefined): string | null {
   return value === undefined || value === "" ? null : value;
-}
-
-function flag(argv: readonly string[], name: string): string | null {
-  const prefix = `--${name}=`;
-  const found = argv.find((entry) => entry.startsWith(prefix));
-  return found === undefined ? null : found.slice(prefix.length);
 }
 
 async function loadProvider(

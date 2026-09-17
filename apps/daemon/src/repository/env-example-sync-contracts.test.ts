@@ -11,7 +11,6 @@ import {
   ENV_EXAMPLE_SYNC_CODES,
   ENV_EXAMPLE_SYNC_COMMAND_KIND,
   envExampleSyncRefusal,
-  isEnvExampleSyncRefusal,
   type EnvExampleSyncCode,
   type EnvExampleSyncRefusal,
 } from "./env-example-sync-contracts.js";
@@ -116,7 +115,7 @@ describe("product_contract.sync_env_example refusal vocabulary", () => {
    *
    * These arms are graded by `pnpm typecheck`, not by vitest — vitest strips types. If the
    * correlation were ever weakened back to
-   * `{code: EnvExampleSyncCode; layer: EnvExampleSyncLayer}`, the `@ts-expect-error` directive
+   * `{code: EnvExampleSyncCode; layer: string}`, the `@ts-expect-error` directive
    * would become unused and typecheck would red on it, which is exactly the alarm wanted.
    */
   it("makes a disagreeing (code, layer) pair inexpressible, even without the factory", () => {
@@ -149,37 +148,6 @@ describe("product_contract.sync_env_example refusal vocabulary", () => {
   it("names a kind that the runtime vocabulary actually carries", () => {
     expect(ENV_EXAMPLE_SYNC_COMMAND_KIND).toBe("product_contract.sync_env_example");
     expect(new Set<string>(RUNTIME_COMMAND_KINDS).has(ENV_EXAMPLE_SYNC_COMMAND_KIND)).toBe(true);
-  });
-
-  describe("isEnvExampleSyncRefusal", () => {
-    it("admits a minted refusal", () => {
-      for (const code of ENV_EXAMPLE_SYNC_CODES) {
-        expect(isEnvExampleSyncRefusal(envExampleSyncRefusal(code))).toBe(true);
-      }
-    });
-
-    it("rejects non-refusals", () => {
-      expect(isEnvExampleSyncRefusal(null)).toBe(false);
-      expect(isEnvExampleSyncRefusal(undefined)).toBe(false);
-      expect(isEnvExampleSyncRefusal({})).toBe(false);
-      expect(isEnvExampleSyncRefusal({ ok: true })).toBe(false);
-      expect(isEnvExampleSyncRefusal("ENV_EXAMPLE_COMMIT_FAILED")).toBe(false);
-    });
-
-    /**
-     * (E) A refusal from ANOTHER vocabulary is not one of ours. The guard checks the code
-     * against the closed roster, so `ok === false` alone does not admit a foreign code.
-     */
-    it("rejects a foreign refusal that merely carries ok:false", () => {
-      expect(isEnvExampleSyncRefusal({ code: "RELEASE_PR_FAILED", ok: false })).toBe(false);
-      expect(isEnvExampleSyncRefusal({ ok: false })).toBe(false);
-    });
-
-    it("does not admit a code inherited from the prototype chain", () => {
-      const inherited = Object.create({ code: "ENV_EXAMPLE_COMMIT_FAILED" }) as { ok?: unknown };
-      inherited.ok = false;
-      expect(isEnvExampleSyncRefusal(inherited)).toBe(false);
-    });
   });
 
   /** The roster is the compile-time code set too, so a typo cannot reach the factory. */

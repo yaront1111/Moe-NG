@@ -8,7 +8,6 @@ import type {
   PlanningRunReducerResult,
   PlanningRunState,
   PlanningRunSuccessorData,
-  PlanningUnsupportedReason,
 } from "./planning-contract.js";
 import { validExpansionHoldBinding } from "./planning-expansion-validation.js";
 import { deepFreeze } from "./planning-snapshot.js";
@@ -63,16 +62,6 @@ export function finalizing(state: PlanningRunState): PlanningRunReducerResult {
     details: { sourceState: state.lifecycle },
     source: { aggregate: "PLANNING_RUN", state: state.lifecycle },
   }));
-}
-
-/** Carries no `RuntimeError`: see `PlanningUnsupportedResult` for why the registry cannot. */
-export function unsupported(
-  reason: PlanningUnsupportedReason,
-  executionBearingNodeKeys: readonly string[] = [],
-): PlanningRunReducerResult {
-  return deepFreeze({
-    executionBearingNodeKeys, ok: false as const, reason, unsupported: true as const,
-  });
 }
 
 export function accepted(

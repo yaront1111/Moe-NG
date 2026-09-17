@@ -96,6 +96,8 @@ export interface RunPolicyEvaluationAccepted {
   readonly computedTier: PolicyRiskTier;
   readonly ok: true;
   readonly payload: JsonObject;
+  /** The policy head this evaluation was computed against; the caller commits it as a fence. */
+  readonly policyFence: StableRunPolicySelection["fence"];
 }
 
 export type RunPolicyEvaluationResult =
@@ -226,6 +228,7 @@ export function evaluateRunPolicyContent(
         runId: input.runId,
         sliceRef: selection.sliceRef,
       }),
+      policyFence: selection.fence,
     });
   } catch {
     return runPolicyRefusal("RUN_POLICY_INPUT_INVALID", facts.factIds);

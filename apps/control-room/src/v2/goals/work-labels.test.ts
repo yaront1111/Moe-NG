@@ -27,7 +27,7 @@ import {
  * given an invented name.
  *
  * The emitted set is exactly 14 (verified in apps/daemon/src/http/affordance-read.ts):
- * the ten BOOTSTRAP_COMMAND_KINDS (bootstrap-contracts.ts:29-41), session.open /
+ * the ten BOOTSTRAP_COMMAND_KINDS (bootstrap-contracts.ts:31-43), session.open /
  * session.close / session.renew (affordance-read.ts:267-294) and the daemon-local
  * NODE_DELIVER_KIND "node.deliver" (affordance-contract.ts:25). `review.submit`
  * is only ever an OFFER, never a step kind, so it is deliberately absent.

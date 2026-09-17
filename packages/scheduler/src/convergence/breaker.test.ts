@@ -409,6 +409,48 @@ describe("retry unlock", () => {
   });
 });
 
+describe("hostile entry accessors", () => {
+  /**
+   * `readOwnDataValue` never invokes an accessor, and that discipline has to
+   * survive the unlock path: handing the caller's entry to `evaluateRetryUnlock`
+   * by spreading it would run every getter the entry carries — a crash, or a
+   * side effect, on an entry whose validated fields were all fine. `text` is a
+   * field the breaker never reads, so the only way the getter can fire is a
+   * whole-object copy.
+   */
+  function entryWithHostileAccessor(): DeadEndJournalEntry {
+    const hostile = entry({ id: "entry-hostile" });
+    Object.defineProperty(hostile, "text", {
+      enumerable: true,
+      get(): string {
+        throw new Error("accessor invoked");
+      },
+    });
+    return hostile;
+  }
+
+  it("never invokes an accessor on the caller's entry while unlocking", () => {
+    const held = heldOnBaseBug();
+    const retry = request({ entry: entryWithHostileAccessor(), candidatePredicate: MOVED_PREDICATE });
+
+    const transition = decideBreaker(held.holds, retry);
+
+    expect(transition.outcome.ok).toBe(true);
+    expect(transition.holds.size).toBe(0);
+  });
+
+  it("never invokes an accessor on the caller's entry while refusing an unmoved retry", () => {
+    const held = heldOnBaseBug();
+    const retry = request({ entry: entryWithHostileAccessor(), candidatePredicate: HELD_PREDICATE });
+
+    const outcome = decideBreaker(held.holds, retry).outcome;
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("unreachable");
+    expect(outcome.code).toBe("RETRY_PREDICATE_UNCHANGED_HOLD");
+  });
+});
+
 describe("predicate key discipline", () => {
   /**
    * Field checks alone are not enough: a predicate can carry every valid field

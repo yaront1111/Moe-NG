@@ -118,8 +118,6 @@ export const INTERVAL_STATES = Object.freeze([
   "UNTERMINATED",
 ] as const);
 
-export type IntervalState = (typeof INTERVAL_STATES)[number];
-
 /** What the human had to do to recover. Observed on the action; never counted into. */
 export const RECOVERY_BURDENS = Object.freeze([
   "MANUAL_REPAIR",

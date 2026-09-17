@@ -217,3 +217,16 @@ export function readCurrentActiveGraph(
     snapshotIdentity: body.snapshotIdentity,
   });
 }
+
+/**
+ * One aggregate's stored history, decoded exactly as this projection decodes it, for the WRITE
+ * side that replays a single revision before building its next leg (initial activation,
+ * supersession, and the supersede approval binding). One decode keeps a writer from admitting a
+ * history the reader would refuse, or the reverse.
+ */
+export function readGraphRevisionHistory(
+  store: SqliteEventStore,
+  aggregateId: string,
+): readonly unknown[] {
+  return historyOf(store.readEvents(aggregateId));
+}

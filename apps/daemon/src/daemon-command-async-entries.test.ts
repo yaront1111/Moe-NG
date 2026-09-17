@@ -21,7 +21,8 @@ import { readDeployLedger } from "./deployment/deploy-ledger.js";
 import { createDockerDouble, nodeDockerRunner } from "./deployment/deploy-ports.js";
 import type { DockerDouble, DeployTarget } from "./deployment/deploy-ports.js";
 import { deployImageTag } from "./deployment/deploy-receipt-contracts.js";
-import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deployment/deploy-target-contracts.js";
+import { DEPLOYMENT_DEPLOY_COMMAND_KIND, DEPLOYMENT_DEPLOY_PAYLOAD_KEYS }
+  from "./deployment/deploy-target-contracts.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import type { AuthenticatedPrincipal, CommandHandlerInput } from "./http/http-contract.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -222,6 +223,9 @@ describe("the async command seam serves deployment.deploy", () => {
       .toBe(PAYLOAD_KEYS[DEPLOYMENT_DEPLOY_COMMAND_KIND]);
     expect([...context.entries[DEPLOYMENT_DEPLOY_COMMAND_KIND].payloadKeys])
       .toEqual(["environment", "sha"]);
+    // ONE SOURCE: the ingress allow-list IS the slice's own roster, not a retyped copy that
+    // could drift while both still read `["environment", "sha"]`.
+    expect(PAYLOAD_KEYS[DEPLOYMENT_DEPLOY_COMMAND_KIND]).toBe(DEPLOYMENT_DEPLOY_PAYLOAD_KEYS);
     // BYTE-FOR-BYTE against the sha VALUE. A `/[0-9a-f]{40}/` pattern passes for the WRONG sha,
     // and every later rollback and dossier claim resolves through this tag.
     expect(context.docker.calls.find((call) => call[0] === "build"))

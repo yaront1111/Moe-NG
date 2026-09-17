@@ -240,8 +240,7 @@ describe("the proof drawer keeps the dialog contract the keyboard map expects", 
     expect(drawer.getAttribute("aria-modal")).toBe("true");
 
     // The dialog's own labelled Close button is the accessible way out, so the
-    // scrim stays out of the a11y tree rather than duplicating that name -
-    // the same shape src/shell/inspector-sheet.tsx already uses for a backdrop.
+    // scrim stays out of the a11y tree rather than duplicating that name.
     const scrim = screen.getByTestId("cr.shell.inspector.scrim");
     expect(scrim.tagName).toBe("DIV");
     expect(scrim.getAttribute("aria-hidden")).toBe("true");

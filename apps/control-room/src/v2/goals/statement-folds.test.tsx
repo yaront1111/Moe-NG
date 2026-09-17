@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+
 import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { ELLIPSIS } from "../glyphs.js";
 import { CHUNK_SIZE, FLAT_LIMIT, FoldedRoster, familyOf, foldGroups } from "./statement-folds.js";
 
 beforeAll(() => {
@@ -75,6 +78,14 @@ describe("foldGroups", () => {
       ["solo026", "solo026 … solo050", CHUNK_SIZE],
       ["solo051", "solo051 … solo053", 3],
     ]);
+  });
+
+  it("names a run with the shared glyphs.ts ELLIPSIS, so the source stays pure ASCII", () => {
+    expect(foldGroups(soloItems(FLAT_LIMIT + 1), idOf)?.[0]?.label)
+      .toBe(`solo001 ${ELLIPSIS} solo021`);
+    const source = readFileSync("src/v2/goals/statement-folds.tsx", "utf8");
+    expect(source).toMatch(/import \{[^}]*\bELLIPSIS\b[^}]*\} from "\.\.\/glyphs\.js";/u);
+    expect(source).not.toMatch(/[-\u{10FFFF}]/u);
   });
 
   it("splits one family larger than CHUNK_SIZE into runs, so no click mounts more than a run", () => {

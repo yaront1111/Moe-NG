@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
+import {
+  hostBootPortsOf, hostRebootedSince, measureHostBoot, recordedHostBootOf,
+} from "./agent-staffing-host-boot.js";
+import type {
+  HostBootIdPort, HostUptimePort, RecordedHostBoot,
+} from "./agent-staffing-host-boot.js";
 
 /**
  * The durable staffing fence: may this wrapper start an agent for this work item?
@@ -93,11 +99,23 @@ export interface AgentSessionFenceConfig {
    * never runs, so the child SURVIVES — the exact case this fence exists to
    * catch. "Wrapper dead" would then admit a second agent beside a live orphan.
    *
-   * PID REUSE FAILS SAFE: a recycled pid reads as alive, so the fence refuses
-   * where it could have admitted. That is recoverable — the retire path frees
-   * the item — whereas the opposite error re-opens the defect.
+   * PID REUSE FAILS SAFE within one boot: a recycled pid reads as alive, so the
+   * fence refuses where it could have admitted, for as long as the stranger
+   * runs — whereas the opposite error re-opens the defect. Across a reboot no
+   * retire path would ever free the item, which is what the host-boot facts
+   * below close.
    */
   readonly isProcessAlive: (pid: number) => boolean;
+  /**
+   * The host's boot identity and uptime, injected like the probe. Written
+   * beside the child's pid and read back at admission: a host that has rebooted
+   * since the row was written cannot be running the child, so an alive-reading
+   * pid is then a STRANGER's, not evidence — see agent-staffing-host-boot.ts.
+   * Both default to the host's own reading. A row without the facts leaves the
+   * probe to decide.
+   */
+  readonly hostBootId?: HostBootIdPort;
+  readonly hostUptimeMs?: HostUptimePort;
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }
@@ -132,31 +150,46 @@ function errorOf(action: string, cause: unknown): Error {
 }
 
 type LiveFold =
-  | { readonly kind: "LIVE"; readonly childPid: number }
+  | {
+    readonly childPid: number;
+    readonly hostBoot: RecordedHostBoot | null;
+    readonly kind: "LIVE";
+  }
   | { readonly kind: "IDLE" }
   | { readonly kind: "UNREADABLE" };
+
+/** One ADMITTED row as the fold keeps it: `childPid: null` is live but unprobeable. */
+interface AdmittedRecord {
+  readonly childPid: number | null;
+  readonly hostBoot: RecordedHostBoot | null;
+}
+
+const UNPROBEABLE: AdmittedRecord = Object.freeze({ childPid: null, hostBoot: null });
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 /**
- * The recorded child's pid, or null when the payload cannot supply one.
+ * The recorded child's pid, with the host fact written beside it, or a pid-less
+ * record when the payload cannot supply one.
  *
  * A pid this function cannot vouch for must NOT become "no pid, admit": that is
  * the fall-through that would quietly disable the probe. Every rejection here
  * surfaces as UNREADABLE, which refuses.
  */
-function childPidOf(payload: Uint8Array): number | null {
+function admittedRecordOf(event: StoredEvent): AdmittedRecord {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(decoder.decode(payload));
+    parsed = JSON.parse(decoder.decode(event.payload));
   } catch {
-    return null;
+    return UNPROBEABLE;
   }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const pid = (parsed as { childPid?: unknown }).childPid;
+  if (typeof parsed !== "object" || parsed === null) return UNPROBEABLE;
+  const facts = parsed as Record<string, unknown>;
+  const pid = facts["childPid"];
   // Integer and positive: 0 and negatives address process GROUPS, not processes,
   // and a fractional or NaN pid can never identify one.
-  return typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? pid : null;
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return UNPROBEABLE;
+  return { childPid: pid, hostBoot: recordedHostBootOf(facts) };
 }
 
 /**
@@ -173,20 +206,21 @@ function foldLiveChild(events: readonly StoredEvent[]): LiveFold {
   // is deliberately NOT an early return: a later RETIRED must still be able to
   // clear it, or one pid-less admission wedges the item forever — the permanent
   // deadlock this fence must never trade the race for.
-  let live: { readonly childPid: number | null } | null = null;
+  let live: AdmittedRecord | null = null;
   const ordered = [...events].sort((a, b) => a.aggregateSequence - b.aggregateSequence);
   for (const event of ordered) {
     if (!STAFFING_EVENT_TYPES.has(event.eventType)) return { kind: "UNREADABLE" };
-    live = event.eventType === ADMITTED ? { childPid: childPidOf(event.payload) } : null;
+    live = event.eventType === ADMITTED ? admittedRecordOf(event) : null;
   }
   if (live === null) return { kind: "IDLE" };
   return live.childPid === null
     ? { kind: "UNREADABLE" }
-    : { childPid: live.childPid, kind: "LIVE" };
+    : { childPid: live.childPid, hostBoot: live.hostBoot, kind: "LIVE" };
 }
 
 export function createAgentSessionFence(config: AgentSessionFenceConfig): AgentSessionFence {
   const { isProcessAlive, projectId, store } = config;
+  const host = hostBootPortsOf(config);
 
   const admit = (workItemId: string, now: string): AgentStaffingDecision => {
     // 1. The durable claim, which fences ordinary contention.
@@ -216,6 +250,15 @@ export function createAgentSessionFence(config: AgentSessionFenceConfig): AgentS
     // probe the item would be unstaffable forever, which is strictly worse than
     // the expiry exposure the fence replaces. A record TTL is not a substitute:
     // a TTL equal to the claim TTL reintroduces that exact expiry defect.
+    //
+    // The probe itself speaks only for the boot that issued the pid. Once the
+    // host has rebooted since the row was written the child is certainly gone,
+    // and whatever the pid now addresses would read "alive" until the NEXT
+    // reboot with no retire path left to free the item. The witness is clock
+    // free — a boot identity, an uptime — because a stepped clock must never
+    // admit beside a live orphan. A row without the facts, or a host that
+    // cannot be read, proves nothing and the probe decides.
+    if (hostRebootedSince(fold.hostBoot, host)) return ADMIT;
     let alive: boolean;
     try {
       alive = isProcessAlive(fold.childPid);
@@ -257,18 +300,21 @@ export function createAgentSessionFence(config: AgentSessionFenceConfig): AgentS
 
   return Object.freeze({
     admit,
-    recordLiveChild: (record: AgentLiveChildRecord): readonly Error[] => append(
-      "RECORD", record.workItemId,
-      {
+    recordLiveChild: (record: AgentLiveChildRecord): readonly Error[] => {
+      // Measured HERE, in the process that spawned the child: one reading of
+      // one boot, which is what lets a reader place this row inside it. What
+      // cannot be measured is omitted, never guessed.
+      return append("RECORD", record.workItemId, {
         // Written only when it is a real pid. Persisting `undefined`/0/-1 would
         // hand the probe a value it cannot use while LOOKING probeable; omitting
         // the key routes it to the UNREADABLE arm, which refuses.
         ...(typeof record.childPid === "number" ? { childPid: record.childPid } : {}),
         claimAggregateVersion: record.claimAggregateVersion,
+        ...measureHostBoot(host),
         sessionId: record.sessionId,
         workItemId: record.workItemId,
-      },
-    ),
+      });
+    },
     retireLiveChild: (workItemId: string): readonly Error[] => append(
       "RETIRE", workItemId, { workItemId },
     ),

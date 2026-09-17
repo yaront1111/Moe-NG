@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   lstatSync, realpathSync, statSync, unlinkSync, writeFileSync,
 } from "node:fs";
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PACKAGING_SOURCE_LAYER, PackSourceError, type PackSourceDependencies,
@@ -13,6 +13,7 @@ import {
   resolveProtectedWindowsPackExecutable, resolveWindowsPackToolchain,
   serializeWindowsPackToolchain, type WindowsPackToolchain,
 } from "./pack-command.js";
+import { pathInside } from "./pack-tool-identity.js";
 import type { PackOptions } from "./pack-windows.js";
 import { observeWindowsCandidateOutputRoot, publishPrivateWindowsCandidate,
   createPrivateWindowsCandidate, privateWindowsCandidateProcessBoundary,
@@ -208,18 +209,13 @@ function removePrivateControlFile(path: string, candidateRoot: string): void {
   }
 }
 
-function inside(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-}
-
 /** Windows packaging admits only fixed protected OS installation paths, never ambient PATH. */
 export function resolvePackExecutable(repositoryRoot: string, name: "git" | "tar"): string {
   try {
     const canonicalRoot = realpathSync(repositoryRoot);
     if (!statSync(canonicalRoot).isDirectory()) throw new Error();
     const executable = resolveProtectedWindowsPackExecutable(name);
-    if (inside(canonicalRoot, executable)) throw new Error();
+    if (pathInside(canonicalRoot, executable)) throw new Error();
     return executable;
   } catch {
     throw new PackSourceError("PACK_SOURCE_TOOLCHAIN_INVALID");
@@ -244,7 +240,7 @@ export function packChildEnvironment(
     try {
       if (!isAbsolute(raw)) return [];
       const canonical = realpathSync(raw);
-      return statSync(canonical).isDirectory() && !inside(repository, canonical) ? [canonical] : [];
+      return statSync(canonical).isDirectory() && !pathInside(repository, canonical) ? [canonical] : [];
     } catch {
       return [];
     }

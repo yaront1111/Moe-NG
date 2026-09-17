@@ -1,11 +1,11 @@
 /**
- * Hostile-input primitives shared by both planning aggregates. Cloned from
- * `goal-validation.ts` so the planning modules keep the same fail-closed boundary: accessors,
- * proxies, symbols, cycles, and exotic prototypes are snapshotted into inert data once, and
- * every later check reads only the snapshot.
+ * Hostile-input primitives shared by the planning aggregates and the other core areas that
+ * import them (goal, project, policy, cutover, the profile and contract codecs), so every one
+ * keeps the same fail-closed boundary: accessors, proxies, symbols, cycles, and exotic
+ * prototypes are snapshotted into inert data once, and every later check reads only the snapshot.
  */
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+export function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   try {
     return value !== null && typeof value === "object" && !Array.isArray(value);
   } catch {

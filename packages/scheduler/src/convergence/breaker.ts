@@ -214,13 +214,16 @@ function releases(release: HumanRelease | null, fingerprint: FailureFingerprint)
  * on the caller's own entry. Comparing the caller's entry against the caller's
  * candidate would put both sides of the test under the caller's control and
  * make any hold unlockable on demand.
+ *
+ * The caller's entry is not handed over at all — not even as the base of a
+ * copy. Spreading it would invoke every accessor the entry carries, and an
+ * accessor is never invoked (see `readOwnDataValue`): a getter that throws
+ * would turn a decision on fully validated fields into a crash, and a getter
+ * with side effects would run inside the breaker. Only the held predicate
+ * reaches the comparison, which is also the only field it reads.
  */
-function unlocks(
-  hold: HoldRecord,
-  entry: DeadEndJournalEntry,
-  candidate: FactPredicate,
-): RetryPredicateRefusal | null {
-  const held: DeadEndJournalEntry = { ...entry, retryPredicate: hold.awaitedPredicate };
+function unlocks(hold: HoldRecord, candidate: FactPredicate): RetryPredicateRefusal | null {
+  const held = { retryPredicate: hold.awaitedPredicate } as DeadEndJournalEntry;
   const result = evaluateRetryUnlock(held, candidate);
   return result.kind === "REFUSED" ? result : null;
 }
@@ -275,7 +278,7 @@ export function decideBreaker(holds: ActiveHolds, request: BreakerRequest): Brea
     return Object.freeze({ outcome: sameBugHold(joined), holds: withHold(holds, joined) });
   }
 
-  const refusedBy = unlocks(existing, request.entry, candidatePredicate);
+  const refusedBy = unlocks(existing, candidatePredicate);
   if (refusedBy === null) {
     return Object.freeze({
       outcome: admit(fingerprint),

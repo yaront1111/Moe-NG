@@ -7,6 +7,8 @@ import type {
 } from "@moe/runner";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
+
 /**
  * `/2` adds the runner-derived continuation evidence. The bump is not cosmetic:
  * a `/1` row carries no derived release, so decoding one as `/2` would leave the
@@ -195,10 +197,6 @@ function addStored(
   const record = decodeRecord(decision.resultBytes);
   if (record === null || decision.targetAggregateId !== aggregateId(record.attemptRef)) return;
   records.set(record.attemptRef, { bytes: decision.resultBytes, record, version: decision.currentVersion });
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
 function commitRecord(

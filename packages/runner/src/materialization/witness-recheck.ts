@@ -24,7 +24,7 @@ import {
  * per-file ceiling: that module owns the mirrored SHAPE, this one owns the
  * verdict derived from it.
  */
-export type EffectiveStabilityResult =
+type EffectiveStabilityResult =
   | { readonly ok: true; readonly stability: MirroredStability }
   | MaterializationFailure;
 
@@ -40,7 +40,7 @@ function resolveStability(
       entry.schemaVersion === predicate.schemaVersion,
   );
   if (contract.stability !== "MONOTONIC" || proof === undefined) {
-    // dependency-contract.ts:248. A MONOTONIC claim with no registered proof is
+    // dependency-contract.ts:235. A MONOTONIC claim with no registered proof is
     // normalized DOWN, so it stays subject to recheck. Skipping this would exempt
     // a witness the authority itself treats as revocable — a divergence in the
     // unsafe direction, and a silent one.
@@ -50,7 +50,7 @@ function resolveStability(
     (entry) => entry.sourceOperationClass !== proof.sourceOperationClass,
   );
   if (mismatch !== undefined) {
-    // dependency-contract.ts:245. The authority refuses this outright; a mirror
+    // dependency-contract.ts:232. The authority refuses this outright; a mirror
     // that accepted it would be strictly more permissive than what it mirrors.
     return materializationFailure(
       "RUNNER_MATERIALIZATION_MONOTONIC_OPERATION_MISMATCH",
@@ -60,15 +60,6 @@ function resolveStability(
     );
   }
   return Object.freeze({ ok: true as const, stability: "MONOTONIC" as const });
-}
-
-/** Public wrapper that parses its own registry, so a caller never has to pre-parse one. */
-export function effectiveStability(
-  contract: MirroredDependencyContract,
-  registryInput: unknown,
-): EffectiveStabilityResult {
-  const registry = parseMonotonicRegistry(registryInput);
-  return registry === null ? registryRefusal() : resolveStability(contract, registry);
 }
 
 function registryRefusal(): MaterializationFailure {

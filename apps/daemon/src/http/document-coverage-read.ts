@@ -27,6 +27,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
+import { dataRecord } from "../json-record-shape.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
 import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "../orchestrator/compiled-node-identity.js";
@@ -74,10 +75,6 @@ export interface DocumentCoverageReadOptions {
   ) => ReadonlyMap<string, NodeReviewFacts>;
   readonly store: SqliteEventStore;
 }
-
-const dataRecord = (value: unknown): Readonly<Record<string, unknown>> | null =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>> : null;
 
 interface SealedNode { readonly criterionIds: readonly string[]; readonly goalRef: string; readonly nodeKey: string; readonly nodeRef: string }
 interface Carrier { readonly criterionId: string; readonly goalRef: string; readonly nodeKey: string; readonly status: CriterionCoverageStatus }

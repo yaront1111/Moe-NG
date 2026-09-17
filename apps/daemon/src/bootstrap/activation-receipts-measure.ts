@@ -22,7 +22,7 @@ import {
 import type {
   ActivationReceipt, ActivationReceiptMember, ActivationReceipts, DistributionKind,
 } from "./activation-receipts.js";
-import { receiptDetail } from "./activation-receipts-ports.js";
+import { isAlreadyGone, receiptDetail } from "./activation-receipts-ports.js";
 import type {
   ActivationBackupOutcome, ActivationReceiptPorts, ProviderVersionRun,
 } from "./activation-receipts-ports.js";
@@ -270,6 +270,9 @@ export interface BackupPruneResult {
  * Keeps the newest BACKUP_RETENTION copies (the stamps sort chronologically) and removes the
  * rest, never the one just written. Only direct stamped files are eligible; never recurse into
  * another owner's subtree. Callers must report both successful removals and failed attempts.
+ * A stale copy that is ALREADY GONE when its unlink runs is a removal, not a failure: this is
+ * check-then-act over a directory another pruner may be walking at the same time, and the
+ * state it leaves behind is exactly the one pruning wanted. Every other error still fails.
  */
 export function pruneBackups(
   ports: Pick<ActivationReceiptPorts, "fs">, directory: string, keep: string,
@@ -285,7 +288,9 @@ export function pruneBackups(
       try {
         ports.fs.remove(path);
         removedRefs.push(path);
-      } catch { failedRefs.push(path); }
+      } catch (error) {
+        (isAlreadyGone(error) ? removedRefs : failedRefs).push(path);
+      }
     }
   } catch { failedRefs.push(directory); }
   return Object.freeze({ removedRefs: Object.freeze(removedRefs), failedRefs: Object.freeze(failedRefs),

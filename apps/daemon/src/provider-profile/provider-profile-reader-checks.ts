@@ -12,12 +12,13 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { ProjectConfigurationLimitKey, ProjectConfigurationManifest } from "@moe/contracts";
 
 import type { ProjectConfigurationStore } from "../configuration/project-configuration-selection.js";
+import { isRecord } from "../value-primitives.js";
 import {
   PROVIDER_PROFILE_LIMIT_BINDINGS,
   decodeProviderProfileBytes,
 } from "./provider-profile-codec.js";
 import type { ProviderProfileRevision } from "./provider-profile-codec.js";
-import { canonicalJson, isRecord } from "./provider-profile-fields.js";
+import { canonicalJson } from "./provider-profile-fields.js";
 
 export const PROVIDER_PROFILE_READER_CODES = Object.freeze([
   "PROVIDER_PROFILE_ABSENT",

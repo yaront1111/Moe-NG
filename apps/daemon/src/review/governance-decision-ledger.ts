@@ -15,10 +15,21 @@ import type { SqliteEventStore } from "@moe/store";
  * load-bearing rather than descriptive:
  *   - `PRD_CITED` — the approved product record already answered it. Governance did not decide
  *     anything; it located the answer and must name where (`citation`). This is the preferred
- *     outcome and costs the project no new authority.
+ *     outcome and grants the project no new authority it did not already approve.
  *   - `GOVERNANCE_DECIDED` — the product record is genuinely silent, so governance chose, and
- *     `rationale` carries why. This is the only arm that spends the policy's decision bound.
+ *     `rationale` carries why.
  * A `PRD_CITED` record with no citation is not a citation, and is refused below.
+ *
+ * THE BOUND COUNTS ATTEMPTS, NOT OPINIONS — and the distinction above is deliberately NOT the
+ * one it uses. `spentOn` used to count `GOVERNANCE_DECIDED` rows only, on the reasoning that
+ * locating an answer already in the PRD costs the project nothing. That is true of AUTHORITY and
+ * false of everything the bound exists to protect: every funded attempt spends real tokens
+ * against a real repository whether the answer was cited or decided. A governor that cites the
+ * PRD each round would have funded attempt after attempt for ever at `maxDecisions: 1` — roughly
+ * 21 of them before the absolute round ceiling stopped it — which is precisely the runaway the
+ * bound was written to make impossible. So `fundedOn` counts DISTINCT REVIEW VERSIONS governance
+ * recorded against: one funded attempt moves the review version by one, and decisions are
+ * recorded only after the attempt was actually funded, so distinct versions IS the attempt count.
  *
  * NOTHING HERE HAS A PENDING STATE, AND THAT IS THE POINT (owner, 2026-09-16: "but it will not
  * stop and wait for answer"). There is no status a run can block on and no approval to collect.
@@ -57,6 +68,14 @@ export interface GovernanceDecisionInput {
   readonly criterionId: string | null;
   /** The finding that raised the question, by its stable id. */
   readonly findingId: string;
+  /**
+   * WHAT the finding was raised against, as `KIND:locator`. A rule id is not a question: the same
+   * rule fires against many subjects, and `registry-obligation-cardinality` on two different
+   * contracts is two different questions with two different answers. Without this in the id they
+   * collapse into one block, the second answer is silently dropped as "already recorded", and the
+   * owner's list shows one decision standing for a judgement never made about the other subject.
+   */
+  readonly findingSubject: string;
   /** The question itself, as the finding put it. */
   readonly question: string;
   /** Why this answer. Required when governance decided; may be empty when the PRD is cited. */
@@ -81,14 +100,18 @@ export interface GovernanceDecisionLedger {
   readonly all: () => readonly GovernanceDecisionRecord[];
   /** Every decision recorded for one node, oldest first. */
   readonly forSubject: (subjectRef: string) => readonly GovernanceDecisionRecord[];
-  /** How many decisions governance has SPENT on this node; PRD citations are free. */
-  readonly spentOn: (subjectRef: string) => number;
+  /**
+   * How many attempts governance has FUNDED on this node — the quantity the policy bounds. It is
+   * a count of distinct review versions, not of decision rows: one attempt may answer six
+   * questions at once, and that is one attempt, not six.
+   */
+  readonly fundedOn: (subjectRef: string) => number;
 }
 
 type DecisionStore = Pick<SqliteEventStore, "commit" | "getAggregateVersion" | "readEvents">;
 
 const RECORD_KEYS = [
-  "answer", "basis", "citation", "criterionId", "decisionId", "findingId",
+  "answer", "basis", "citation", "criterionId", "decisionId", "findingId", "findingSubject",
   "question", "rationale", "reviewVersion", "subjectRef", "supersedes", "version",
 ];
 const encoder = new TextEncoder();
@@ -102,12 +125,17 @@ export const governanceAggregateId = (projectId: string): string =>
  * The id is derived from what the decision is ABOUT, never from when it was taken, so the same
  * question at the same review version is the same block in the UI rather than a second one, and
  * a re-record is detectable instead of silently doubling the list.
+ *
+ * "The same question" takes FOUR parts, and `findingSubject` is the one that was missing: a rule
+ * id names the check, not the thing checked, so two subjects failing one rule are two questions.
  */
 export function governanceDecisionId(input: {
-  readonly findingId: string; readonly reviewVersion: number; readonly subjectRef: string;
+  readonly findingId: string; readonly findingSubject: string;
+  readonly reviewVersion: number; readonly subjectRef: string;
 }): string {
   return sha256(JSON.stringify({
-    findingId: input.findingId, reviewVersion: input.reviewVersion,
+    findingId: input.findingId, findingSubject: input.findingSubject,
+    reviewVersion: input.reviewVersion,
     subjectRef: input.subjectRef, version: GOVERNANCE_DECISION_VERSION,
   })).slice(0, 32);
 }
@@ -126,7 +154,7 @@ const stated = (value: string): boolean => value.trim().length > 0 && bounded(va
 export function validGovernanceDecision(input: GovernanceDecisionInput): boolean {
   if (!GOVERNANCE_BASES.includes(input.basis)) return false;
   if (!stated(input.answer) || !stated(input.question) || !stated(input.subjectRef)) return false;
-  if (!stated(input.findingId)) return false;
+  if (!stated(input.findingId) || !stated(input.findingSubject)) return false;
   if (!Number.isSafeInteger(input.reviewVersion) || input.reviewVersion < 0) return false;
   if (input.criterionId !== null && !stated(input.criterionId)) return false;
   if (input.supersedes !== null && !stated(input.supersedes)) return false;
@@ -199,9 +227,10 @@ export function createGovernanceDecisionLedger(
     forSubject(subjectRef: string): readonly GovernanceDecisionRecord[] {
       return Object.freeze(read().filter((decision) => decision.subjectRef === subjectRef));
     },
-    spentOn(subjectRef: string): number {
-      return read().filter((decision) =>
-        decision.subjectRef === subjectRef && decision.basis === "GOVERNANCE_DECIDED").length;
+    fundedOn(subjectRef: string): number {
+      return new Set(read()
+        .filter((decision) => decision.subjectRef === subjectRef)
+        .map((decision) => decision.reviewVersion)).size;
     },
   });
 }

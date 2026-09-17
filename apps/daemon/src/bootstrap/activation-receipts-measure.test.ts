@@ -636,6 +636,32 @@ describe("backup retention", () => {
     });
   });
 
+  /**
+   * TWO PRUNERS, ONE DIRECTORY. Every daemon the root roster spawned measured into one shared
+   * `<checkout>/.moe-next/backups/` (fixed at the harness's `startDaemon`), and two of them
+   * pruning at once raced on the same stale stamps: the later unlink answered ENOENT and the
+   * activation was refused for a file that was exactly as gone as pruning wanted. Only the
+   * already-gone code reads as removed; every other failure still refuses.
+   */
+  it("counts a stale copy a concurrent pruner already removed as removed, every other failure as failed", () => {
+    const { ports } = healthyPorts();
+    const directory = join(PROJECT_ROOT, BACKUP_DIRECTORY, BACKUP_LEAF);
+    const names = Array.from({ length: BACKUP_RETENTION + 2 }, (_, i) =>
+      `${String(i).padStart(17, "0")}.sqlite`);
+    const [gone, next] = [join(directory, names[0]!), join(directory, names[1]!)];
+    const keep = join(directory, names.at(-1)!);
+    const errno = (code: string): Error =>
+      Object.assign(new Error(`${code}: no such file or directory, unlink '${gone}'`), { code });
+    const refusing = (error: Error) => ({ fs: { ...ports.fs, list: () => names, remove: (path: string) => {
+      if (path === gone) throw error;
+    } } });
+    expect(pruneBackups(refusing(errno("ENOENT")), directory, keep))
+      .toEqual({ removedRefs: [gone, next], failedRefs: [], failure: null });
+    expect(pruneBackups(refusing(errno("EACCES")), directory, keep)).toEqual({
+      removedRefs: [next], failedRefs: [gone], failure: { code: "BACKUP_FAILED", layer: LAYER },
+    });
+  });
+
   const roots: string[] = [];
   afterEach(() => {
     while (roots.length > 0) {
@@ -643,7 +669,12 @@ describe("backup retention", () => {
       if (path !== undefined) rmSync(path, { force: true, maxRetries: 5, recursive: true });
     }
   });
-  it("keeps the newest five stamped copies and removes the rest, never the one just written", async () => {
+
+  /** A real store under a real root, with six earlier activations' stamped copies, oldest first. */
+  function seededRetentionRoot(): {
+    readonly directory: string; readonly earlier: readonly string[];
+    readonly projectRoot: string; readonly storePath: string;
+  } {
     const projectRoot = realpathSync.native(mkdtempSync(join(tmpdir(), "moe-activation-retention-")));
     roots.push(projectRoot);
     const storePath = join(projectRoot, "store.sqlite");
@@ -652,22 +683,29 @@ describe("backup retention", () => {
     seeded.close();
     const directory = join(projectRoot, ".moe-next", "backups");
     mkdirSync(directory, { recursive: true });
-    // Six earlier activations, oldest first; a stray non-backup file must be left alone.
     const earlier = ["20260101000000001", "20260102000000002", "20260103000000003",
       "20260104000000004", "20260105000000005", "20260106000000006"].map((stamp) => `${stamp}.sqlite`);
     for (const name of earlier) writeFileSync(join(directory, name), "old");
-    writeFileSync(join(directory, "notes.txt"), "keep me");
+    return { directory, earlier, projectRoot, storePath };
+  }
+
+  /**
+   * The real filesystem is what these arms are measuring; the provider CLI is not, and leaving
+   * it live would spawn an external process per arm.
+   */
+  function realFsPorts(): ActivationReceiptPorts {
     const { ports: fakes } = healthyPorts();
-    const receipts = await measureActivationReceipts(
-      { ...INPUT, projectRoot, storePath },
-      nodeActivationReceiptPorts({
-        committedProbeRef: fakes.committedProbeRef, git: fakes.git,
-        installedPolicySliceRefs: fakes.installedPolicySliceRefs,
-        // The real filesystem is what these arms are measuring; the provider CLI is not, and
-        // leaving it live would spawn an external process per arm.
-        providerVersion: fakes.providerVersion,
-      }),
-    );
+    return nodeActivationReceiptPorts({
+      committedProbeRef: fakes.committedProbeRef, git: fakes.git,
+      installedPolicySliceRefs: fakes.installedPolicySliceRefs, providerVersion: fakes.providerVersion,
+    });
+  }
+
+  it("keeps the newest five stamped copies and removes the rest, never the one just written", async () => {
+    const { directory, earlier, projectRoot, storePath } = seededRetentionRoot();
+    // A stray non-backup file must be left alone.
+    writeFileSync(join(directory, "notes.txt"), "keep me");
+    const receipts = await measureActivationReceipts({ ...INPUT, projectRoot, storePath }, realFsPorts());
     const written = basename(measuredOf(receipts, "backup").ref.split("@sha256:")[0] ?? "");
     const remaining = readdirSync(directory).sort();
     expect(remaining).toContain(written);
@@ -676,5 +714,17 @@ describe("backup retention", () => {
     expect(remaining).not.toContain(earlier[0]);
     expect(remaining).not.toContain(earlier[1]);
     expect(remaining).toContain(earlier[5]);
+  });
+
+  it("measures the backup when the real port finds a stale copy already gone", async () => {
+    const { directory, projectRoot, storePath } = seededRetentionRoot();
+    // A stamp the listing still carries but a concurrent pruner has already unlinked: the real
+    // `unlinkSync` answers ENOENT for it, the one removal failure the measurer reads as removed.
+    const phantom = "20251231000000000.sqlite";
+    const ports = realFsPorts();
+    const receipts = await measureActivationReceipts({ ...INPUT, projectRoot, storePath },
+      { ...ports, fs: { ...ports.fs, list: (path) => [...ports.fs.list(path), phantom] } });
+    expect(measuredOf(receipts, "backup").ref).toContain("@sha256:");
+    expect(readdirSync(directory).filter((name) => name.endsWith(".sqlite"))).toHaveLength(BACKUP_RETENTION);
   });
 });

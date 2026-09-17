@@ -53,9 +53,6 @@ export type CapabilityCatalogRevisionEncodeResult =
 export type CapabilityCatalogRevisionDecodeResult =
   | Readonly<{ ok: true; revision: CapabilityCatalogRevision }>
   | CapabilityCatalogRefusal;
-export type CapabilityCatalogRevisionDigestResult =
-  | Readonly<{ ok: true; revisionDigest: string }>
-  | CapabilityCatalogRefusal;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -122,14 +119,6 @@ export function createCapabilityCatalogRevision(
   if (!final.ok) return final;
   const bounded = canonicalBytes(final.revision);
   return bounded.ok ? Object.freeze({ ok: true as const, revision: final.revision }) : bounded;
-}
-
-export function deriveCapabilityCatalogRevisionDigest(
-  value: unknown,
-): CapabilityCatalogRevisionDigestResult {
-  const admitted = admitCapabilityCatalogRevision(value); if (!admitted.ok) return admitted;
-  const bounded = canonicalBytes(admitted.revision); if (!bounded.ok) return bounded;
-  return Object.freeze({ ok: true as const, revisionDigest: digestOf(admitted.revision) });
 }
 
 export function encodeCapabilityCatalogRevision(

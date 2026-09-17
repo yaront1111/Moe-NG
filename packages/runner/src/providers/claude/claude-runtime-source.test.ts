@@ -9,7 +9,6 @@ import {
   type RuntimeClosureEntry,
   type RuntimeClosureKind,
 } from "./claude-observation.js";
-import * as runtimePinClosure from "./claude-runtime-pin-closure.js";
 import {
   resolveSources,
   type ClaudeRuntimePinErrorCode,
@@ -26,6 +25,12 @@ import {
   createEmulatedWin32RuntimeFs,
   nativeRuntimePath,
 } from "./claude-runtime-pin-test-fixtures.js";
+import {
+  inspectSources,
+  snapshotSourceCandidates,
+  type RuntimeSourceCandidate,
+  type SourceInspectionFailure,
+} from "./claude-runtime-source.js";
 
 /**
  * Shared source discovery for the Claude runtime pin: the primitive that turns
@@ -35,26 +40,28 @@ import {
  * spawns, observes a version, classifies an installed closure, or grants launch
  * authority; this suite exists to prove the ORDER of validation against reads.
  */
-type SourceOutcome = readonly SourceEntry[] | ClaudeRuntimePinFailure;
+type SourceOutcome = readonly SourceEntry[] | ClaudeRuntimePinFailure | SourceInspectionFailure;
 
-type DiscoverSources = (
+/**
+ * Caller-named inspection with no declared digest: the bytes are simply measured,
+ * so nothing can be "confirmed" against a caller's claim. Takes `unknown` so the
+ * shape matrix reaches the snapshot, which is the layer that refuses it.
+ */
+async function inspectUnquoted(
   fs: ClaudeRuntimeFsPort,
   candidates: unknown,
   realRoot: string,
-) => Promise<SourceOutcome>;
-
-/**
- * Resolved through the module NAMESPACE rather than a named import on purpose.
- * A missing named import makes the whole file fail to load, which reports zero
- * executed tests — indistinguishable from a suite that tested nothing. Going
- * through the namespace makes every case below execute and fail on its own
- * assertion while the production export is absent, and keeps reddening every
- * case (instead of vanishing) if the export is ever deleted.
- */
-function discoverSources(): DiscoverSources {
-  const exported = (runtimePinClosure as unknown as Record<string, unknown>)["discoverSources"];
-  expect(typeof exported, "production discoverSources export is absent").toBe("function");
-  return exported as DiscoverSources;
+): Promise<readonly SourceEntry[] | SourceInspectionFailure> {
+  const snapshot = snapshotSourceCandidates(candidates);
+  if (!Array.isArray(snapshot)) return snapshot as SourceInspectionFailure;
+  return await inspectSources(
+    fs,
+    (snapshot as readonly RuntimeSourceCandidate[]).map((entry) => ({
+      ...entry,
+      expectedSha256: null,
+    })),
+    realRoot,
+  );
 }
 
 const BIG_EXECUTABLE_SHA256 = "b80935d45c7fcb544ad1b841005e50e452239aef65d3e0b6c07976a50f356c69";
@@ -185,13 +192,18 @@ function quoted(entries: readonly { kind: RuntimeClosureKind; path: string }[]):
   }));
 }
 
-function expectRefusal(outcome: SourceOutcome, code: ClaudeRuntimePinErrorCode): void {
+/** The inspector's internal failure: a code only, the caller owns the refusal shape. */
+function expectFailure(outcome: SourceOutcome, code: ClaudeRuntimePinErrorCode): void {
   expect(Array.isArray(outcome), `expected a refusal, received ${JSON.stringify(outcome)}`).toBe(
     false,
   );
+  expect((outcome as SourceInspectionFailure).code).toBe(code);
+}
+
+function expectRefusal(outcome: SourceOutcome, code: ClaudeRuntimePinErrorCode): void {
+  expectFailure(outcome, code);
   const failure = outcome as ClaudeRuntimePinFailure;
   expect(failure.ok).toBe(false);
-  expect(failure.code).toBe(code);
   expect(failure.layer).toBe("RUNTIME");
   expect(failure.truthClass).toBe("UNKNOWN");
 }
@@ -205,7 +217,7 @@ it("streams caller-named candidates into sorted frozen entries with pinned diges
   const fixture = makeFixture();
   const probe = instrument(fixture);
   const entries = expectEntries(
-    await discoverSources()(probe.port, SCRAMBLED_CANDIDATES, EMULATED_WIN32_RUNTIME_ROOT),
+    await inspectUnquoted(probe.port, SCRAMBLED_CANDIDATES, EMULATED_WIN32_RUNTIME_ROOT),
   );
 
   expect(entries.map((entry) => entry.relativePath)).toEqual([
@@ -234,7 +246,7 @@ it("reads every candidate through bounded chunks and never materialises a file",
   const fixture = makeFixture();
   const probe = instrument(fixture);
   expectEntries(
-    await discoverSources()(probe.port, SCRAMBLED_CANDIDATES, EMULATED_WIN32_RUNTIME_ROOT),
+    await inspectUnquoted(probe.port, SCRAMBLED_CANDIDATES, EMULATED_WIN32_RUNTIME_ROOT),
   );
 
   expect(probe.readChunkCalls()).toBe(3);
@@ -300,12 +312,12 @@ it("generated a nonzero candidate-shape matrix", () => {
 });
 
 it.each(SHAPE_CASES)(
-  "refuses $name as CLAUDE_RUNTIME_OBSERVATION_INVALID at RUNTIME before reading",
+  "refuses $name as CLAUDE_RUNTIME_OBSERVATION_INVALID before reading",
   async ({ candidates }) => {
     const fixture = makeFixture();
     const probe = instrument(fixture);
-    expectRefusal(
-      await discoverSources()(probe.port, candidates, EMULATED_WIN32_RUNTIME_ROOT),
+    expectFailure(
+      await inspectUnquoted(probe.port, candidates, EMULATED_WIN32_RUNTIME_ROOT),
       "CLAUDE_RUNTIME_OBSERVATION_INVALID",
     );
     expect(probe.readChunkCalls()).toBe(0);
@@ -418,12 +430,12 @@ it("generated a nonzero path matrix covering every path refusal code", () => {
 });
 
 it.each(PATH_CASES)(
-  "refuses $name at RUNTIME with $code having read only validated candidates",
+  "refuses $name with $code having read only validated candidates",
   async ({ code, candidates, reads }) => {
     const fixture = makeFixture();
     const probe = instrument(fixture);
-    expectRefusal(
-      await discoverSources()(probe.port, candidates(fixture), EMULATED_WIN32_RUNTIME_ROOT),
+    expectFailure(
+      await inspectUnquoted(probe.port, candidates(fixture), EMULATED_WIN32_RUNTIME_ROOT),
       code,
     );
     expect(probe.readChunkCalls()).toBe(reads ?? 0);
@@ -433,8 +445,8 @@ it.each(PATH_CASES)(
 it("never reads the offending path itself, even when an earlier candidate was read", async () => {
   const fixture = makeFixture();
   const probe = instrument(fixture);
-  expectRefusal(
-    await discoverSources()(
+  expectFailure(
+    await inspectUnquoted(
       probe.port,
       [
         candidate("EXECUTABLE", EXECUTABLE_PATH),
@@ -460,8 +472,8 @@ it("maps a pre-read filesystem failure to CLAUDE_RUNTIME_PATH_MISSING without re
       throw new Error("unexpected stat");
     },
   });
-  expectRefusal(
-    await discoverSources()(
+  expectFailure(
+    await inspectUnquoted(
       probe.port,
       [candidate("EXECUTABLE", EXECUTABLE_PATH)],
       EMULATED_WIN32_RUNTIME_ROOT,
@@ -479,8 +491,8 @@ it("maps a thrown digest stream to CLAUDE_RUNTIME_SOURCE_DIGEST_MISMATCH", async
       throw new Error("host dropped the read mid-stream");
     },
   });
-  expectRefusal(
-    await discoverSources()(
+  expectFailure(
+    await inspectUnquoted(
       probe.port,
       [candidate("EXECUTABLE", EXECUTABLE_PATH)],
       EMULATED_WIN32_RUNTIME_ROOT,
@@ -505,8 +517,8 @@ it("refuses a leaf replaced by a junction after the read with CLAUDE_RUNTIME_PIN
       }
     },
   });
-  expectRefusal(
-    await discoverSources()(
+  expectFailure(
+    await inspectUnquoted(
       probe.port,
       [candidate("EXECUTABLE", EXECUTABLE_PATH)],
       EMULATED_WIN32_RUNTIME_ROOT,
@@ -524,8 +536,8 @@ it("refuses a leaf deleted after the read with CLAUDE_RUNTIME_PIN_SOURCE_DRIFT",
       if (path === EXECUTABLE_PATH) rmSync(fixture.native(EXECUTABLE_PATH));
     },
   });
-  expectRefusal(
-    await discoverSources()(
+  expectFailure(
+    await inspectUnquoted(
       probe.port,
       [candidate("EXECUTABLE", EXECUTABLE_PATH)],
       EMULATED_WIN32_RUNTIME_ROOT,
@@ -541,8 +553,8 @@ it("refuses a canonical identity that changes after the read with CLAUDE_RUNTIME
     realpath: async (path, callIndex, inner) =>
       path === EXECUTABLE_PATH && callIndex > 1 ? LAUNCHER_PATH : await inner(),
   });
-  expectRefusal(
-    await discoverSources()(
+  expectFailure(
+    await inspectUnquoted(
       probe.port,
       [candidate("EXECUTABLE", EXECUTABLE_PATH)],
       EMULATED_WIN32_RUNTIME_ROOT,
@@ -568,7 +580,7 @@ it("refuses a quoted digest that does not match the streamed bytes", async () =>
   expect(probe.readChunkCalls()).toBe(1);
 });
 
-it("resolveSources and discoverSources traverse one identical validate/read/revalidate order", async () => {
+it("resolveSources and the unquoted inspector traverse one identical validate/read/revalidate order", async () => {
   const quoteFixture = makeFixture();
   const quoteProbe = instrument(quoteFixture);
   const quoteEntries = expectEntries(
@@ -578,7 +590,7 @@ it("resolveSources and discoverSources traverse one identical validate/read/reva
   const discoverFixture = makeFixture();
   const discoverProbe = instrument(discoverFixture);
   const discoverEntries = expectEntries(
-    await discoverSources()(discoverProbe.port, SCRAMBLED_CANDIDATES, EMULATED_WIN32_RUNTIME_ROOT),
+    await inspectUnquoted(discoverProbe.port, SCRAMBLED_CANDIDATES, EMULATED_WIN32_RUNTIME_ROOT),
   );
 
   expect(discoverProbe.trace).toEqual(quoteProbe.trace);
@@ -618,7 +630,7 @@ it("pairs each validated path with its OWN declared digest against a shifting ar
   expect(reads).toBeGreaterThan(0);
 });
 
-it("refuses the same shape from resolveSources as from discoverSources", async () => {
+it("refuses the same shape from resolveSources as from the unquoted inspector", async () => {
   const fixture = makeFixture();
   const probe = instrument(fixture);
   expectRefusal(

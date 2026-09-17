@@ -189,7 +189,7 @@ describe("verdictOf", () => {
     expect(verdictOf("approval.decide_intent", bytes({ decision: "APPROVE" }))).toBe("APPROVE");
     expect(verdictOf("approval.decide", bytes({ decision: "APPROVE" }))).toBe("APPROVE");
     // An APPROVE commits a GoalState, which carries a lifecycle and NO decision word: the seam
-    // admits APPROVE only (planning-services.ts:290), so the lifecycle IS the verdict. Asserted
+    // admits APPROVE only (planning-services.ts:289-291), so the lifecycle IS the verdict. Asserted
     // with a real goal lifecycle, not a placeholder, because that is the shape on disk.
     expect(verdictOf("approval.decide", bytes({
       goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1",

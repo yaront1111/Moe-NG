@@ -10,12 +10,14 @@
  * answering first.
  */
 
+import { execFileSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createScanner, LanguageVariant, SyntaxKind } from "typescript/unstable/ast";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   DECLARED_BOUNDARIES,
@@ -32,7 +34,9 @@ import {
   SEEDED_LOW_RISK_TASK,
   createScratchProjectRepository,
 } from "./foundation-fixtures.js";
-import { readyDaemonOrigin } from "./j1-loop-harness.js";
+import {
+  REPOSITORY_ROOT, createJ1Scratch, prepareDaemonLaunch, readyDaemonOrigin,
+} from "./j1-loop-harness.js";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const harnessDirectory = "tests/e2e/foundation";
@@ -183,6 +187,49 @@ describe("daemon readiness", () => {
    */
   it("accepts a CRLF-terminated transcript and returns the bound origin", () => {
     expect(readyDaemonOrigin(`listening on ${origin}\r\n${ready}\r\n`)).toBe(origin);
+  });
+});
+
+describe("daemon project root", () => {
+  const roots: string[] = [];
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+  });
+  const git = (cwd: string, ...args: string[]): string =>
+    execFileSync("git", args, { cwd, encoding: "utf8", shell: false, windowsHide: true }).trim();
+
+  /**
+   * `activationReceiptInput` reads `MOE_PROJECT_ROOT ?? process.cwd()` and the daemon's cwd is
+   * the checkout, so a launch without the variable sends EVERY daemon this roster spawns to one
+   * `<checkout>/.moe-next/backups/`, where concurrent files prune each other's stamps and the
+   * activation is refused ACTIVATION_BACKUP_FAILED (1 lane run in 3). The root is asserted per
+   * scratch and against the checkout, not merely "set".
+   */
+  it("hands every spawned daemon its own scratch root, never the checkout", () => {
+    const scratches = [createJ1Scratch(), createJ1Scratch()];
+    roots.push(...scratches.map((scratch) => scratch.root));
+    const projectRoots = scratches.map((scratch) => prepareDaemonLaunch(scratch).env["MOE_PROJECT_ROOT"]);
+    expect(projectRoots).toEqual(scratches.map((scratch) => scratch.root));
+    expect(projectRoots.map((root) => resolve(String(root)))).not.toContain(resolve(REPOSITORY_ROOT));
+  });
+
+  /**
+   * The same root feeds `git rev-parse` for the repository and distribution members, so a root
+   * that is not a repository would trade the shared-backups refusal for
+   * ACTIVATION_REPOSITORY_UNMEASURED. Read FROM the root, exactly as the daemon reads it.
+   */
+  it("gives the root a HEAD of its own so the repository and distribution members still measure", () => {
+    const scratch = createJ1Scratch({ compiledExecution: true });
+    roots.push(scratch.root);
+    const root = String(prepareDaemonLaunch(scratch).env["MOE_PROJECT_ROOT"]);
+    const head = git(root, "rev-parse", "HEAD");
+    expect(head).toMatch(/^[0-9a-f]{40}$/u);
+    // Neither the checkout's history nor the compiled workspace's nested below the root.
+    expect(git(REPOSITORY_ROOT, "rev-parse", "HEAD")).not.toBe(head);
+    expect(git(scratch.workspace, "rev-parse", "HEAD")).not.toBe(head);
+    // A J3 restart prepares the same scratch again; the root's history must not grow.
+    prepareDaemonLaunch(scratch);
+    expect(git(root, "rev-parse", "HEAD")).toBe(head);
   });
 });
 

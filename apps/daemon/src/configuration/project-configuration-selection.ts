@@ -4,6 +4,9 @@ import type { ProjectConfigurationManifest } from "@moe/contracts";
 import { decodeProjectConfigurationManifestBytes } from "@moe/core";
 import { DurableStoreError } from "@moe/store";
 import type { CommandDecisionRecord, CommandDecisionResponse, CommandReceipt, CommitExpectedVersionDecisionInput, CursorPage, StoredEvent } from "@moe/store";
+
+import { sameBytes } from "../byte-equality.js";
+
 export const PROJECT_CONFIGURATION_SELECTION_CODES = Object.freeze(["PROJECT_CONFIGURATION_ABSENT", "PROJECT_CONFIGURATION_STALE", "PROJECT_CONFIGURATION_CONFLICT", "PROJECT_CONFIGURATION_UNREADABLE"] as const);
 export const PROJECT_CONFIGURATION_SELECTION_LAYER = "PROJECT_CONFIGURATION_SELECTION" as const;
 export type ProjectConfigurationSelectionCode = (typeof PROJECT_CONFIGURATION_SELECTION_CODES)[number];
@@ -79,9 +82,6 @@ function copyBytes(value: unknown): Uint8Array | null {
       || (typeof SharedArrayBuffer !== "undefined" && buffer instanceof SharedArrayBuffer)) return null;
     return new Uint8Array(value);
   } catch { return null; }
-}
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 function aggregateId(projectId: string): string {
   return `project-configuration:${createHash("sha256").update(projectId).digest("hex")}`;

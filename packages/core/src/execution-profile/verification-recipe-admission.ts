@@ -6,7 +6,7 @@ import {
   VERIFICATION_RECIPE_LIMITS,
   VERIFICATION_RECIPE_OUTPUT_MOUNTS,
   VERIFICATION_RECIPE_VERSION,
-  verificationRecipeRefusal,
+  verificationRecipeRefusal as refusal,
   type VerificationRecipeExpectedOutput,
   type VerificationRecipeExpectedRefusal,
   type VerificationRecipeImageRef,
@@ -51,10 +51,6 @@ const REFUSAL_TOKEN = /^[A-Z][A-Z0-9_]{0,255}$/u;
 const RELATIVE_PATH = /^[A-Za-z0-9._/-]+$/u;
 const CONTROL = /[\u0000-\u001f\u007f]/u;
 
-const refusal = (
-  code: Parameters<typeof verificationRecipeRefusal>[0],
-  layer: Parameters<typeof verificationRecipeRefusal>[1],
-): VerificationRecipeRefusal => verificationRecipeRefusal(code, layer);
 const malformed = (): VerificationRecipeRefusal => refusal(
   "VERIFICATION_RECIPE_MALFORMED", "VERIFICATION_RECIPE_ADMISSION",
 );

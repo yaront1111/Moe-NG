@@ -6,6 +6,8 @@ import type {
   RuntimeCommandKind,
 } from "@moe/contracts";
 
+import { isObject as isPlainJsonObject, ref as isRef } from "../json-record-shape.js";
+
 /**
  * Byte ingress for the bootstrap command surface.
  *
@@ -148,24 +150,6 @@ const COMMAND_UNKNOWN: BootstrapRequestRefused = Object.freeze({
 
 const KIND_SET: ReadonlySet<string> = new Set<string>(BOOTSTRAP_COMMAND_KINDS);
 const KEY_SET: ReadonlySet<string> = new Set<string>(BOOTSTRAP_REQUEST_KEYS);
-
-/**
- * `decodeBoundedJsonBytes` yields null-prototype objects, so a prototype other than null
- * means the value did not come from the bounded decoder and is not trusted here.
- */
-function isPlainJsonObject(value: JsonValue | undefined): value is JsonObject {
-  return (
-    value !== null
-    && value !== undefined
-    && typeof value === "object"
-    && !Array.isArray(value)
-    && Object.getPrototypeOf(value) === null
-  );
-}
-
-function isRef(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function hasExactKeys(request: JsonObject): boolean {
   const keys = Object.keys(request);

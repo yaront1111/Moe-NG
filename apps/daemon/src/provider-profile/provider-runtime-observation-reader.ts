@@ -15,7 +15,8 @@
  */
 
 import type { ProjectConfigurationStore } from "../configuration/project-configuration-selection.js";
-import { canonicalJson, isRecord } from "./provider-profile-fields.js";
+import { isRecord } from "../value-primitives.js";
+import { canonicalJson } from "./provider-profile-fields.js";
 import {
   decodeProviderRuntimeObservationBytes,
   encodeProviderRuntimeObservationBytes,

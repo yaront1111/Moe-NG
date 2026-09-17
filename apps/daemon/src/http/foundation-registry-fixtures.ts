@@ -106,7 +106,6 @@ const HEAD = REPOSITORY.head;
 /** The catalog an OUT-OF-PROCESS daemon must be pointed at to resolve the same workspace
  *  authority these fixtures seed, via `MOE_FOUNDATION_WORKSPACE_CATALOG`. */
 export const FOUNDATION_SEAM_CATALOG_PATH = REPOSITORY.catalogPath;
-export const FOUNDATION_SEAM_REPOSITORY_HEAD = HEAD;
 
 const LEASE_RECORD = {
   authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT", leaseId: "lease-1",

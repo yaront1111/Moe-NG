@@ -50,7 +50,12 @@ import { readReleaseReceipt } from "./release-receipt-ledger.js";
  *
  * NOTHING HERE THROWS. `DurableSchedule` flattens any throw to SCHEDULE_CALLBACK_FAILED and
  * DISCARDS the reason, so a refusal that escaped as an exception would be an invisible refusal.
- * Every per-candidate answer is a returned outcome, including a `DomainRefusal` from the dispatch.
+ * Every per-candidate answer is a returned outcome, including a `DomainRefusal` from the dispatch
+ * AND a store fault in the cheap checks before it: the reads above call the store bare, and a
+ * contended reader under a concurrent seat writer throws STORE_BUSY out of them. That fault is
+ * ONE candidate's answer, never the tick's, so the goals after it are still answered. The candidate
+ * scan itself pages the publish ledger BEFORE any candidate exists, so a fault there has no goal
+ * to name: it is the tick's one answer, carrying empty ids, and still never a throw.
  */
 
 export const RELEASE_AUTO_DECIDE_JOB_ID = "release/auto-decide" as const;
@@ -80,12 +85,15 @@ export type ReleaseAutoOutcomeCode =
   | "RECORD_FAILED"
   | "RELEASE_IN_FLIGHT"
   | "RELEASED"
+  | "STORE_UNREADABLE"
   | "UNSERVED";
 
 /**
  * One candidate's answer. `code` is this reconciler's own word for WHAT happened; `refusal` carries
  * the production vocabulary's (code, layer) pair whenever a gate refused, so an arm can assert the
  * stable code together with the layer that minted it rather than merely that nothing released.
+ * EMPTY `goalId` and `sha` name the candidate scan, the one read that runs before a candidate is
+ * known: only STORE_UNREADABLE is ever answered that way.
  */
 export interface ReleaseAutoOutcome {
   readonly code: ReleaseAutoOutcomeCode;
@@ -289,13 +297,48 @@ async function decideCandidate(
   }
 }
 
-/** One tick: every PUSHED candidate, answered independently. Exported so arms drive it directly. */
+/**
+ * A STORE FAULT IN THE PRE-CHECKS IS THIS CANDIDATE'S OUTCOME, not the tick's. The checks before
+ * the dispatch -- the decision lookup, the release walk, the version read, the record -- call the
+ * store bare, and a contended reader throws STORE_BUSY out of them. Left to escape, one unreadable
+ * goal would end the tick with every later candidate unanswered and the reason discarded by the
+ * schedule. The store's own code travels in the detail; `refusal` stays null because no gate
+ * refused -- nothing was answered at all, no attempt was recorded, and the next tick asks again.
+ */
+async function answerCandidate(
+  deps: ReleaseAutoDecideDeps, goalId: string, sha: string,
+): Promise<ReleaseAutoOutcome> {
+  try {
+    return await decideCandidate(deps, goalId, sha);
+  } catch (error) {
+    return outcome(goalId, sha, "STORE_UNREADABLE", storeFaultDetail(error));
+  }
+}
+
+/** The store's own message, `<code>: <detail>` for a `DurableStoreError`, so the code travels. */
+function storeFaultDetail(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown store fault";
+}
+
+/**
+ * One tick: every PUSHED candidate, answered independently. Exported so arms drive it directly.
+ *
+ * The candidate scan pages the publish ledger before any goal is known, so a fault THERE cannot
+ * be a candidate's answer; it is the tick's one answer, with empty ids, rather than the throw the
+ * schedule would flatten. Nothing has been written, so the next tick simply scans again.
+ */
 export async function releaseAutoDecideOnce(
   deps: ReleaseAutoDecideDeps,
 ): Promise<readonly ReleaseAutoOutcome[]> {
+  let candidates: ReturnType<typeof candidatesOf>;
+  try {
+    candidates = candidatesOf(deps.store, deps.projectId);
+  } catch (error) {
+    return Object.freeze([outcome("", "", "STORE_UNREADABLE", storeFaultDetail(error))]);
+  }
   const answers: ReleaseAutoOutcome[] = [];
-  for (const candidate of candidatesOf(deps.store, deps.projectId)) {
-    answers.push(await decideCandidate(deps, candidate.goalId, candidate.sha));
+  for (const candidate of candidates) {
+    answers.push(await answerCandidate(deps, candidate.goalId, candidate.sha));
   }
   return Object.freeze(answers);
 }

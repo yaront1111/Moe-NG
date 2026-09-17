@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  decisionWords, kindWords, previewCodeSaid, previewCodeWords,
-} from "./activity-words.js";
+import { decisionWords, kindWords, previewCodeSaid } from "./activity-words.js";
 
 /**
  * The four codes are the daemon's own closed roster (`PREVIEW_CODE_LAYERS` in
@@ -23,47 +21,47 @@ it("describes a review continuation as another attempt without promising unlimit
 
 describe("preview refusal codes, as operator words", () => {
   it("says what happened AND what to do about it, for PREVIEW_COMMAND_MISSING", () => {
-    expect(previewCodeWords("PREVIEW_COMMAND_MISSING")).toBe(
+    expect(previewCodeSaid("PREVIEW_COMMAND_MISSING")).toBe(
       "The preview command is not installed on this machine, so there was nothing to run."
       + " Install it, or set the command this project previews with, then start the preview"
-      + " again.",
+      + " again. (PREVIEW_COMMAND_MISSING)",
     );
   });
 
   it("says what happened AND what to do about it, for PREVIEW_START_TIMEOUT", () => {
-    expect(previewCodeWords("PREVIEW_START_TIMEOUT")).toBe(
+    expect(previewCodeSaid("PREVIEW_START_TIMEOUT")).toBe(
       "The product did not answer before the daemon stopped waiting. It may still be starting,"
       + " or it may be failing on launch - start the preview again, and read the board if it"
-      + " times out twice.",
+      + " times out twice. (PREVIEW_START_TIMEOUT)",
     );
   });
 
   it("gives every rostered code a real sentence, never an echo of the code", () => {
     for (const code of DAEMON_CODES) {
-      const words = previewCodeWords(code);
-      expect(words, code).not.toBe(code);
-      expect(words.length, code).toBeGreaterThan(40);
-      expect(words.endsWith("."), code).toBe(true);
+      const said = previewCodeSaid(code);
+      expect(said, code).not.toBe(code);
+      // A full sentence, then the code: the period proves words came before the parenthesis.
+      expect(said.endsWith(`. (${code})`), code).toBe(true);
+      expect(said.length, code).toBeGreaterThan(40 + code.length);
     }
   });
 
   it("renders an UNKNOWN code VERBATIM rather than blank", () => {
     for (const code of ["PREVIEW_SOMETHING_NEW", "TOTALLY_UNRELATED", "x"]) {
-      expect(previewCodeWords(code), code).toBe(code);
       expect(previewCodeSaid(code), code).toBe(code);
     }
-    expect(previewCodeWords("")).toBe("");
+    expect(previewCodeSaid("")).toBe("");
   });
 
   it("shows the code ALONGSIDE the words, never instead of them", () => {
     const said = previewCodeSaid("PREVIEW_GOAL_NOT_LANDED");
-    expect(said).toContain(previewCodeWords("PREVIEW_GOAL_NOT_LANDED"));
+    expect(said.startsWith("This goal has no landed commit yet")).toBe(true);
     expect(said).toContain("(PREVIEW_GOAL_NOT_LANDED)");
   });
 
   it("does not answer from a prototype key, which would invent a sentence", () => {
     for (const key of ["toString", "constructor", "__proto__", "hasOwnProperty"]) {
-      expect(previewCodeWords(key), key).toBe(key);
+      expect(previewCodeSaid(key), key).toBe(key);
     }
   });
 });

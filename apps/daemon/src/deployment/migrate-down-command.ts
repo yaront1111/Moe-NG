@@ -17,7 +17,6 @@ import { MIGRATE_DOWN_KIND, finishMigrationCommand, migrateDownRefuse, migration
 import type { MigrationCommandIdentity, MigrationCommandTerminal } from "./migrate-down-admission.js";
 
 export const MIGRATE_DOWN_UNCONFIGURED = "MIGRATE_DOWN_UNCONFIGURED" as const;
-export const ENVIRONMENT_MIGRATE_DOWN_DECIDED_EVENT = "EnvironmentMigrateDownDecided" as const;
 export const DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND = MIGRATE_DOWN_KIND;
 
 /** The three HOST-SCOPED values ONE environment's revert needs, resolved together or not at all.

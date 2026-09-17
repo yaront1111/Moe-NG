@@ -26,8 +26,8 @@ import { buildPolicyWaiverLeg } from "./policy-waiver-leg.js";
  * AUTHENTICATED request, and the exact-shape decode refuses a payload that so much as
  * NAMES one of them before any store read. Record, fold and expected-version leg come
  * from the landed policy-waiver contract unchanged -- no second canonicaliser, hash or
- * fold, and no separate burn: `burnStepUpAuthRef` commits on its own, which would leave
- * a refused waiver with a spent step-up. The marker travels as a LEG inside the waiver's
+ * fold, and no separate burn: a standalone replay observation commits on its own, which
+ * would leave a refused waiver with a spent step-up. The marker travels as a LEG inside the waiver's
  * own decision, so refusal, conflict and replay write neither and no success is reusable.
  */
 

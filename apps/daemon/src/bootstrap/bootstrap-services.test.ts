@@ -1406,7 +1406,7 @@ describe("policy.validate - consumes verified durable waivers (task-5d462855)", 
 
   /**
    * Roster ORDER is load-bearing and this arm is the fence on it. `callerSuppliedKey`
-   * (bootstrap-policy-authority.ts:107-110) is a `find`, so the FIRST rostered key the payload
+   * (bootstrap-policy-authority.ts:99-102) is a `find`, so the FIRST rostered key the payload
    * carries answers. The three refs are appended for exactly this reason: prepending them would
    * silently retarget the four dedicated refusals to BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE for
    * any payload that carried both, turning a precise refusal into a vaguer one with no test

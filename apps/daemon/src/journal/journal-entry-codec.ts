@@ -31,7 +31,7 @@ const ENTRY_KEYS = Object.freeze([
 ] as const);
 
 /** Exactly the key set each `FactPredicate` variant declares in
- *  packages/context/src/context-contract.ts:44. Never retyped as a local union:
+ *  packages/context/src/context-contract.ts:24. Never retyped as a local union:
  *  the kinds and operators are read off @moe/context's own exported members. */
 const PREDICATE_KEYS = Object.freeze({
   FACT_DIGEST: ["expectedDigest", "factId", "kind", "operator"],

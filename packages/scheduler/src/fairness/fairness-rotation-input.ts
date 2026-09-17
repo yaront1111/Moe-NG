@@ -78,7 +78,7 @@ export function refuseRotation(
 /**
  * Bounded addition, ceilinged at MAX_AUTHORITY_COUNT rather than
  * Number.MAX_SAFE_INTEGER: every counter this package emits must survive a round
- * trip through `isCount` (authority-kernel.ts:150), which stops there. A sum
+ * trip through `isCount` (authority-kernel.ts:134), which stops there. A sum
  * above it passes a MAX_SAFE_INTEGER guard and is then refused by the very
  * contract that produced it, bricking the ring.
  */

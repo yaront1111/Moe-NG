@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 
+import { flag } from "../argv-flag.js";
 import { collectV2ReadinessEvidence, createSystemEvidencePorts }
   from "./v2-readiness-evidence-collector.js";
 
@@ -16,12 +17,6 @@ import { collectV2ReadinessEvidence, createSystemEvidencePorts }
  * only when every kind was produced. The acceptance lanes are RUN by this tool at the named
  * commit, so expect it to take as long as `pnpm test:e2e` and `pnpm test:e2e:browser`.
  */
-
-function flag(argv: readonly string[], name: string): string | null {
-  const prefix = `--${name}=`;
-  const found = argv.find((entry) => entry.startsWith(prefix));
-  return found === undefined ? null : found.slice(prefix.length);
-}
 
 function print(value: unknown, exitCode: number): never {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);

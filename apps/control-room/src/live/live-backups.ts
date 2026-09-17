@@ -23,6 +23,7 @@
  */
 
 import { effectRefusal } from "./live-effect-read.js";
+import { exactDataRecord } from "./live-wire-primitives.js";
 
 const LAYER = "CONTROL_ROOM_BACKUPS";
 const INVALID_RESPONSE_CODE = "BACKUPS_RESPONSE_INVALID";
@@ -74,29 +75,6 @@ const errored = (code: string, layer: string): Failure =>
  * frame or a single decoded backup behind. The tests assert that, not the code twice.
  */
 const invalidResponse = (): Failure => errored(INVALID_RESPONSE_CODE, LAYER);
-
-/** An own-enumerable EXACT-key snapshot (copied verbatim from live-deployments-health.ts). */
-function exactDataRecord(
-  value: unknown, expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
-}
 
 const text = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 /**

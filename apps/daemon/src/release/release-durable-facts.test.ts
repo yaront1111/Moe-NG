@@ -201,9 +201,8 @@ it("refuses receipt evidence whose bytes no longer match the accepted digest", (
     .toMatchObject({ landingSha: null, receipt: null });
 });
 
-it("reads the durable preview decision and its goal-bound receipt URL", () => {
-  const { store, nodeRef } = world();
-  land(store, nodeRef, accept(store, nodeRef));
+/** The goal's durable APPROVE verdict, recorded the way the preview edge records it. */
+function approvePreview(store: SqliteEventStore): void {
   const preview = recordPreviewReceipt(store, {
     code: null, decidedAt: NOW, goalId: GOAL_ID, pid: 1234, projectId: PROJECT_ID,
     screenshots: [], sha: LANDING_SHA, url: "http://127.0.0.1:4173",
@@ -216,9 +215,43 @@ it("reads the durable preview decision and its goal-bound receipt URL", () => {
     principalId: "principal-1", projectId: PROJECT_ID, store,
   });
   expect(decision.resultCode).toBe("PREVIEW_DECISION_RECORDED");
+}
+
+it("reads the durable preview decision and its goal-bound receipt URL", () => {
+  const { store, nodeRef } = world();
+  land(store, nodeRef, accept(store, nodeRef));
+  approvePreview(store);
   expect(readReleaseDossierInput(store, PROJECT_ID, GOAL_ID)?.preview).toMatchObject({
     decidedAt: NOW, outcome: "APPROVE", url: "http://127.0.0.1:4173",
   });
+});
+
+it("refuses RELEASE_FACTS_UNREADABLE when the preview walk faults, never a null preview", () => {
+  const { store, nodeRef } = world();
+  land(store, nodeRef, accept(store, nodeRef));
+  approvePreview(store);
+  // POSITIVE CONTROL: the untouched store answers the approval, so only the fault below removes it.
+  expect(readReleaseDossierInput(store, PROJECT_ID, GOAL_ID)?.preview?.outcome).toBe("APPROVE");
+  // The preview walk is the ONE reader here that pages the decision ledger at 256 (the review
+  // ledger pages at 200), so a store that throws STORE_BUSY on that page faults the preview read
+  // and nothing else. No gap code names a preview: a null here would render as the durable fact
+  // "There is no preview decision for this goal" inside evidence, with every other fact present.
+  let faults = 0;
+  const busy = new Proxy(store, { get(target, key) {
+    if (key === "readCommandDecisionsAfter") {
+      return (cursor: bigint, pageSize: number) => {
+        if (pageSize !== 256) return target.readCommandDecisionsAfter(cursor, pageSize);
+        faults += 1;
+        throw new DurableStoreError("STORE_BUSY", "decision history changed during its read");
+      };
+    }
+    const value: unknown = Reflect.get(target, key, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+  expect(readReleaseDossierFacts(busy, PROJECT_ID, GOAL_ID))
+    .toEqual({ code: "RELEASE_FACTS_UNREADABLE", ok: false });
+  expect(faults).toBe(1);
+  expect(readReleaseDossierInput(busy, PROJECT_ID, GOAL_ID)).toBeNull();
 });
 
 it("reads the selected project's durable policy revision", () => {

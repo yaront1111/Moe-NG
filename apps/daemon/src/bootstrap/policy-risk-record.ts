@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { POLICY_RISK_TIERS, type PolicyRiskTier } from "@moe/core";
 
 import { isIsoInstant } from "../identity/session-contracts.js";
+import { isRecord } from "../value-primitives.js";
 
 export const POLICY_RISK_EVENT_TYPE = "policy.risk-assessment.v1" as const;
 /**
@@ -79,10 +80,6 @@ export function policyRiskRefusal<Code extends PolicyRiskRefusalCode>(
 
 function refuse(code: PolicyRiskRecordCode): PolicyRiskRefusal {
   return policyRiskRefusal(code);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function ownDataSnapshot(value: unknown): Record<string, unknown> | null {

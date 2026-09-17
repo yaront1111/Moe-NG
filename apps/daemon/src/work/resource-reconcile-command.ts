@@ -18,10 +18,10 @@
  * committed activation and the durable member set itself, so a report cannot smuggle
  * in a membership.
  *
- * NO DRAIN FENCE HERE, deliberately. Design 312 lists `resource.reconcile` among the
- * commands a FENCED attempt may still issue (`drain-fence.ts` DRAIN_ADMITTED_COMMANDS),
- * so a "refuse while draining" guard would contradict the fence's own admitted list and
- * strand exactly the attempts this seam exists to reconcile.
+ * NO DRAIN FENCE HERE, deliberately. Design 312 lists effect/resource reconciliation
+ * among what a FENCED attempt may still do, so a "refuse while draining" guard would
+ * contradict the design's own admitted list and strand exactly the attempts this seam
+ * exists to reconcile.
  *
  * REFUSALS ARE FORWARDED, NOT RESTAMPED. Everything `applyAttemptResourceReport`
  * answers keeps its own code and its own layer — the daemon resource codes under

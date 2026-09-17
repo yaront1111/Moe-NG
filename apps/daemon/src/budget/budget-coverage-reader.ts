@@ -50,17 +50,6 @@ import type { BudgetDurableBinding } from "./budget-ledger-contracts.js";
  */
 const COVERAGE_LAYER = "BUDGET_COVERAGE_READER";
 
-/**
- * The ONLY code this reader authors. Every other refusal it can return is the projection's own,
- * forwarded unrestamped — a thrown store fault is the single case where no lower layer reached a
- * verdict, so there is nothing to forward and this module must answer for itself.
- */
-export const BUDGET_COVERAGE_CODES = Object.freeze([
-  "BUDGET_COVERAGE_STORE_UNAVAILABLE",
-] as const);
-
-export type BudgetCoverageCode = (typeof BUDGET_COVERAGE_CODES)[number];
-
 /** The projection's verdict, whole: its code and layer, plus any deeper source it carried. */
 export interface BudgetCoverageUpstream {
   readonly code: string;

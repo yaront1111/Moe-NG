@@ -1,3 +1,4 @@
+import { REVIEW_ROUND_ABSOLUTE_CEILING } from "@moe/review";
 import type { SqliteEventStore } from "@moe/store";
 
 import { createGovernanceDecisionLedger, governanceDecisionId } from "./governance-decision-ledger.js";
@@ -53,6 +54,8 @@ export interface GovernanceQuestion {
   readonly detail: string;
   readonly findingId: string;
   readonly severity: string;
+  /** What the finding was raised against, `KIND:locator`. Part of the question's identity. */
+  readonly subject: string;
 }
 
 export interface GovernanceBrief {
@@ -71,7 +74,12 @@ export interface GovernanceAnswer {
   readonly guidance: string;
 }
 
-export type GovernanceAdvisor = (brief: GovernanceBrief) => GovernanceAnswer | null;
+/**
+ * Asynchronous because the only real implementation runs a model in a process. A synchronous
+ * advisor blocked the wrapper's whole event loop for the length of that call; see the note in
+ * `orchestrator/governor-seat.ts`. The type is what keeps a future advisor from doing it again.
+ */
+export type GovernanceAdvisor = (brief: GovernanceBrief) => Promise<GovernanceAnswer | null>;
 
 export interface GovernanceDeciderDeps {
   readonly advisor: GovernanceAdvisor;
@@ -91,7 +99,7 @@ export type GovernanceOutcome =
   /** Governance answered and funded one more attempt. */
   | { readonly kind: "ALLOWED"; readonly decisionIds: readonly string[] }
   /** Governance stopped and left the node for the human. It commits NOTHING on this arm. */
-  | { readonly kind: "HUMAN_NEEDED"; readonly why: "BOUND_SPENT" | "NO_ANSWER" }
+  | { readonly kind: "HUMAN_NEEDED"; readonly why: "BOUND_SPENT" | "NO_ANSWER" | "ROUND_CEILING" }
   /** The durable decision refused; the node stays exactly as it was. */
   | { readonly kind: "REFUSED"; readonly code: string };
 
@@ -112,7 +120,9 @@ const escalationRefOf = (subjectRef: string, version: number): string =>
  * the same version is a new command rather than a spent id (`REVIEW_COMMAND_ID_SPENT`).
  */
 const commandIdOf = (subjectRef: string, version: number, decision: string): string =>
-  `gov-${governanceDecisionId({ findingId: decision, reviewVersion: version, subjectRef })}`;
+  // The empty subject is deliberate and is not a finding's: this id names the ESCALATION
+  // decision, which is about the node and its review version, not about any one finding.
+  `gov-${governanceDecisionId({ findingId: decision, findingSubject: "", reviewVersion: version, subjectRef })}`;
 
 function openQuestionsOf(
   ledger: ReturnType<typeof readReviewLedger>,
@@ -128,6 +138,10 @@ function openQuestionsOf(
       detail: record.finding.detail,
       findingId: record.finding.ruleId,
       severity: record.finding.severity,
+      // Carried for EVERY subject kind, not just CRITERION: `criterionId` above is null for a
+      // NODE or FILE subject, so without this the only thing distinguishing two findings of one
+      // rule would be their prose detail, which is not part of a decision's identity.
+      subject: `${record.finding.subject.kind}:${record.finding.subject.locator}`,
     }))
     .filter((question) => question.findingId.length > 0 && question.detail.length > 0));
 }
@@ -162,10 +176,10 @@ function decide(
  * Answers the escalation on one node, or says why it did not. Every arm is terminal for this
  * pass: governance never leaves a node half-decided, and never retries inside one call.
  */
-export function decideGovernanceEscalation(
+export async function decideGovernanceEscalation(
   deps: GovernanceDeciderDeps,
   subjectRef: string,
-): GovernanceOutcome {
+): Promise<GovernanceOutcome> {
   if (!governanceOpen(deps.policy)) return { kind: "CLOSED" };
   let ledger: ReturnType<typeof readReviewLedger>;
   try {
@@ -185,11 +199,25 @@ export function decideGovernanceEscalation(
   const latest = ledger.rounds.at(-1);
   if (latest === undefined || latest.routing.route === "ACCEPT") return { kind: "NOT_DUE" };
 
+  // The daemon refuses ALLOW_MORE_ATTEMPTS outright once the lineage reaches the absolute round
+  // ceiling (review-acceptance.ts, REVIEW_ROUND_CEILING_REACHED), and no decision taken here can
+  // raise it. Mirrored for the same reason the ACCEPT case above is mirrored: without it,
+  // governance spends a real model call per node per pass to produce an answer whose only
+  // possible fate is REFUSED, for as long as the node exists.
+  if (ledger.rounds.length >= REVIEW_ROUND_ABSOLUTE_CEILING) {
+    return { kind: "HUMAN_NEEDED", why: "ROUND_CEILING" };
+  }
+
   const records = createGovernanceDecisionLedger(deps.store, deps.projectId);
   const version = ledger.version;
-  // The bound is checked BEFORE the advisor is asked: past it, no answer would be spent anyway,
+  // The bound is checked BEFORE the advisor is asked: past it, no answer could be funded anyway,
   // and asking would cost a model call to reach a conclusion already fixed.
-  if (records.spentOn(subjectRef) >= deps.policy.maxDecisions) {
+  //
+  // It counts FUNDED ATTEMPTS, not decisions authored. Counting `GOVERNANCE_DECIDED` rows let a
+  // governor that cited the PRD fund attempts for ever at `maxDecisions: 1`, because a citation
+  // was free — free of new AUTHORITY, but not of the tokens and repository work an attempt costs,
+  // which is the whole thing the bound protects.
+  if (records.fundedOn(subjectRef) >= deps.policy.maxDecisions) {
     return { kind: "HUMAN_NEEDED", why: "BOUND_SPENT" };
   }
 
@@ -200,7 +228,7 @@ export function decideGovernanceEscalation(
   let answer: GovernanceAnswer | null = null;
   // An advisor that throws is an advisor that did not answer. It must not leave the node parked.
   try {
-    answer = deps.advisor({ questions, reviewVersion: version, subjectRef });
+    answer = await deps.advisor({ questions, reviewVersion: version, subjectRef });
   } catch { answer = null; }
   if (answer === null || answer.guidance.trim().length === 0) {
     return { kind: "HUMAN_NEEDED", why: "NO_ANSWER" };

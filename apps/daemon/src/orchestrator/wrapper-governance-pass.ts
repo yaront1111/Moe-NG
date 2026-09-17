@@ -41,8 +41,8 @@ export interface GovernancePassConfig {
   readonly store: () => SqliteEventStore | undefined;
 }
 
-export function createGovernancePass(config: GovernancePassConfig): () => void {
-  return function governancePass(): void {
+export function createGovernancePass(config: GovernancePassConfig): () => Promise<void> {
+  return async function governancePass(): Promise<void> {
     if (!governanceOpen(config.policy)) return;
     const store = config.store();
     if (store === undefined) return;
@@ -74,18 +74,31 @@ export function createGovernancePass(config: GovernancePassConfig): () => void {
       });
     } catch { return; }
     for (const nodeRef of candidates) {
-      const outcome = decideGovernanceEscalation({
-        advisor: config.advisor, clock: config.clock, policy: config.policy,
-        projectId: config.projectId, store,
-      }, nodeRef);
-      if (outcome.kind === "ALLOWED") {
-        config.log(`[governance] ${nodeRef}: answered its exhausted review and funded one more attempt (${String(outcome.decisionIds.length)} decision(s) recorded)`);
-      } else if (outcome.kind === "HUMAN_NEEDED") {
-        config.log(outcome.why === "BOUND_SPENT"
-          ? `[governance] ${nodeRef}: its governance decision bound is spent; it needs your decision in the control room, and its work is untouched`
-          : `[governance] ${nodeRef}: no answer could be produced; it needs your decision in the control room, and its work is untouched`);
-      } else if (outcome.kind === "REFUSED") {
-        config.log(`[governance] ${nodeRef}: the daemon refused the decision (${outcome.code}); it stays exactly as it was`);
+      // EACH NODE ALONE, AND THAT NOW NEEDS A GUARD. The decider contains its own failures, but
+      // the advisor it awaits is a model in a process this module does not own. An advisor that
+      // REJECTS rather than returning null would abandon every node after it in the candidate
+      // list — and this pass is the only thing that moves any of them, so one bad node would
+      // park the rest indefinitely with nothing in the log to say why.
+      try {
+        const outcome = await decideGovernanceEscalation({
+          advisor: config.advisor, clock: config.clock, policy: config.policy,
+          projectId: config.projectId, store,
+        }, nodeRef);
+        if (outcome.kind === "ALLOWED") {
+          config.log(`[governance] ${nodeRef}: answered its exhausted review and funded one more attempt (${String(outcome.decisionIds.length)} decision(s) recorded)`);
+        } else if (outcome.kind === "HUMAN_NEEDED") {
+          const why = outcome.why === "BOUND_SPENT"
+            ? "its governance decision bound is spent"
+            : outcome.why === "ROUND_CEILING"
+              ? "its review has reached the absolute round ceiling, which no decision can raise"
+              : "no answer could be produced";
+          config.log(`[governance] ${nodeRef}: ${why}; it needs your decision in the control room, and its work is untouched`);
+        } else if (outcome.kind === "REFUSED") {
+          config.log(`[governance] ${nodeRef}: the daemon refused the decision (${outcome.code}); it stays exactly as it was`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        config.log(`[governance] ${nodeRef}: the decision could not be taken (${message}); it stays exactly as it was`);
       }
     }
   };

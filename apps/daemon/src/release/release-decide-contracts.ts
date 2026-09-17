@@ -47,9 +47,6 @@ export const RELEASE_DECIDE_CODE_LAYER_MAP = Object.freeze({
 /** The closed code set, read off the map rather than restated beside it. */
 export type ReleaseDecideCode = keyof typeof RELEASE_DECIDE_CODE_LAYER_MAP;
 
-/** The closed layer set, likewise derived — no layer exists that the map does not name. */
-export type ReleaseDecideLayer = (typeof RELEASE_DECIDE_CODE_LAYER_MAP)[ReleaseDecideCode];
-
 /** Derived, never restated: the roster IS the layer map's key set, sorted for a stable order. */
 export const RELEASE_DECIDE_CODES: readonly ReleaseDecideCode[] = Object.freeze(
   (Object.keys(RELEASE_DECIDE_CODE_LAYER_MAP) as ReleaseDecideCode[]).sort(),
@@ -61,7 +58,7 @@ export const RELEASE_DECIDE_CODES: readonly ReleaseDecideCode[] = Object.freeze(
  * unions. Written as a distributed mapped type so that a hand-built literal bypassing
  * `releaseRefusal` cannot express a disagreeing pair either: `{code: "RELEASE_PR_FAILED",
  * layer: "PROJECT_REDUCER"}` is a compile error, not merely bad practice. A plain
- * `{code: ReleaseDecideCode; layer: ReleaseDecideLayer}` interface would admit it, which
+ * `{code: ReleaseDecideCode; layer: <union of map values>}` interface would admit it, which
  * would leave the factory as the only thing standing between a caller and a wrong layer.
  */
 export type ReleaseDecideRefusalFor<C extends ReleaseDecideCode> = {
@@ -90,23 +87,4 @@ export function releaseRefusal<C extends ReleaseDecideCode>(
     layer: RELEASE_DECIDE_CODE_LAYER_MAP[code],
     ok: false as const,
   });
-}
-
-/**
- * Narrow an unknown value to a release.decide refusal. Two things are deliberate here.
- *
- * First, the CODE is checked against the closed roster rather than trusting `ok === false`
- * alone: a refusal minted by another vocabulary must not be admitted as one of ours.
- *
- * Second, `ok` and `code` are required as OWN properties. A plain property read walks the
- * prototype chain, so `Object.create({code: "RELEASE_PR_FAILED"})` with `ok = false` set on
- * the instance would otherwise be admitted as a refusal it never carried.
- */
-export function isReleaseDecideRefusal(value: unknown): value is ReleaseDecideRefusal {
-  if (typeof value !== "object" || value === null) return false;
-  if (!Object.hasOwn(value, "ok") || !Object.hasOwn(value, "code")) return false;
-  const candidate = value as { readonly code?: unknown; readonly ok?: unknown };
-  if (candidate.ok !== false) return false;
-  return typeof candidate.code === "string"
-    && Object.hasOwn(RELEASE_DECIDE_CODE_LAYER_MAP, candidate.code);
 }

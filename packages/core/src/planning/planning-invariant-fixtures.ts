@@ -39,7 +39,6 @@ export const RUN_RANK: Readonly<Record<PlanningRunLifecycle, number>> = {
   ACTIVATED: 6, REJECTED: 7, CANCELLED: 7,
 };
 export const RUN_TERMINAL: ReadonlySet<string> = new Set(["ACTIVATED", "REJECTED", "CANCELLED"]);
-export const RUN_APPROVAL_STATES: ReadonlySet<string> = new Set(["PLAN_REVIEW", "APPROVED", "ACTIVATED"]);
 export const REVISION_RANK: Readonly<Record<GraphRevisionLifecycle, number>> = {
   DRAFT: 0, PENDING_APPROVAL: 1, APPROVED: 2, ACTIVE: 3, SUPERSEDED: 4, REJECTED: 5,
 };

@@ -5,10 +5,11 @@ import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.
 /**
  * THE COVERAGE READ ON A GOAL, POLLED, AS STATE THAT ONLY MOVES WHEN ITS SURFACE WOULD.
  *
- * Every poll decodes a FRESH frame object. Before this hook LiveContractDossier (every 10 s)
- * and PrdCoverage (every 5 s) each set that object as state on every tick, so React
- * reconciled their whole contract trees for an answer that had not changed - with the
- * measured 128 + 150 statement contract, a periodic repeat of the first-paint cost. A poll
+ * Every poll decodes a FRESH frame object. Before this hook the contract dossier (every 10 s,
+ * now composed by live-product-workspace) and the PRD coverage card (every 5 s) each set that object
+ * as state on every tick, so React reconciled their whole contract trees for an answer that
+ * had not changed - with the measured 128 + 150 statement contract, a periodic repeat of the
+ * first-paint cost. A poll
  * that renders the same surface keeps the state it has; React then skips the subtree
  * instead of walking it.
  */
@@ -28,7 +29,7 @@ export function sameDossier(previous: DocumentCoverageOutcome, next: DocumentCov
   return shown(previous) === shown(next);
 }
 
-/** PrdCoverage renders the totals, the document line, every contract and the section map: only a whole answer is the same. */
+/** For a surface that renders the whole answer, totals and section map included: only a whole answer is the same. */
 export function sameAnswer(previous: DocumentCoverageOutcome, next: DocumentCoverageOutcome): boolean {
   return JSON.stringify(previous) === JSON.stringify(next);
 }

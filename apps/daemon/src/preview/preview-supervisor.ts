@@ -19,7 +19,8 @@ import type { PreviewRunRequest, PreviewRunResult, PreviewRunnerConfig } from ".
  *   - APPROVE — the operator accepted it;
  *   - REJECT — the operator rejected it;
  *   - a start that never became answerable — already stopped inside `startPreviewProcess`;
- *   - DAEMON SHUTDOWN — `close()`, which stops every live preview and refuses to start more.
+ *   - DAEMON SHUTDOWN — `close()`, which stops every live preview, refuses to start more, and
+ *     resolves only once every start already in flight has landed and stopped itself.
  * A decision and a shutdown that race cannot double-start or resurrect anything: `stop()` is
  * memoised per handle, and the entry is removed from the roster before it is stopped.
  *
@@ -40,7 +41,8 @@ export interface LivePreview {
 export interface PreviewSupervisor {
   /** Every preview this supervisor is currently holding open. */
   readonly active: () => readonly LivePreview[];
-  /** Daemon shutdown: stops every live preview and refuses to start any more. */
+  /** Daemon shutdown: stops every live preview, refuses to start any more, and resolves only once
+   * no start still in flight can leave a child behind. */
   readonly close: () => Promise<void>;
   /** APPROVE or REJECT. Both stop the process; the decision does not change that. */
   readonly decide: (receiptId: string, decision: PreviewDecision) => Promise<boolean>;
@@ -80,8 +82,14 @@ export function createPreviewSupervisor(config: PreviewRunnerConfig): PreviewSup
       closed = true;
       closing ??= (async (): Promise<void> => {
         const entries = [...live.keys()].map(forget);
-        await Promise.allSettled(entries.map(async (entry) =>
-          entry === undefined ? undefined : stopPreview(entry.handle)));
+        // A start still in flight is not on the roster yet; it stops its own child when it lands
+        // and finds `closed` (see `start`). The daemon awaits this and then EXITS, so close()
+        // waits for that landing too — a stop owed by a process that no longer exists would
+        // leave the detached child holding the port for the next daemon to refuse on.
+        await Promise.allSettled([
+          ...entries.map(async (entry) => entry === undefined ? undefined : stopPreview(entry.handle)),
+          ...starting.values(),
+        ]);
       })();
       await closing;
     },
@@ -130,11 +138,4 @@ export function createPreviewSupervisor(config: PreviewRunnerConfig): PreviewSup
       }
     },
   });
-}
-
-/** The receipt id a decision names, so a caller does not have to reproduce the hash. */
-export function previewReceiptIdFor(
-  projectId: string, request: Pick<PreviewRunRequest, "goalId" | "sha">,
-): string {
-  return previewReceiptId(projectId, request.goalId, request.sha);
 }

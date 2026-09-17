@@ -13,6 +13,8 @@ import type {
   StoredEvent,
 } from "@moe/store";
 
+import { exactKeys, isRecord } from "./cutover-shape.js";
+
 export const CUTOVER_ATTEMPT_LAYER = "DAEMON_CUTOVER_ATTEMPT" as const;
 export const CUTOVER_ATTEMPT_EVENT_TYPE = "CutoverAttemptCommandApplied" as const;
 export const CUTOVER_ATTEMPT_COMMAND_KIND = "cutover.admit_activate_approval" as const;
@@ -100,16 +102,6 @@ export function deriveCutoverDecisionId(binding: ActivationBinding): string {
   return createHash("sha256").update(canonicalJson(canonical), "utf8").digest("hex");
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function exact(value: unknown, keys: readonly string[]): value is Readonly<Record<string, unknown>> {
-  if (!isRecord(value)) return false;
-  const own = Object.keys(value);
-  return own.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
-}
-
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (isRecord(value)) {
@@ -150,7 +142,7 @@ function validWitness(kind: CutoverCommandKind, value: unknown): boolean {
   if (!Object.hasOwn(WITNESS_KEYS, kind)) return false;
   const keys = WITNESS_KEYS[kind];
   if (keys.length === 0) return value === undefined;
-  if (!exact(value, keys)) return false;
+  if (!exactKeys(value, keys)) return false;
   return keys.every((key) => key === "truthClass"
     ? typeof value[key] === "string" && TRUTH_CLASSES.has(value[key])
     : typeof value[key] === "string" && REF.test(value[key]));
@@ -164,7 +156,7 @@ function validCommand(value: unknown): value is CutoverCommand {
   const kind = value["kind"] as CutoverCommandKind;
   if (!Object.hasOwn(COMMAND_KEYS, kind)) return false;
   const keys = COMMAND_KEYS[kind];
-  if (!exact(value, keys)) return false;
+  if (!exactKeys(value, keys)) return false;
   if (typeof value["commandId"] !== "string" || !REF.test(value["commandId"])) return false;
   const version = value["expectedVersion"];
   if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0) return false;
@@ -176,20 +168,20 @@ function validCommand(value: unknown): value is CutoverCommand {
 }
 
 function validAdmitted(value: unknown): value is CutoverAttemptAdmittedRecord {
-  if (!exact(value, ADMITTED_KEYS)) return false;
+  if (!exactKeys(value, ADMITTED_KEYS)) return false;
   if (typeof value["principalId"] !== "string" || value["principalId"].length === 0) return false;
   const moment = value["grantedAtEpochMs"];
   if (typeof moment !== "number" || !Number.isSafeInteger(moment) || moment < 0) return false;
   if (typeof value["sourceCommit"] !== "string" || !HEX40.test(value["sourceCommit"])) return false;
   const generations = value["generations"];
-  return exact(generations, ACTIVATION_GENERATION_KEYS)
+  return exactKeys(generations, ACTIVATION_GENERATION_KEYS)
     && ACTIVATION_GENERATION_KEYS.every((key) =>
       typeof generations[key] === "string" && HEX64.test(generations[key]));
 }
 
 export function decodeCutoverAttemptEvent(bytes: unknown): CutoverAttemptDecodeResult {
   const decoded = decodeBoundedJsonBytes(bytes);
-  if (!decoded.ok || !exact(decoded.value, EVENT_KEYS)) {
+  if (!decoded.ok || !exactKeys(decoded.value, EVENT_KEYS)) {
     return cutoverAttemptRefusal("CUTOVER_ATTEMPT_EVIDENCE_UNREADABLE");
   }
   if (decoded.value["admitted"] !== null && !validAdmitted(decoded.value["admitted"])) {

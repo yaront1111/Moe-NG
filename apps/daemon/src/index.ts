@@ -210,6 +210,12 @@ export {
   type RecoveryReconciliationFound, type RecoveryReconciliationReadResult,
   type RecoveryReconciliationRecorded, type RecoveryReconciliationWriteResult,
 } from "./recovery/recovery-inventory-ledger.js";
+// The ledger's only production writer, published beside it for the same reason:
+// without it `recovery.complete` has no reachable reconciliation to consume.
+export {
+  reconcileEffectInventory, type EffectInventoryConfiguration, type EffectInventoryHeld,
+  type EffectInventoryOutcome, type EffectInventoryRequest,
+} from "./recovery/effect-inventory.js";
 export type {
   RecoveryInventoryRefusal, RecoveryReconciliationItem, RecoveryReconciliationProof,
   RecoveryReconciliationRecord,

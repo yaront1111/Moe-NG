@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLAUDE_RECONCILIATION_VERSION } from "../providers/claude/claude-cancel-reconcile.js";
 import { upgradeDisposition } from "./drain-disposition.js";
-import {
-  admitPostActivationMutation,
-  lifecycleDemandsDrain,
-  DRAIN_ADMITTED_COMMANDS,
-} from "./drain-fence.js";
 import { resolveDrainRow } from "./drain-reconciliation.js";
-import { makeIntent } from "./effect-test-fixtures.js";
 import {
   drainRank,
   drainTargetOf,
@@ -278,50 +272,6 @@ describe("RELEASED requires the exact safe handoff", () => {
     if (outcome.kind !== "TERMINALIZED") return;
     expect(outcome.terminalTarget).toBe("RELEASED");
     expect(outcome.safeHandoff).toBe("handoff-1");
-  });
-});
-
-describe("fencing is authoritative even while DRAINING", () => {
-  it("admits every drain-whitelisted command, with a non-zero sweep", () => {
-    expect(DRAIN_ADMITTED_COMMANDS.length).toBeGreaterThan(0);
-    for (const command of DRAIN_ADMITTED_COMMANDS) {
-      expect(admitPostActivationMutation("DRAINING", command).kind).toBe("ADMITTED");
-    }
-  });
-
-  const refused: ReadonlyArray<readonly [string, unknown]> = [
-    ["a business mutation", "step.start"],
-    ["a new effect", "effect.activate"],
-    ["an unrecognised command", "totally.unknown"],
-    ["a non-string command", 7],
-  ];
-
-  it.each(refused)("refuses %s while DRAINING", (_label, command) => {
-    expect(codeAndLayer(admitPostActivationMutation("DRAINING", command))).toEqual({
-      code: "DRAIN_POST_ACTIVATION_MUTATION_REFUSED",
-      layer: "DRAIN",
-    });
-  });
-
-  it("fails closed on an attempt state it does not recognise", () => {
-    expect(codeAndLayer(admitPostActivationMutation("HOVERING", "runner.observe"))).toEqual({
-      code: "DRAIN_POST_ACTIVATION_MUTATION_REFUSED",
-      layer: "DRAIN",
-    });
-  });
-});
-
-describe("the drain requirement comes from the lifecycle, not a second derivation", () => {
-  it("reads MUST_DRAIN off the reducer for an ACTIVE cancel", () => {
-    expect(lifecycleDemandsDrain(makeIntent({ state: "ACTIVE" }), { kind: "requestCancel" })).toBe(
-      true,
-    );
-  });
-
-  it("does not claim a drain for a pre-activation cancel", () => {
-    expect(lifecycleDemandsDrain(makeIntent({ state: "ARMED" }), { kind: "requestCancel" })).toBe(
-      false,
-    );
   });
 });
 

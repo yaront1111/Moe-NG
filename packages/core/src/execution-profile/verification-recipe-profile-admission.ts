@@ -7,16 +7,12 @@ import type { ExecutionIsolationProfileRevision } from
 import {
   VERIFICATION_RECIPE_BUILD_AGENT_SAFE_ENVIRONMENT_NAMES,
   VERIFICATION_RECIPE_FRESH_VERIFIER_SAFE_ENVIRONMENT_NAMES,
-  verificationRecipeRefusal,
+  verificationRecipeRefusal as refusal,
   type VerificationRecipeProfileAdmission,
   type VerificationRecipeRefusal,
   type VerificationRecipeRevision,
 } from "./verification-recipe-contract.js";
 
-const refusal = (
-  code: Parameters<typeof verificationRecipeRefusal>[0],
-  layer: Parameters<typeof verificationRecipeRefusal>[1],
-): VerificationRecipeRefusal => verificationRecipeRefusal(code, layer);
 const profileMismatch = (): VerificationRecipeRefusal => refusal(
   "VERIFICATION_RECIPE_EXECUTION_PROFILE_MISMATCH",
   "VERIFICATION_RECIPE_EXECUTION_PROFILE",

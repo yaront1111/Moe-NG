@@ -19,7 +19,8 @@
  * the three layers stay separately assertable. No Date and no randomness: an identity derives from
  * the supplied account and admission refs.
  */
-import { isPlainArray, isPlainRecord, hasOnlyOwnStringKeys, readOwnDataProperty } from "../runtime-shape.js";
+import { deepFreeze, exactRecord, isRef, isSafeCount, oneOf } from "../kernel-primitives.js";
+import { isPlainArray, isPlainRecord } from "../runtime-shape.js";
 import { MAX_BUDGET_VERSION } from "./budget-account.js";
 import {
   BUDGET_ACCOUNT_STATES, BUDGET_POLICY_OUTCOMES, MAX_BUDGET_METERS, type BudgetAccountState,
@@ -78,16 +79,7 @@ const APPROVAL_KEYS = ["approvalRef", "decision", "validity"] as const;
 const BUCKET_AMOUNTS = ["available", "reserved", "quarantined", "committed"] as const;
 const MAX_ADMISSION_LINES = MAX_BUDGET_METERS * ADMISSION_PURPOSES.length;
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) deepFreeze((value as Record<string, unknown>)[key]);
-  return value;
-}
-const isCount = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
-const isRef = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 const isRefOrNull = (value: unknown): value is string | null => value === null || isRef(value);
-const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === "string" && (values as readonly string[]).includes(value);
 /** The CODE is the contract; the message restates it so no prose can drift away from the code. */
 const issue = (code: BudgetReservationIssueCode): BudgetReservationIssue => ({ code, message: code.slice("BUDGET_RESERVATION_".length).toLowerCase().split("_").join(" ") });
 const fail = (view: BudgetAvailableView, reservation: ReservationRecord | null, code: BudgetReservationIssueCode): BudgetReservationResult =>
@@ -97,23 +89,12 @@ const bucketOf = (view: BudgetAvailableView, meter: string): BudgetMeterBuckets 
 /** Ordered precedence: the FIRST failing check decides the single reported code. */
 type Check = readonly [boolean, BudgetReservationIssueCode];
 const firstOf = (checks: readonly Check[]): BudgetReservationIssueCode | null => checks.find((check) => check[0])?.[1] ?? null;
-/** Own data properties only: an accessor, proxy, prototype-carried key, or extra key refuses. */
-function readRecord(value: unknown, allowed: readonly string[]): Record<string, unknown> | null {
-  if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, allowed)) return null;
-  const output: Record<string, unknown> = {};
-  for (const key of allowed) {
-    const read = readOwnDataProperty(value, key);
-    if (!read.ok || !read.present) return null;
-    output[key] = read.value;
-  }
-  return output;
-}
 /** Rebuilds each line field by field, so no caller reference reaches a record this module returns. */
 function readLines(value: unknown): ReservationLine[] | null {
   if (!isPlainArray(value) || value.length === 0 || value.length > MAX_ADMISSION_LINES) return null;
   const output: ReservationLine[] = [];
   for (const entry of value) {
-    const item = readRecord(entry, LINE_KEYS);
+    const item = exactRecord(entry, LINE_KEYS);
     if (item === null || !oneOf(item.purpose, ADMISSION_PURPOSES) || !isRef(item.meter) || typeof item.quantity !== "number") return null;
     output.push({ purpose: item.purpose, meter: item.meter, quantity: item.quantity });
   }
@@ -126,9 +107,9 @@ function readLines(value: unknown): ReservationLine[] | null {
  * each copy — units minted and destroyed by a caller-shaped view.
  */
 const isView = (value: unknown): value is BudgetAvailableView =>
-  isPlainRecord(value) && isRef(value.accountId) && isCount(value.version) && oneOf(value.state, BUDGET_ACCOUNT_STATES)
+  isPlainRecord(value) && isRef(value.accountId) && isSafeCount(value.version) && oneOf(value.state, BUDGET_ACCOUNT_STATES)
   && isPlainArray(value.meters) && value.meters.length > 0 && value.meters.length <= MAX_BUDGET_METERS
-  && value.meters.every((entry) => isPlainRecord(entry) && isRef(entry.meter) && BUCKET_AMOUNTS.every((key) => isCount(entry[key])))
+  && value.meters.every((entry) => isPlainRecord(entry) && isRef(entry.meter) && BUCKET_AMOUNTS.every((key) => isSafeCount(entry[key])))
   && new Set(value.meters.map((entry) => (entry as { readonly meter: string }).meter)).size === value.meters.length;
 /** The account length prefix keeps the join injective, so no two distinct pairs can collide. */
 export const deriveReservationId = (accountId: string, admissionRef: string): string => `reservation:${accountId.length}:${accountId}:${admissionRef}`;
@@ -138,16 +119,16 @@ function checkLines(lines: readonly ReservationLine[]): BudgetReservationIssueCo
   const present = new Set(lines.map((line) => line.purpose));
   return firstOf([
     [new Set(keys).size !== keys.length, "BUDGET_RESERVATION_DUPLICATE_PURPOSE"],
-    [lines.some((line) => !isCount(line.quantity) || line.quantity === 0), "BUDGET_RESERVATION_INVALID_QUANTITY"],
+    [lines.some((line) => !isSafeCount(line.quantity) || line.quantity === 0), "BUDGET_RESERVATION_INVALID_QUANTITY"],
     [PROTECTED_ADMISSION_PURPOSES.some((p) => !present.has(p)), "BUDGET_RESERVATION_PROTECTED_PURPOSE_MISSING"],
     [!present.has("EXECUTION"), "BUDGET_RESERVATION_EXECUTION_MISSING"],
   ]);
 }
 function readGate(gate: unknown): AdmissionGate | null {
-  const item = readRecord(gate, GATE_KEYS);
+  const item = exactRecord(gate, GATE_KEYS);
   if (item === null) return null;
-  const one = item.allowance === null ? null : readRecord(item.allowance, ALLOWANCE_KEYS);
-  const two = item.approval === null ? null : readRecord(item.approval, APPROVAL_KEYS);
+  const one = item.allowance === null ? null : exactRecord(item.allowance, ALLOWANCE_KEYS);
+  const two = item.approval === null ? null : exactRecord(item.approval, APPROVAL_KEYS);
   if (item.allowance !== null && (one === null || !isRef(one.decisionRef) || !oneOf(one.outcome, BUDGET_POLICY_OUTCOMES))) return null;
   if (item.approval !== null && (two === null || !isRef(two.approvalRef)
     || !oneOf(two.decision, APPROVAL_DECISIONS) || !oneOf(two.validity, APPROVAL_VALIDITIES))) return null;
@@ -178,10 +159,10 @@ const unknownMeter = (view: BudgetAvailableView, totals: ReadonlyMap<string, num
   [...totals.keys()].some((meter) => bucketOf(view, meter) === undefined);
 
 export function reserveForAdmission(view: BudgetAvailableView, admission: AdmissionRequest, gate: AdmissionGate): BudgetReservationResult {
-  const request = readRecord(admission, ADMISSION_KEYS);
+  const request = exactRecord(admission, ADMISSION_KEYS);
   const lines = request === null ? null : readLines(request.amounts);
   if (!isView(view) || request === null || lines === null || !isRef(request.admissionRef)
-    || !isCount(request.expectedVersion)) return fail(view, null, "BUDGET_RESERVATION_MALFORMED");
+    || !isSafeCount(request.expectedVersion)) return fail(view, null, "BUDGET_RESERVATION_MALFORMED");
   const supplied = readGate(gate);
   if (supplied === null) return fail(view, null, "BUDGET_RESERVATION_GATE_MALFORMED");
   const totals = totalPerMeter(lines);
@@ -208,7 +189,7 @@ function checkTransition(view: BudgetAvailableView, reservation: ReservationReco
   const lines = isPlainRecord(reservation) ? readLines(reservation.lines) : null;
   if (!isView(view) || lines === null || !isRef(reservation.reservationId) || !isRef(reservation.accountId)
     || !isRef(reservation.admissionRef) || !oneOf(reservation.state, RESERVATION_STATES)
-    || !isCount(reservation.version) || !isRefOrNull(reservation.attemptRef)
+    || !isSafeCount(reservation.version) || !isRefOrNull(reservation.attemptRef)
     || !isRefOrNull(reservation.neverStartedProofRef)) return { code: "BUDGET_RESERVATION_MALFORMED" };
   const code = checkLines(lines) ?? firstOf([
     [reservation.accountId !== view.accountId
@@ -225,7 +206,7 @@ function checkTransition(view: BudgetAvailableView, reservation: ReservationReco
 
 /** One use only, and it moves NO units: the caller's view is returned by reference. */
 export function activateReservation(view: BudgetAvailableView, reservation: ReservationRecord, command: ReservationActivateCommand): BudgetReservationResult {
-  if (!isPlainRecord(command) || !isCount(command.expectedVersion) || !isRef(command.attemptRef)) {
+  if (!isPlainRecord(command) || !isSafeCount(command.expectedVersion) || !isRef(command.attemptRef)) {
     return fail(view, reservation, "BUDGET_RESERVATION_MALFORMED");
   }
   const checked = checkTransition(view, reservation, command.expectedVersion);
@@ -236,7 +217,7 @@ export function activateReservation(view: BudgetAvailableView, reservation: Rese
 
 /** Design 660: only a proven-never-started reservation refunds, and it refunds the whole set. */
 export function cancelReservation(view: BudgetAvailableView, reservation: ReservationRecord, command: ReservationCancelCommand): BudgetReservationResult {
-  if (!isPlainRecord(command) || !isCount(command.expectedVersion) || !isRefOrNull(command.neverStartedProofRef)) {
+  if (!isPlainRecord(command) || !isSafeCount(command.expectedVersion) || !isRefOrNull(command.neverStartedProofRef)) {
     return fail(view, reservation, "BUDGET_RESERVATION_MALFORMED");
   }
   const checked = checkTransition(view, reservation, command.expectedVersion);

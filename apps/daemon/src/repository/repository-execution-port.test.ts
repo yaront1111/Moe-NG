@@ -50,6 +50,19 @@ describe("physical repository execution reservation", () => {
     expect(() => readFileSync(databasePath(root))).toThrow();
   });
 
+  it("treats a file a killed first writer left empty as an absent reservation", () => {
+    // DatabaseSync creates the file on open, so a first acquire killed before COMMIT leaves 0 bytes behind.
+    const root = repository(); const port = createRepositoryExecutionPort();
+    new DatabaseSync(databasePath(root)).close();
+    expect(readFileSync(databasePath(root)).length).toBe(0);
+    expect(port.inspect(root)).toEqual({ ok: true, reservation: null });
+    expect(port.readOwned(root, owner.storeId, owner.projectId)).toEqual({ ok: true, handle: null });
+    const handle = held(port, root);
+    expect(port.inspect(root)).toEqual({ ok: true, reservation: handle.reservation });
+    expect(port.acquire(root, { ...owner, nodeRef: "next-node" }, controller))
+      .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_BUSY" });
+  });
+
   it("excludes another project store through root, subdirectory and physical aliases", () => {
     const root = repository();
     const port = createRepositoryExecutionPort();

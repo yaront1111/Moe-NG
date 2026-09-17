@@ -6,7 +6,6 @@
  * the verifier's standing authority. Nothing here is a guess: a fact the process does not
  * hold is null, and the ledger numbers are counted on every read.
  */
-import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
@@ -16,6 +15,7 @@ import { readProviderPause } from "../orchestrator/provider-pause-ledger.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import type { VerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { catalogBoundGoals } from "./document-coverage-goals.js";
+import { emptyBody } from "./empty-read-body.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
@@ -72,14 +72,14 @@ export interface HealthView {
   readonly readAt: string;
   readonly verifier: VerifierStandingAuthority;
 }
-export interface HealthRefused { readonly code: string; readonly layer: string; readonly outcome: "REFUSED" }
+export interface HealthRefused { readonly code: (typeof HEALTH_READ_CODES)[number]; readonly layer: string; readonly outcome: "REFUSED" }
 export type HealthReadResult = HealthRefused | HealthView;
 export interface HealthReadPort {
   readonly boundProjectId: string;
   readHealth(): HealthReadResult;
 }
 
-const refused = (code: string): HealthRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
+const refused = (code: (typeof HEALTH_READ_CODES)[number]): HealthRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
 
 export interface HealthReadOptions {
   readonly clock?: () => string;
@@ -202,13 +202,6 @@ export function createHealthReadPort(options: HealthReadOptions): HealthReadPort
 export type HealthReadDispatch =
   | { readonly body: HealthReadResult | HttpPortRefused | HttpRefused; readonly httpStatus: number; readonly kind: "REPLY" }
   | { readonly code: "LISTENER_HEALTH_REQUEST_INVALID" | "LISTENER_HEALTH_UNAVAILABLE"; readonly kind: "LISTENER_REFUSAL" };
-
-function emptyBody(body: unknown): boolean {
-  if (body instanceof Uint8Array && body.length === 0) return true;
-  const decoded = decodeBoundedJsonBytes(body);
-  return decoded.ok && typeof decoded.value === "object" && decoded.value !== null
-    && !Array.isArray(decoded.value) && Object.keys(decoded.value).length === 0;
-}
 
 export function handleHealthReadRequest(
   dependencies: { readonly authenticator: Authenticator; readonly health?: HealthReadPort | undefined },

@@ -12,6 +12,8 @@
 
 import type { ProjectConfigurationSelection } from "@moe/contracts";
 
+import { isRecord } from "../value-primitives.js";
+
 export interface ProviderProfileLimits {
   readonly stderrBytes: number;
   readonly stdoutBytes: number;
@@ -30,10 +32,6 @@ export const PROFILE_SELECTION_KEYS: readonly string[] = Object.freeze([
 
 export const MAX_PROFILE_TEXT_CHARS = 256;
 export const PROFILE_HEX64 = /^[0-9a-f]{64}$/u;
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Exact-record membership: a missing key and an unknown key both refuse. Dropping an unknown

@@ -378,7 +378,14 @@ async function main(): Promise<void> {
       // Governance answers the nodes this loop cannot otherwise move, BEFORE the pass that would
       // find them unstaffable: a node funded here is staffed in the same pass rather than the
       // next one. It is a no-op unless the owner stated a policy.
-      governancePass();
+      // The pass contains its own failures per node; this is the last line. An escaped rejection
+      // here would reach main().catch, whose finally tree-kills every live seat and exits 1 —
+      // the same shape that took the fleet down in 2026-09-13, and not a fate an optional
+      // advisory pass may ever inflict on the loop.
+      await governancePass().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`[governance] pass failed: ${message}\n`);
+      });
       const report = await wrapper.runOnce().catch((error: unknown): null => {
         // ONE failed pass is not the fleet. A DurableStoreError STORE_BUSY under a concurrent
         // daemon commit rejected the pass here and, uncaught, reached main().catch, whose finally

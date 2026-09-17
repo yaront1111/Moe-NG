@@ -1,14 +1,13 @@
 import { isHex64 } from "../canonical.js";
-import { exactRecord, isCount, isRef } from "../supervisor/effect-shape.js";
+import { exactRecord, isRef } from "../supervisor/effect-shape.js";
+import { parseCurrentWitnessFacts, type CurrentWitnessFact } from "./dependency-witness-mirror.js";
 import {
   parseGraphEpoch,
   parseSealedManifest,
   sealDigests,
   type SealedGraphEpoch,
-  type SealedWitnessBinding,
 } from "./input-manifest-digest.js";
 import {
-  MAX_MATERIALIZATION_WITNESSES,
   MAX_SELECTED_INPUTS,
   materializationFailure,
   readBoundedList,
@@ -49,10 +48,16 @@ function parseCurrentPredecessors(value: unknown): CurrentPredecessorFact[] | nu
   const read = readBoundedList(value, MAX_SELECTED_INPUTS);
   if (read.kind !== "OK") return null;
   const output: CurrentPredecessorFact[] = [];
+  const seen = new Set<string>();
   for (const entry of read.items) {
     const item = exactRecord(entry, ["artifactIdentity", "sha256", "producerAdoptionRef"]);
-    if (item === null || !isRef(item["artifactIdentity"])) return null;
+    // A feed naming one identity twice is refused, never resolved by position:
+    // the verdict below is keyed by identity, and keeping whichever fact came
+    // last would let a superseded predecessor dispatch in one list order and
+    // refuse in the other.
+    if (item === null || !isRef(item["artifactIdentity"]) || seen.has(item["artifactIdentity"])) return null;
     if (!isHex64(item["sha256"]) || !isRef(item["producerAdoptionRef"])) return null;
+    seen.add(item["artifactIdentity"]);
     output.push(item as unknown as CurrentPredecessorFact);
   }
   return output;
@@ -129,22 +134,13 @@ export function revalidateSealedManifest(
     : null;
 }
 
-function parseSealedWitnessFacts(value: unknown): Map<string, SealedWitnessBinding> | null {
-  const bindings = parseSealedWitnessFactList(value);
-  return bindings === null
-    ? null
-    : new Map(bindings.map((binding) => [binding.witnessRef, binding] as const));
-}
-
-function parseSealedWitnessFactList(value: unknown): SealedWitnessBinding[] | null {
-  const read = readBoundedList(value, MAX_MATERIALIZATION_WITNESSES);
-  if (read.kind !== "OK") return null;
-  const output: SealedWitnessBinding[] = [];
-  for (const entry of read.items) {
-    const item = exactRecord(entry, ["witnessRef", "witnessVersion", "witnessDigest"]);
-    if (item === null || !isRef(item["witnessRef"])) return null;
-    if (!isCount(item["witnessVersion"]) || !isHex64(item["witnessDigest"])) return null;
-    output.push(item as unknown as SealedWitnessBinding);
-  }
-  return output;
+/**
+ * The same parser the seal-time recheck runs, so the two gates cannot disagree
+ * on one fact list. A re-implementation here once dropped the mirror's duplicate
+ * refusal, and a feed naming a witness twice then resolved by whichever entry
+ * came last: the sealed fact could outrank the moved one and dispatch.
+ */
+function parseSealedWitnessFacts(value: unknown): Map<string, CurrentWitnessFact> | null {
+  const facts = parseCurrentWitnessFacts(value);
+  return facts === null ? null : new Map(facts.map((fact) => [fact.witnessRef, fact] as const));
 }

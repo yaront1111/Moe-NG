@@ -89,14 +89,6 @@ function framedDigest(parts: readonly string[]): string {
   return hash.digest("hex");
 }
 
-/** The sealed bytes persisted beside their digest so a reader can independently recompute it. */
-export interface PolicyDecisionMaterial extends JsonObject {
-  readonly projectId: string;
-  readonly serverSources: JsonObject;
-  readonly verifiedInput: JsonObject;
-  readonly verifiedOutcome: JsonObject;
-}
-
 /**
  * OWN-property presence over a named list, never `in`.
  *

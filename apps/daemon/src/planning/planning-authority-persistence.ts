@@ -62,8 +62,6 @@ export const PLANNING_AUTHORITY_PERSISTENCE_CODES = Object.freeze([
   "PLANNING_AUTHORITY_STATE_UNSEALED",
   "PLANNING_AUTHORITY_SUBMISSION_HASH_MISMATCH",
 ] as const);
-export type PlanningAuthorityPersistenceCode =
-  (typeof PLANNING_AUTHORITY_PERSISTENCE_CODES)[number];
 
 /** What the commit seam merges into the decision result so a reader can find the bodies. */
 export interface PlanningAuthorityBinding {

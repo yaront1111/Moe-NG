@@ -30,12 +30,15 @@ import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
-import { readGraphBody } from "../planning/graph-body-record.js";
-import { currentPlanningRun } from "../planning/current-planning-run.js";
+import { dataRecord } from "../json-record-shape.js";
+import { graphBodyAggregateId, readGraphBody } from "../planning/graph-body-record.js";
+import { foldCurrentRun } from "../planning/current-planning-run.js";
 import { readApprovedRunWitness } from "../planning/planning-authority-reader-witness.js";
 import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
 import { compiledExecutionRef } from "./compiled-execution-ref.js";
 import { compiledPlanContext } from "./compiled-plan-context.js";
+import { durableWalkMemoisable, memoisedDurableWalk } from "./durable-walk-memo.js";
+import type { DurableWalkMemos } from "./durable-walk-memo.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
@@ -74,43 +77,52 @@ export interface CompiledNodeSourceOptions {
   readonly workspace: string | null;
 }
 
-function dataRecord(value: unknown): Readonly<Record<string, unknown>> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
-    : null;
-}
-
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const ENABLED_LIFECYCLES = new Set(["EXECUTION_ENABLED", "CLOSING"]);
 
 /**
- * Every enabled goal's sealed compiled plan, read from durable state alone: the
- * folded goal names its initial run; rejection history resolves its successor and the
- * activation witness must approve that successor. The run names the sealed content hash core's
- * own submission fold wrote; `readGraphBody` re-proves the bytes. A goal whose
- * chain does not re-prove contributes NOTHING (an unreadable plan is never
- * staffed), it does not take the listing down.
+ * WHY THIS WALK IS MEMOISED. `activeCompiledGraphs` folds the whole decision ledger and then
+ * parses every sealed graph body out of its JSON bytes — and it is called once PER NODE: the
+ * wrapper's delivery pass asks each node for its mission, each mission builds a fresh compiled
+ * source, and each source walks everything. Measured on UnAI 2026-09-17 with a 15 s CPU profile
+ * of the live wrapper: 63% on-CPU with nothing to staff, 60% of it under this walk (the ledger
+ * fold, `decodeBoundedJsonBytes` and `decodeGraphContent`), one delivery pass running for 25
+ * minutes with ~70 node trees, and not one log line in that time — so nothing was staffed and
+ * governance never ran. The freshness proof lives in `durable-walk-memo.ts`.
  */
-export function activeCompiledGraphs(
-  store: SqliteEventStore, projectId: string,
-  lifecycles: ReadonlySet<string> = ENABLED_LIFECYCLES,
-  /** A ledger the caller already folded; absent, this walk folds its own. */
-  folded?: DurableLedger,
+const activeGraphMemos: DurableWalkMemos<readonly ActiveCompiledGraph[]> = new WeakMap();
+
+function memoKeyOf(projectId: string, lifecycles: ReadonlySet<string>): string {
+  return `${projectId}|${[...lifecycles].sort().join(",")}`;
+}
+
+/**
+ * The walk itself: every enabled goal's sealed compiled plan, read from durable state alone.
+ * The folded goal names its initial run; rejection history resolves its successor and the
+ * activation witness must approve that successor. The run names the sealed content hash core's
+ * own submission fold wrote; `readGraphBody` re-proves the bytes. A goal whose chain does not
+ * re-prove contributes NOTHING (an unreadable plan is never staffed), it does not take the
+ * listing down. `touch` is told every aggregate read, before it is read.
+ */
+function walkActiveGraphs(
+  store: SqliteEventStore, projectId: string, lifecycles: ReadonlySet<string>,
+  ledger: DurableLedger, touch: (aggregateId: string) => void,
 ): readonly ActiveCompiledGraph[] {
-  const ledger = folded ?? readDurableLedger(store, projectId);
   const active: ActiveCompiledGraph[] = [];
+  const readRun = (runId: string) => { touch(runId); return store.readEvents(runId); };
   for (const [aggregateId] of ledger.aggregates) {
     const goal = dataRecord(stateOf(ledger, aggregateId));
     if (goal?.["goalId"] !== aggregateId || goal["projectId"] !== projectId) continue;
     if (!lifecycles.has(String(goal["lifecycle"]))) continue;
     const initialRunRef = goal["planningRunRef"];
     if (typeof initialRunRef !== "string") continue;
-    const current = currentPlanningRun(store, initialRunRef);
+    const current = foldCurrentRun(readRun, initialRunRef);
     if (current.unreadable) continue;
     const planningRunRef = current.runId;
     // A rejection's successor is only executable once the goal's activation names it.
     // Following the latest chain alone would also admit a compiled, unapproved successor.
     if (current.hops > 0) {
+      touch(aggregateId);
       const approval = readApprovedRunWitness(store, aggregateId);
       if ("ok" in approval || approval.runId !== planningRunRef) continue;
     }
@@ -120,11 +132,30 @@ export function activeCompiledGraphs(
     const sealed = dataRecord(runState?.["sealedHashes"]);
     const graphContentHash = sealed?.["graphContentHash"];
     if (typeof graphContentHash !== "string" || !HEX_64.test(graphContentHash)) continue;
+    touch(graphBodyAggregateId(projectId, graphContentHash));
     const body = readGraphBody(store, projectId, graphContentHash);
     if (!body.ok) continue;
     active.push(Object.freeze({ content: body.content, goalRef: aggregateId, planningRunRef }));
   }
-  return active;
+  return Object.freeze(active);
+}
+
+/**
+ * Every enabled goal's sealed compiled plan (see `walkActiveGraphs`), walked once per change to
+ * anything it read. A caller that hands in its own folded ledger owns its freshness and always
+ * gets a fresh walk against that ledger.
+ */
+export function activeCompiledGraphs(
+  store: SqliteEventStore, projectId: string,
+  lifecycles: ReadonlySet<string> = ENABLED_LIFECYCLES,
+  /** A ledger the caller already folded; absent, this walk folds its own. */
+  folded?: DurableLedger,
+): readonly ActiveCompiledGraph[] {
+  if (folded !== undefined || !durableWalkMemoisable(store)) {
+    return walkActiveGraphs(store, projectId, lifecycles, folded ?? readDurableLedger(store, projectId), () => undefined);
+  }
+  return memoisedDurableWalk(store, activeGraphMemos, memoKeyOf(projectId, lifecycles), (touch) =>
+    walkActiveGraphs(store, projectId, lifecycles, readDurableLedger(store, projectId), touch));
 }
 
 interface SealedNode {

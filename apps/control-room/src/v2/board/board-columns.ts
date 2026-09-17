@@ -50,7 +50,7 @@ const STOP_WORDS: Readonly<Record<Exclude<RunNodeStatus, "ACCEPTED" | "DELIVERED
  * A REFUSED LANDING, SAID AS A REFUSAL. The runs read carries `outcome: "REFUSED"` and the
  * lander's code on the node (live-runs.ts RunNodeLandingView); measured before this every surface
  * said "not landed yet" - a delay - and the code was rendered nowhere. The one phrase is shared
- * by the board card, the card detail and the runs evidence so the three cannot drift.
+ * by the board card and the card detail so the two cannot drift.
  */
 export function landingRefusalWords(landing: RunNodeLandingView): string {
   return landing.code === null ? "landing refused" : `landing refused ${MIDDOT} ${landing.code}`;

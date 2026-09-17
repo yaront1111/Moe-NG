@@ -51,8 +51,6 @@ export const BUDGET_COMMITMENT_READ_CODES = Object.freeze([
 
 export type BudgetCommitmentReadCode = (typeof BUDGET_COMMITMENT_READ_CODES)[number];
 
-export type BudgetCommitmentReadLayer = typeof BUDGET_COMMITMENT_READ_LAYER;
-
 export interface BudgetCommitmentView {
   readonly outcome: "COMMITMENT";
   readonly ref: string;

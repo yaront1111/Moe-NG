@@ -9,11 +9,8 @@ import {
   PACK_SENSITIVE_PATH_PRESENT,
   PACK_TEST_ARTIFACT_PRESENT,
   PACK_VCS_ARTIFACT_PRESENT,
-  PACK_WORKTREE_DIRTY,
   REQUIRED_STAGED_PATHS,
-  SHIPPED_PREFIXES,
   inspectStagedTree,
-  inspectWorktree,
 } from "../../../tools/packaging/pack-inventory.js";
 import type { PackInventoryInput } from "../../../tools/packaging/pack-inventory.js";
 
@@ -268,82 +265,5 @@ describe("inspectStagedTree refuses the conventional secret-bearing roster", () 
     if (result.ok) throw new Error("expected a refusal, got admission");
     expect(result.refusals[0]?.code).toBe("PACK_VCS_ARTIFACT_PRESENT");
     expect(result.refusals[0]?.layer).toBe("PACKAGING_INVENTORY");
-  });
-});
-
-describe("inspectWorktree refuses to ship a peer's uncommitted bytes", () => {
-  // The PRODUCTION list, not a test-local copy: a copy would keep these cases green
-  // while the pack script's own gate quietly narrowed.
-  const OWNED = SHIPPED_PREFIXES;
-
-  it("admits a clean worktree", () => {
-    expect(inspectWorktree([], OWNED)).toBe(null);
-  });
-
-  it("admits dirt outside the shipped paths", () => {
-    expect(inspectWorktree([" M .moe/tasks/task-1.json", "?? notes.md"], OWNED)).toBe(null);
-  });
-
-  it("refuses dirty packaging code because those bytes author the release artifact", () => {
-    for (const line of [
-      " M tools/packaging/pack-docs.ts",
-      "?? tools/packaging/new-pack-stage.ts",
-    ]) {
-      const refusal = inspectWorktree([line], OWNED);
-      expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
-      expect(refusal?.detail).toContain(line.slice(3));
-    }
-  });
-
-  it("does not widen packaging authority to unrelated tools", () => {
-    expect(inspectWorktree([" M tools/import/import-shadow.ts"], OWNED)).toBe(null);
-  });
-
-  it("refuses a modified shipped file and names it", () => {
-    const refusal = inspectWorktree([" M packages/store/src/index.ts"], OWNED);
-    expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
-    expect(refusal?.detail).toContain("packages/store/src/index.ts");
-  });
-
-  it("refuses an UNTRACKED shipped file, which a modified-only check would miss", () => {
-    const refusal = inspectWorktree(["?? packages/store/src/new-thing.ts"], OWNED);
-    expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
-    expect(refusal?.detail).toContain("packages/store/src/new-thing.ts");
-  });
-
-  it("reads the destination of a rename, not only its origin", () => {
-    const refusal = inspectWorktree(["R  docs/a.md -> packages/store/src/b.ts"], OWNED);
-    expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
-    expect(refusal?.detail).toContain("packages/store/src/b.ts");
-  });
-
-  it("names every dirty shipped path, so one pack run fixes them all", () => {
-    const refusal = inspectWorktree(
-      [" M packages/store/src/a.ts", "?? apps/daemon/src/b.ts"], OWNED,
-    );
-    expect(refusal?.detail).toContain("packages/store/src/a.ts");
-    expect(refusal?.detail).toContain("apps/daemon/src/b.ts");
-  });
-
-  it("refuses a modified lockfile, which decides the third-party closure pnpm deploy ships", () => {
-    const refusal = inspectWorktree([" M pnpm-lock.yaml"], OWNED);
-    expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
-    expect(refusal?.detail).toContain("pnpm-lock.yaml");
-  });
-
-  it("refuses a modified root manifest, whose version and dependency fields reach the zip", () => {
-    const refusal = inspectWorktree([" M package.json"], OWNED);
-    expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
-    expect(refusal?.detail).toContain("package.json");
-  });
-
-  it("refuses the workspace definition and the pnpm config, which shape the deploy", () => {
-    for (const line of [" M pnpm-workspace.yaml", " M .npmrc"]) {
-      expect(inspectWorktree([line], OWNED)?.code).toBe(PACK_WORKTREE_DIRTY);
-    }
-  });
-
-  it("reads the root manifest as an exact path, not as any file so named", () => {
-    expect(inspectWorktree([" M tests/e2e/package.json"], OWNED)).toBe(null);
   });
 });

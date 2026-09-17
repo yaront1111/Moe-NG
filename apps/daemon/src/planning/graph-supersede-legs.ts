@@ -35,14 +35,13 @@ import type {
 } from "@moe/core";
 import type { ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
 
-import { graphRevisionAggregateId } from "./active-graph-projection.js";
+import { graphRevisionAggregateId, readGraphRevisionHistory } from "./active-graph-projection.js";
 import {
   GRAPH_SUPERSEDE_CANONICALIZER_VERSIONS, refuseFromAggregate, refuseSupersede,
 } from "./graph-supersede-contracts.js";
 import type { GraphSupersedeRefusal } from "./graph-supersede-contracts.js";
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder("utf-8", { fatal: false });
 
 export interface SupersessionParties {
   readonly approvalRef: string;
@@ -72,16 +71,6 @@ export type SupersessionRevisionLegsResult = SupersessionRevisionLegs | GraphSup
 
 function truthClassFor(actorKind: unknown): "DAEMON_VERIFIED" | "HUMAN_APPROVED" {
   return actorKind === "HUMAN" ? "HUMAN_APPROVED" : "DAEMON_VERIFIED";
-}
-
-function historyOf(store: SqliteEventStore, aggregateId: string): readonly unknown[] {
-  return store.readEvents(aggregateId).map((event) => {
-    try {
-      return JSON.parse(decoder.decode(event.payload)) as unknown;
-    } catch {
-      return null;
-    }
-  });
 }
 
 function legOf(
@@ -197,7 +186,9 @@ export function buildSupersessionRevisionLegs(
   const predecessorAggregateId = graphRevisionAggregateId(
     parties.projectId, parties.predecessorRevisionId,
   );
-  const replayed = replayGraphRevisionEvents(historyOf(parties.store, predecessorAggregateId));
+  const replayed = replayGraphRevisionEvents(
+    readGraphRevisionHistory(parties.store, predecessorAggregateId),
+  );
   if (!replayed.ok) {
     return refuseSupersede("GRAPH_SUPERSEDE_CURRENT_GRAPH_UNAVAILABLE",
       { code: replayed.code, layer: replayed.layer });

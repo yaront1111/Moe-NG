@@ -34,8 +34,6 @@ export function isPlainRecord(value: unknown): value is PlainRecord {
 
 export const isText = (value: unknown): boolean => typeof value === "string";
 export const isTextOrNull = (value: unknown): boolean => value === null || isText(value);
-export const isPlainRecordOrNull = (value: unknown): boolean =>
-  value === null || isPlainRecord(value);
 
 /**
  * Every named key is a string. Keys are listed rather than derived from the record's own

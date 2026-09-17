@@ -10,7 +10,7 @@ import { agentEnvironment,
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
 import { AGENT_SPAWNER_LAYER, AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStartResult,
-  AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SeatExitReport,
+  AgentSpawnStarter, AgentSpawnerOptions, SeatExitReport,
   SpawnAttempt } from "./agent-spawn-contract.js";
 import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
 import { spawnSeatFor } from "./agent-provider-resolve.js";
@@ -20,7 +20,7 @@ import type { SpawnRequest } from "./agent-wrapper.js";
 
 export { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
 export type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStart,
-  AgentSpawnStartResult, AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions } from "./agent-spawn-contract.js";
+  AgentSpawnStartResult, AgentSpawnStarter, AgentSpawnerOptions } from "./agent-spawn-contract.js";
 
 /**
  * Spawns one `claude -p` process per staffed work item, wired to the moe-next
@@ -46,7 +46,7 @@ process.once("exit", () => {
 function spawnRuntime(
   mcpOrigin: string,
   options: AgentSpawnerOptions,
-): { readonly spawner: AgentSpawner; readonly starter: AgentSpawnStarter } {
+): AgentSpawnStarter {
   const trustedOrigin = trustedMcpOrigin(mcpOrigin);
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
   CONFIG_DIRS.add(configDir);
@@ -400,21 +400,6 @@ function spawnRuntime(
     return Object.freeze({ ok: true as const, exit: attempt.done, pid: attempt.pid() });
   };
 
-  const runAgent = async (request: SpawnRequest): Promise<void> => {
-    const attempt = attemptSpawn(request);
-    // The legacy contract is the process LIFETIME, so admission is deliberately
-    // not awaited here: a child that exits without ever emitting `spawn` still
-    // settles exactly as this caller has always observed.
-    if (!("admitted" in attempt)) {
-      throw attempt.layer === SPAWN_INVOCATION_LAYER
-        ? new SpawnInvocationRefusal(attempt.code) : new Error(attempt.code);
-    }
-    void attempt.admitted.catch(() => undefined);
-    // The legacy contract answers VOID; the seat report the lifetime now carries is
-    // handed to `startAgent`'s caller, not to this one.
-    await attempt.done;
-  };
-
   const own = <Callable extends object>(callable: Callable): Callable => {
     Object.defineProperties(callable, {
     activeCount: { value: (): number => active.size },
@@ -440,15 +425,7 @@ function spawnRuntime(
     return callable;
   };
 
-  return {
-    spawner: own(runAgent as AgentSpawner),
-    starter: own(startAgent as AgentSpawnStarter),
-  };
-}
-
-/** The lifetime-shaped boundary every current caller already holds. */
-export function claudeSpawner(mcpOrigin: string, options: AgentSpawnerOptions = {}): AgentSpawner {
-  return spawnRuntime(mcpOrigin, options).spawner;
+  return own(startAgent as AgentSpawnStarter);
 }
 
 /** The admission-shaped boundary: a coded refusal, or a start with a separate exit. */
@@ -456,5 +433,5 @@ export function claudeSpawnStarter(
   mcpOrigin: string,
   options: AgentSpawnerOptions = {},
 ): AgentSpawnStarter {
-  return spawnRuntime(mcpOrigin, options).starter;
+  return spawnRuntime(mcpOrigin, options);
 }

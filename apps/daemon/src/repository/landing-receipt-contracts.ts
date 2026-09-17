@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
-
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
+import type { JsonValue } from "@moe/contracts";
 
+import { exact, freezeDeep, hash, isObject, ref } from "../json-record-shape.js";
 import { landingIntentKey } from "./repository-landing-intent.js";
 
 /**
@@ -108,36 +107,8 @@ const BASELINE_KEYS = [
 ] as const;
 const ENTRY_KEYS = ["blobId", "path"] as const;
 
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
 function text(value: JsonValue | undefined): value is string {
   return typeof value === "string";
-}
-
-function hash(parts: readonly JsonValue[]): string {
-  return createHash("sha256").update(JSON.stringify(parts), "utf8").digest("hex");
-}
-
-function freezeDeep<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      freezeDeep((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
 }
 
 /** The aggregate every landing fact for a node lands on: beside the node, never on it. */
