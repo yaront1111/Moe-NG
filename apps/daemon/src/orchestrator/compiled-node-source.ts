@@ -31,7 +31,6 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { decisionsOf, isDecisionLedgerMemoized } from "../decision-ledger-memo.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
-import { dataRecord } from "../json-record-shape.js";
 import { graphBodyAggregateId, readGraphBody } from "../planning/graph-body-record.js";
 import { foldCurrentRun } from "../planning/current-planning-run.js";
 import { readApprovedRunWitness } from "../planning/planning-authority-reader-witness.js";
@@ -74,6 +73,12 @@ export interface CompiledNodeSourceOptions {
   readonly testCommand: string | null;
   /** Host-scoped absolute workspace path. Absent = no briefs. */
   readonly workspace: string | null;
+}
+
+function dataRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : null;
 }
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
