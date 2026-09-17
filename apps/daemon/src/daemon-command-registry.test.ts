@@ -184,6 +184,8 @@ const ROWS: readonly Row[] = [
     payloadKeys: ["activationAggregateId", "proofRef"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.close",
     layer: PREREQ_LAYER, payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
+  { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.cancel",
+    layer: PREREQ_LAYER, payloadKeys: ["goalId"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
     layer: PREREQ_LAYER,
     payloadKeys: ["instructions", "title"] },
@@ -397,7 +399,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "step.start", "step.finish", "step.checkpoint", "cutover.activate",
   "environment.set_variable", "environment.unset_variable",
   "design.submit",
-  "escalation.decide", "goal.close", "goal.create", "goal.create_with_source",
+  "escalation.decide", "goal.close", "goal.cancel", "goal.create", "goal.create_with_source",
   "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
   "graph.request_expansion", "graph.supersede",
   "integration.accept_output",
@@ -433,6 +435,8 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // caller-shaped wire used to accept, so gating one and not the other would leave the derived
   // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
   "approval.decide", "approval.decide_intent", "escalation.decide", "goal.close",
+  // Abandoning a product is the owner's call, same seat as close.
+  "goal.cancel",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish",
   "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
@@ -1124,8 +1128,8 @@ describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(64);
-    expect(deps.registry.size).toBe(64);
+    expect(ROWS).toHaveLength(65);
+    expect(deps.registry.size).toBe(65);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1214,7 +1218,7 @@ describe("registered command table", () => {
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(64);
+    expect(REGISTRATION_ORDER).toHaveLength(65);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1385,8 +1389,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(29);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(29);
+      expect(OPERATOR_ONLY).toHaveLength(30);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(30);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -2067,7 +2071,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(64);
+    expect(ports.registry.size).toBe(65);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -2089,7 +2093,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(64);
+    expect(supplied.registry.size).toBe(65);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -2121,7 +2125,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(64);
+    expect(snapshotPorts.registry.size).toBe(65);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

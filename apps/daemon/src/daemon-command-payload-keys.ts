@@ -136,6 +136,10 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "design.submit": ["contractRef", "goalRef", "revision"],
     "escalation.decide": ["decision", "escalationRef", "implementationGuidance", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
+    // Only the goalId: the cancellation witness is DERIVED server-side from the operator's
+    // authenticated command (see `cancelGoal`), never trusted from the wire — the same discipline
+    // as `goal.close`, whose two witnesses are inert placeholders even for close.
+    "goal.cancel": ["goalId"],
     // PROSE ONLY. The goal, its planning run and its budget account are all derived from the
     // authenticated command identity, the project and principal come from authentication, and
     // project readiness is read from the durable activation — so `goalId`, `planningRunRef`,

@@ -56,6 +56,10 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   // product's migration tool, so it admits through this surface and is then served
   // asynchronously, exactly as `deployment.deploy` above.
   "deployment.migrate_down",
+  // APPENDED, same rule. `goal.cancel` abandons a goal whose product will not be finished. It is
+  // an ordinary synchronous write (lifecycle -> CANCELLED, like `goal.close`), and unlike close
+  // it runs NO readiness gate — a dead product with unverified criteria must still be closeable.
+  "goal.cancel",
 ] as const satisfies readonly RuntimeCommandKind[]);
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];

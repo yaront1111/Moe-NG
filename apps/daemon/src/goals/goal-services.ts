@@ -195,6 +195,59 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
   });
 };
 
+/**
+ * Abandon a goal whose product will not be finished, moving it to CANCELLED.
+ *
+ * WHY IT HAS NO READINESS GATE. `goal.close` refuses unless every approved criterion is verified;
+ * that is exactly wrong for a dead product — the reason to cancel is that the criteria will NOT
+ * be met. So cancel deliberately skips `goalCloseReadinessFor` and `qualifyGoalClosure`. Measured
+ * on UnAI 2026-09-17: three goals stuck EXECUTION_ENABLED at 0/150 verified with their nodes
+ * retired, and no operator action could clear them because Close required completion and Dismiss
+ * only hid the card.
+ *
+ * WHY THE WITNESS IS HONEST, NOT A FENCE IT SKIPS. The core's `validCancellation` requires
+ * `subordinateAuthorityFenced: true` under `HUMAN_APPROVED`. Nothing downstream enforces that
+ * field — it is a recorded attestation — and the operator IS the fence: this kind is
+ * OPERATOR_PRINCIPAL_KINDS-gated, so only the human can reach it. Cancel does not strand live
+ * work either: a CANCELLED goal's nodes go inert at `criterion-goal.ts` (CRITERION_CHECK_GOAL_
+ * CANCELLED), so an in-flight seat's late submission is refused, not deadlocked, and the
+ * repository reservation it holds is released by ordinary recovery when it exits.
+ */
+const cancelGoal: CommandHandler = (context): ServiceOutcome => {
+  const { ledger, request, store } = context;
+  const goalId = payloadRef(request.payload, "goalId");
+  if (goalId === null) return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+
+  const prior = stateOf(ledger, goalId);
+  const command = {
+    commandId: request.commandId,
+    expectedVersion: request.expectedVersion,
+    kind: "goal.cancel",
+    // Derived from the operator's authenticated command, never trusted from the wire. The
+    // authorizing act is the command itself; `subordinateAuthorityFenced` is the operator's
+    // acceptance that subordinate work is being abandoned (see the note above).
+    witness: {
+      authorizationRef: request.commandId,
+      subordinateAuthorityFenced: true as const,
+      truthClass: "HUMAN_APPROVED" as const,
+    },
+  } as unknown as GoalCommand;
+
+  const verdict = reduceGoal(
+    prior === undefined || prior === null ? undefined : (prior as unknown as GoalState),
+    command,
+  );
+  if (!verdict.ok) return refuseFromCore(request.kind, verdict.error);
+
+  return commitAccepted(store, request, {
+    aggregateId: goalId,
+    eventPayload: verdict.events as unknown as JsonValue,
+    eventType: "GoalCancelled",
+    expectedVersion: versionOf(ledger, goalId),
+    result: verdict.state as unknown as JsonValue,
+  });
+};
+
 /** Lifecycles whose goal may be published: the graph was activated, so work may be landed. */
 /** Appended, never reordered: existing suites assert against this table's key order. */
 export const GOAL_HANDLERS: HandlerTable = Object.freeze({
@@ -203,4 +256,5 @@ export const GOAL_HANDLERS: HandlerTable = Object.freeze({
   "goal.create_with_source": createGoalWithSourceHandler,
   "repository.publish": publishRepository,
   "deployment.set_target": setDeployTarget,
+  "goal.cancel": cancelGoal,
 });

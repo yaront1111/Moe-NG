@@ -69,6 +69,7 @@ export const CAPABILITIES = {
 
 export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind | "deployment.rollback", string>> = Object.freeze({
   "approval.decide": CAPABILITIES.PLANNING, "goal.close": CAPABILITIES.GOAL,
+  "goal.cancel": CAPABILITIES.GOAL,
   "repository.publish": CAPABILITIES.GOAL, "repository.bootstrap": CAPABILITIES.ADMIN,
   // Deploying a goal's landed code, and naming where it deploys to. GOAL-scoped like
   // `repository.publish` for the same reason: both act on the product a goal produced. The
@@ -406,6 +407,10 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   PREVIEW_START_COMMAND_KIND,
   RELEASE_DECIDE_COMMAND_KIND,
   "goal.close",
+  // ABANDONING A PRODUCT IS THE OWNER'S CALL, never an agent's: cancel retires a goal with its
+  // criteria unverified, discarding work an agent might otherwise keep attempting. MCP-excluded
+  // by derivation from this set, like `goal.close` above.
+  "goal.cancel",
   // AN AGENT MUST NEVER SET AN ENVIRONMENT VARIABLE: one it could write is one the deploy then
   // delivers to a production process. The MCP roster EXCLUDES both kinds by deriving itself from
   // this very set (`mcp-tool-allowlist.js`), and that exclusion -- not the ADMIN capability

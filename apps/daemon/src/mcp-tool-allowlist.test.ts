@@ -229,7 +229,10 @@ describe("wiredMcpToolKinds command half", () => {
       "approval.decide", "approval.decide_intent",
       "criterion_check.approve", "criterion_check.verify", "cutover.activate",
       "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
-      "environment.set_variable", "environment.unset_variable", "escalation.decide", "goal.close",
+      "environment.set_variable", "environment.unset_variable", "escalation.decide",
+      // Sorted before goal.close: the exclusion is DERIVED from OPERATOR_PRINCIPAL_KINDS and the
+      // derivation sorts, so this independent transcription places it where the sort does.
+      "goal.cancel", "goal.close",
       "graph.approve", "graph.supersede", "integration.accept_output",
       // task-eb37494e wired the kind for dispatch, and the exclusion followed BY DERIVATION from
       // OPERATOR_PRINCIPAL_KINDS -- precisely the movement the lockstep arm at the foot of this
@@ -247,7 +250,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(28);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(29);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -272,7 +275,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 28, queries: 7, vocabulary: 64, wired: 43 });
+    }).toEqual({ excluded: 29, queries: 7, vocabulary: 65, wired: 43 });
   });
 
   it("is deterministic and frozen", () => {

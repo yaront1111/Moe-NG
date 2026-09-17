@@ -20,6 +20,10 @@ export const COMMAND_PREREQUISITES = Object.freeze({
   // Acceptance can only follow the approval that activated the graph, so the goal it accepts
   // is durably EXECUTION_ENABLED before the core is ever asked.
   "goal.close": Object.freeze(["approval.decide"]),
+  // Cancelling has the same precondition as closing: the graph was activated (goal durably
+  // EXECUTION_ENABLED, or CLOSING) before either verb applies. The `approval.decide_intent`
+  // alternative rides along for a browser-approved goal, exactly as it does for close.
+  "goal.cancel": Object.freeze(["approval.decide"]),
   // Publishing follows the approval that activated the graph: before it there is nothing
   // landed to push. The decision names a remote; the wrapper's publisher performs the push.
   "repository.publish": Object.freeze(["approval.decide"]),

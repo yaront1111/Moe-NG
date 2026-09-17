@@ -169,7 +169,7 @@ describe("goal service surface", () => {
   it("contributes the create, close, and source-bound handlers in append order", () => {
     expect(Object.keys(GOAL_HANDLERS)).toEqual([
       "goal.create", "goal.close", "goal.create_with_source", "repository.publish",
-      "deployment.set_target",
+      "deployment.set_target", "goal.cancel",
     ]);
   });
 
@@ -594,5 +594,81 @@ describe("goal create replay (task-9d86234a)", () => {
     expect(store.readEvents(GOAL_ID)).toHaveLength(1);
     const facts = created(store)[0] as unknown as readonly Record<string, unknown>[];
     expect(facts[0]?.["brief"]).toEqual({ instructions: OK_INSTRUCTIONS, title: OK_TITLE });
+  });
+});
+
+/**
+ * Abandoning a goal whose product will not be finished. The point of `goal.cancel` is the exact
+ * asymmetry these prove: it succeeds on a goal `goal.close` REFUSES, because a dead product's
+ * criteria will never verify and its acceptance evidence will never exist. Measured on UnAI
+ * 2026-09-17 — three goals stuck EXECUTION_ENABLED at 0/150 verified, no operator action able to
+ * clear them.
+ */
+function stageGoalLifecycle(store: SqliteEventStore, lifecycle: string): number {
+  // Reaches EXECUTION_ENABLED (or beyond) through a committed decision, exactly as
+  // `stageUnreadableExecutionApproval` does, but with a clean event and a caller-chosen
+  // lifecycle. `driveThrough` first satisfies the `approval.decide` prerequisite.
+  driveThrough(store, "approval.decide");
+  const aggregate = readDurableLedger(store, PROJECT_ID).aggregates.get(GOAL_ID);
+  if (aggregate === undefined || aggregate.result === null
+    || typeof aggregate.result !== "object" || Array.isArray(aggregate.result)) {
+    throw new Error("goal setup did not create a readable draft");
+  }
+  const enabled = { ...aggregate.result, activeGraphRevisionRef: GRAPH_REVISION_REF,
+    graphEpoch: 1, lifecycle, version: 2 };
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: "approval.decide",
+    committedResultBytes: encoder.encode(JSON.stringify(enabled)),
+    correlationId: "corr-cancel-stage", decidedAt: "2026-08-10T00:00:00.000Z",
+    events: [{ eventId: `cmd-cancel-stage-${lifecycle}`, eventType: "GoalExecutionEnabled",
+      payload: encoder.encode(JSON.stringify({ graphEpoch: 1 })) }],
+    expectedVersion: aggregate.currentVersion,
+    key: { commandId: "cmd-cancel-stage", principalId: "principal-1", projectId: PROJECT_ID },
+    requestBytes: encoder.encode(JSON.stringify({ kind: "approval.decide", payload: {} })),
+    targetAggregateId: GOAL_ID,
+  });
+  expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+  return store.getAggregateVersion(GOAL_ID);
+}
+
+describe("goal cancel abandons a goal close would refuse", () => {
+  it("cancels an EXECUTION_ENABLED goal whose acceptance close demands does not exist", () => {
+    const store = openStore();
+    const version = stageGoalLifecycle(store, "EXECUTION_ENABLED");
+    const before = closeSnapshot(store);
+
+    // Close refuses the very same goal: with no durable acceptance it cannot qualify closure.
+    const closed = send(store, envelope("goal.close", version, acceptancePayload()));
+    expect(closed.ok).toBe(false);
+    expectNoCloseMutation(store, before);
+
+    // Cancel succeeds where close refused — no readiness gate, no acceptance required.
+    const cancelled = send(store, envelope("goal.cancel", version, { goalId: GOAL_ID }));
+    expect(cancelled.ok, cancelled.ok ? "" : cancelled.code).toBe(true);
+    expect(goalRow(store)?.lifecycle).toBe("CANCELLED");
+    expect(store.readEvents(GOAL_ID).some((event) => event.eventType === "GoalCancelled")).toBe(true);
+    expect(decisionCount(store)).toBe(before.decisionCount + 1);
+  });
+
+  it("refuses to cancel a goal whose lifecycle the core does not permit", () => {
+    // COMPLETED is terminal: core's GOAL_TRANSITIONS does not list it as a cancel source, so the
+    // handler surfaces the core's own ILLEGAL_TRANSITION rather than inventing an outcome.
+    const store = openStore();
+    const version = stageGoalLifecycle(store, "COMPLETED");
+    const before = closeSnapshot(store);
+
+    const outcome = send(store, envelope("goal.cancel", version, { goalId: GOAL_ID }));
+
+    expect(outcome.ok).toBe(false);
+    expectNoCloseMutation(store, before);
+  });
+
+  it("refuses a cancel whose payload names no goal", () => {
+    const store = openStore();
+    stageGoalLifecycle(store, "EXECUTION_ENABLED");
+
+    const outcome = send(store, envelope("goal.cancel", store.getAggregateVersion(GOAL_ID), { goalId: "" }));
+
+    expect(outcome.ok).toBe(false);
   });
 });

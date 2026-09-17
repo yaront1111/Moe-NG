@@ -73,6 +73,7 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
   Object.freeze({
     "approval.decide": DEFAULT_RUN_SUBJECT,
     "goal.close": DEFAULT_GOAL_SUBJECT,
+    "goal.cancel": DEFAULT_GOAL_SUBJECT,
     "plan.propose": DEFAULT_RUN_SUBJECT,
   });
 
@@ -160,7 +161,7 @@ function bootstrapAggregateId(
 ): string {
   if (planningSubject !== null) {
     if (kind === "plan.propose" || kind === "approval.decide") return planningSubject.runId;
-    if (kind === "goal.close") return planningSubject.goalId;
+    if (kind === "goal.close" || kind === "goal.cancel") return planningSubject.goalId;
     if (kind === "repository.publish") return `publish:${planningSubject.goalId}`;
     // ONE OFFER PER GOAL, at the exact key the Deployments card matches
     // (goal-deployments.tsx `deployOffer`). The environment is chosen at DISPATCH and
@@ -336,6 +337,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       // aggregate `setDeployTarget` fences. Leaving the generic PROJECT-targeted offer beside
       // those would let the card match an offer that has never been spendable.
       if (kind !== "plan.propose" && kind !== "approval.decide" && kind !== "goal.close"
+        && kind !== "goal.cancel"
         && kind !== "repository.publish" && kind !== "deployment.deploy"
         && kind !== "deployment.set_target") {
         offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));

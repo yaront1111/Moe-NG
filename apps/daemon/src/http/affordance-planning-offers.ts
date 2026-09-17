@@ -127,7 +127,7 @@ function durableGoals(ledger: DurableLedger, projectId: string): readonly Durabl
 function offer(
   input: PlanningOfferInput,
   kind: CompilerOfferKind
-    | "approval.decide" | "approval.decide_intent" | "goal.close" | "plan.propose"
+    | "approval.decide" | "approval.decide_intent" | "goal.cancel" | "goal.close" | "plan.propose"
     | "preview.decide" | "release.decide" | "repository.publish",
   aggregateId: string,
 ): NextAllowedCommand {
@@ -284,9 +284,13 @@ function offersForGoal(
     // the surface must never offer a close the command would refuse. Read here rather than
     // above so the coverage walk is skipped for every goal that could not be offered one.
     const readiness = input.closeReadiness(goal.goalId);
+    // Close is gated on readiness; CANCEL is not, and that asymmetry is the whole point. A goal
+    // is offered close only when every criterion is verified, but it can ALWAYS be abandoned —
+    // that is exactly the action an owner needs for a product that will never verify.
+    const cancel = offer(input, "goal.cancel", goal.goalId);
     return staffAll(readiness === "NO_CONTRACT" || readiness === "READY"
-      ? [offer(input, "goal.close", goal.goalId), ...publish, ...preview, ...release]
-      : [...publish, ...preview, ...release]);
+      ? [offer(input, "goal.close", goal.goalId), cancel, ...publish, ...preview, ...release]
+      : [cancel, ...publish, ...preview, ...release]);
   }
   if (lifecycle === "COMPLETED") return staffAll([...publish, ...preview, ...release]);
   return staffAll([]);

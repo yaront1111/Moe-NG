@@ -174,6 +174,8 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["decision", "escalationRef", "implementationGuidance", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
     payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
+  { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.cancel",
+    payloadKeys: ["goalId"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.create",
     payloadKeys: ["instructions", "title"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP",
@@ -319,7 +321,7 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // Both approval wires are human-only: the intent seam derives the authority the caller-shaped
   // wire used to accept, so gating one and not the other would leave the derived wire reachable
   // by a non-operator principal and hand back exactly the authority this seam removes.
-  "approval.decide", "approval.decide_intent", "escalation.decide", "goal.close",
+  "approval.decide", "approval.decide_intent", "escalation.decide", "goal.close", "goal.cancel",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish", "repository.bootstrap",
   "release.decide", "product_contract.sync_env_example",
@@ -355,8 +357,8 @@ describe("command vocabulary", () => {
   it("carries exactly the transcribed wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(64);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(64);
+    expect(ROWS).toHaveLength(65);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(65);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -400,7 +402,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(53);
+    expect(declared).toHaveLength(54);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -409,7 +411,7 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
     expect(FAMILY_MAPS.CRITERION.size).toBe(2);
     expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(1);
-    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(17);
+    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(18);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
     expect(FAMILY_MAPS.DESIGN.size).toBe(1);
     expect(FAMILY_MAPS.ENVIRONMENT.size).toBe(2);
@@ -459,8 +461,8 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(29);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(29);
+    expect(OPERATOR_ONLY).toHaveLength(30);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(30);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {
