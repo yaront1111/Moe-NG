@@ -65,12 +65,17 @@ export type ApprovalIntentSourceResult = ApprovalIntentSources | ApprovalIntentR
  * read names whichever arrived first and would bind the envelope payload's fields while looking
  * correct. Same discipline as `approval-run-binding.ts:112-133`.
  */
-function sealedCriteriaDigest(store: SqliteEventStore, runId: string): string | null {
+/** The store read THREW. `null` stays reserved for facts that are genuinely not there. */
+const AUTHORITY_UNREADABLE = Symbol("APPROVAL_AUTHORITY_UNREADABLE");
+
+function sealedCriteriaDigest(
+  store: SqliteEventStore, runId: string,
+): string | null | typeof AUTHORITY_UNREADABLE {
   let events;
   try {
     events = store.readEvents(planningAuthorityAggregateId(runId));
   } catch {
-    return null;
+    return AUTHORITY_UNREADABLE;
   }
   const bodies = events.find((event) => event.eventType === BODIES_EVENT_TYPE);
   if (bodies === undefined) return null;
@@ -102,12 +107,12 @@ function sealedCriteriaDigest(store: SqliteEventStore, runId: string): string | 
  */
 function sealedNodeScope(
   store: SqliteEventStore, projectId: string, runId: string,
-): readonly string[] | null {
+): readonly string[] | null | typeof AUTHORITY_UNREADABLE {
   let events;
   try {
     events = store.readEvents(planningAuthorityAggregateId(runId));
   } catch {
-    return null;
+    return AUTHORITY_UNREADABLE;
   }
   const bodies = events.find((event) => event.eventType === BODIES_EVENT_TYPE);
   if (bodies === undefined) return null;
@@ -179,6 +184,11 @@ export function readApprovalIntentSources(
     : payloadRef(payloadObject(state, "sealedHashes") ?? {}, "qualityHash");
   const criteriaRef = sealedCriteriaDigest(store, runId);
   const approvedNodeScope = sealedNodeScope(store, projectId, runId);
+  // Same aggregate, same fault, same honest name as `approval-run-binding.ts`: an authority
+  // that could not be READ must not be reported as one that was never sealed.
+  if (typeof criteriaRef === "symbol" || typeof approvedNodeScope === "symbol") {
+    return sourceRefusal("APPROVAL_AUTHORITY_UNREADABLE", "APPROVAL_RUN_BINDING");
+  }
   if (submissionHash === null || goalRef === null || graphRevisionRef === null
     || qualityHash === null || criteriaRef === null || approvedNodeScope === null) {
     return sourceRefusal("APPROVAL_AUTHORITY_UNSEALED", "APPROVAL_RUN_BINDING");

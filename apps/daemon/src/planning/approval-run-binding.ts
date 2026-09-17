@@ -28,6 +28,10 @@ export const APPROVAL_RUN_BINDING_CODES = Object.freeze([
   "APPROVAL_RUN_NOT_REVIEWABLE",
   "APPROVAL_GRAPH_REVISION_DIVERGED",
   "APPROVAL_AUTHORITY_UNSEALED",
+  // The authority aggregate could not be READ. Never UNSEALED: that code states as fact that
+  // this run's planning authority was never sealed, and sends the operator to re-run planning
+  // on a run that sealed fine. Binds exactly as little; only the name is honest.
+  "APPROVAL_AUTHORITY_UNREADABLE",
 ] as const);
 
 export type ApprovalRunBindingCode = (typeof APPROVAL_RUN_BINDING_CODES)[number];
@@ -110,12 +114,17 @@ const asObject = (value: JsonValue): JsonObject | null =>
  * `readDurableLedger` cannot be used here — it folds only `decision.targetAggregateId`, and the
  * authority aggregate is a SECONDARY leg, so a ledger read would report it empty forever.
  */
-function sealedBodiesDigest(store: SqliteEventStore, runId: string): string | null {
+/** The store read THREW. `null` stays reserved for a bodies event that is genuinely absent. */
+const AUTHORITY_UNREADABLE = Symbol("APPROVAL_AUTHORITY_UNREADABLE");
+
+function sealedBodiesDigest(
+  store: SqliteEventStore, runId: string,
+): string | null | typeof AUTHORITY_UNREADABLE {
   let events;
   try {
     events = store.readEvents(planningAuthorityAggregateId(runId));
   } catch {
-    return null;
+    return AUTHORITY_UNREADABLE;
   }
   const bodies = events.find((event) => event.eventType === BODIES_EVENT_TYPE);
   if (bodies === undefined) return null;
@@ -161,6 +170,9 @@ export function verifyApprovedRunBinding(
   const authorityRef = record === null ? null : payloadRef(record, "authorityRef");
   const envelopeDigest = record === null ? null : payloadRef(record, "envelopeDigest");
   const bodiesDigest = sealedBodiesDigest(input.store, input.runId);
+  // A seal that could not be READ is not a seal that is missing. Checked before the
+  // all-three-or-nothing test below, which would otherwise fold it into UNSEALED.
+  if (typeof bodiesDigest === "symbol") return refused("APPROVAL_AUTHORITY_UNREADABLE");
   // ALL THREE OR NOTHING. A run whose record looks sealed while the bodies event cannot be read
   // is UNSEALED, not partially bound: binding an undefined digest would publish a witness whose
   // join silently resolves to nothing.
