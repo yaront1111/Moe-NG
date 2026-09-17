@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
-import { isPlainJsonObject } from "../review/review-contracts.js";
-import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 import { decisionsOf } from "../decision-ledger-memo.js";
 import { isDurableHumanPrincipal } from "../identity/human-approver.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import { readTerminalReplan } from "../review/review-terminal-replan.js";
 import { liveChildOf } from "../orchestrator/agent-wrapper-reclaim-records.js";
 import { decodeSeatStartBytes, seatStartAggregateId } from "../orchestrator/seat-start-contracts.js";
 import { AGENT_WRAPPER_PRINCIPAL_ID, SEAT_EXIT_COMMAND_KIND, decodeSeatExitBytes,
@@ -21,7 +20,7 @@ export interface RepositoryReplanEvidence extends RepositoryReviewResumeEvidence
   readonly replanDecisionId: string; readonly replanDigest: string; readonly replanPrincipalId: string;
 }
 
-/** A release intent must be the exact human REPLAN immediately following the reviewed package. */
+/** A release intent must be the human REPLAN that is the node's last decision and answers its latest reviewed round. */
 export function readRepositoryReplanEvidence(store: SqliteEventStore, handle: RepositoryExecutionHandle):
 RepositoryRecoveryResult<{ evidence: RepositoryReplanEvidence }> {
   const invalid = () => recoveryRefusal("REPOSITORY_REPLAN_EVIDENCE_INVALID");
@@ -30,20 +29,12 @@ RepositoryRecoveryResult<{ evidence: RepositoryReplanEvidence }> {
     if (!ledger.replanned) return invalid();
     const common = readRepositoryFailedReviewEvidence(store, handle);
     if (!common.ok) return common;
-    const latest = ledger.rounds.at(-1)!;
-    if (!ledger.replanned || ledger.continuation !== undefined || ledger.delta !== undefined) return invalid();
-    const rows = decisionsOf(store, 200).filter((row) => row.key.projectId === handle.owner.projectId
-      && row.targetAggregateId === handle.owner.nodeRef && row.effectDisposition === "EFFECTS_COMMITTED");
-    const replan = rows.at(-1);
-    if (replan === undefined || replan.commandKind !== "escalation.decide"
-      || replan.currentVersion !== ledger.version || replan.previousVersion !== latest.aggregateVersion
-      || replan.currentVersion !== latest.aggregateVersion + 1 || !isDurableHumanPrincipal(store, replan.key.principalId)) return invalid();
-    const decoded = decodeBoundedJsonBytes(replan.resultBytes);
-    const result = decoded.ok ? decoded.value : null;
-    if (!isPlainJsonObject(result) || result["decision"] !== "REPLAN"
-      || Object.keys(result).sort().join(",") !== "decision,escalationRef,unsuccessfulRounds"
-      || typeof result["escalationRef"] !== "string" || result["escalationRef"].trim() === ""
-      || result["unsuccessfulRounds"] !== ledger.lineage.unsuccessfulRounds) return invalid();
+    if (ledger.continuation !== undefined) return invalid();
+    // An agent's earlier re-plan is no evidence against release; live successor work is fenced by
+    // the human principal, closed authority, a positive native drain and an unchanged clean tree.
+    const terminal = readTerminalReplan(decisionsOf(store, 200), handle.owner.projectId, handle.owner.nodeRef, ledger);
+    if (terminal === null || !isDurableHumanPrincipal(store, terminal.replan.key.principalId)) return invalid();
+    const { replan } = terminal;
     return { ok: true, evidence: { ...common.evidence, replanDecisionId: replan.decisionId,
       replanDigest: replan.resultSha256, replanPrincipalId: replan.key.principalId } };
   } catch { return invalid(); }

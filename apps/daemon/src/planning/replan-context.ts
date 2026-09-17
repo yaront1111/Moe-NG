@@ -9,6 +9,7 @@ import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js"
 import { continuationSourceAttested } from "../review/review-continuation.js";
 import { readReviewGuidanceSource } from "../review/review-implementation-guidance.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import { readTerminalReplan } from "../review/review-terminal-replan.js";
 import { replanGuidanceHistory } from "./replan-guidance-history.js";
 
 export const REPLAN_CONTEXT_UNAVAILABLE = "REPLAN_CONTEXT_UNAVAILABLE";
@@ -66,26 +67,17 @@ export function withReplanContext(store: SqliteEventStore, projectId: string, go
     const source = readReviewGuidanceSource(store, projectId, nodeRef, latest);
     if (source === null || source["goalRef"] !== predecessorGoalId || source["nodeKey"] !== nodeKey) return invalid();
     const decisions = decisionsOf(store, 200);
-    const replans = decisions.filter((row) => {
-      if (row.effectDisposition !== "EFFECTS_COMMITTED" || row.key.projectId !== projectId
-        || row.targetAggregateId !== nodeRef || row.commandKind !== "escalation.decide") return false;
-      const decoded = decodeBoundedJsonBytes(row.resultBytes);
-      const value = decoded.ok ? object(decoded.value) : null;
-      return value !== null && value["decision"] === "REPLAN"
-        && Object.keys(value).sort().join(",") === "decision,escalationRef,unsuccessfulRounds"
-        && typeof value["escalationRef"] === "string" && value["escalationRef"].trim().length > 0
-        && value["unsuccessfulRounds"] === ledger.lineage.unsuccessfulRounds;
-    });
-    const replan = replans[0];
+    const terminal = readTerminalReplan(decisions, projectId, nodeRef, ledger);
     const goalCreation = decisions.find((row) => row.key.projectId === projectId
       && row.targetAggregateId === goalId && row.key.commandId === event.decisionTrace?.commandId
       && row.key.principalId === event.decisionTrace?.principalId
       && row.commandKind === "goal.create_with_source" && row.effectDisposition === "EFFECTS_COMMITTED");
-    const reviewDecision = decisions.find((row) => row.decisionId === latest.decisionId);
-    if (replans.length !== 1 || replan === undefined || goalCreation === undefined || reviewDecision === undefined) return invalid();
-    if (replan.currentVersion !== ledger.version || replan.previousVersion !== latest.aggregateVersion) return invalid();
-    if (reviewDecision.decisionPosition >= replan.decisionPosition || replan.decisionPosition >= goalCreation.decisionPosition) return invalid();
-    if (!pinMatches(instructions, predecessorGoalId, nodeRef, replan.previousVersion!)) return invalid();
+    if (terminal === null || goalCreation === undefined) return invalid();
+    const { replan } = terminal;
+    if (replan.decisionPosition >= goalCreation.decisionPosition) return invalid();
+    // The pin binds the version the human decided at (the offer's expectedVersion and `-vN`); the
+    // context names the reviewed round's. They differ when an agent re-planned between the two.
+    if (!pinMatches(instructions, predecessorGoalId, nodeRef, replan.previousVersion)) return invalid();
     const findings = latest.lineage.records.filter((record) => record.round === latest.round).map((record) => record.finding);
     const context = { version: "moe-replan-mission-context/1", predecessorGoalId, nodeRef,
       sourceContentSha256: previous.contentSha256, replanDecisionId: replan.decisionId,

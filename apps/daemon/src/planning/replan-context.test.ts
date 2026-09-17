@@ -13,6 +13,7 @@ import { MARKER } from "../orchestrator/wrapper-review-test-fixtures.js";
 import { replanGuidanceHistory } from "./replan-guidance-history.js";
 import { envelope as reviewEnvelope, send as sendReview } from "../review/review-test-fixtures.js";
 import { nodeOf, PRD } from "./plan-reject-test-fixtures.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 const worlds: ReturnType<typeof reviewWorld>[] = [];
 const CLUE = "The queue owner depends on foundation; foundation cannot require queue completion first.";
@@ -24,16 +25,18 @@ const findings = Array.from({ length: 9 }, (_, index) => ({
 const header = (goal = GOAL_ID, key = "node-slice") =>
   `REPLAN of goal ${goal}: node ${key} failed review 3 times and was retired.`;
 
-async function failedWorld(reviewFindings = findings) {
+type World = ReturnType<typeof reviewWorld>;
+async function failedWorld(reviewFindings = findings, afterRound: (round: number, w: World) => void = () => undefined) {
   const w = reviewWorld(); worlds.push(w);
   for (let round = 1; round <= 3; round++) {
     expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
     // Each attempt changes the workspace: the same findings after real work are a repeat that
     // exhausts the three-round cap, not a stall that asks for a decision at once (review-stall.ts).
     writeFileSync(join(w.workspace, `attempt-${String(round)}.txt`), `attempt ${String(round)}`);
-    expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef,
-      round, packageItems: [], findings: reviewFindings }, round - 1)).toMatchObject({ ok: true });
+    expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef, round, packageItems: [],
+      findings: reviewFindings }, readReviewLedger(w.store, PROJECT_ID, w.nodeRef).version)).toMatchObject({ ok: true });
     await w.finishSeat();
+    afterRound(round, w);
   }
   await w.wrapper.runOnce();
   return w;
@@ -45,6 +48,23 @@ function decide(w: ReturnType<typeof reviewWorld>, decision = "REPLAN", guidance
       ...(guidance === undefined ? {} : { implementationGuidance: guidance }) }, randomUUID()), projectId: PROJECT_ID });
   expect(result).toMatchObject({ ok: true });
 }
+/** An agent's re-plan of the node, admitted by the review lane at the node's current version. */
+function agentReplan(w: World) {
+  const review = readReviewLedger(w.store, PROJECT_ID, w.nodeRef);
+  expect(sendReview(w.store, { ...reviewEnvelope("qualification.replan", review.version, { nodes: [{ nodeRef: w.nodeRef }],
+    subjectRef: w.nodeRef, successorPlanRef: "agent-successor-plan" }, randomUUID()), projectId: PROJECT_ID })).toMatchObject({ ok: true });
+}
+/** A committed row no review handler writes, staged straight through the store seam. */
+function stageOnNode(w: World, commandKind: string, result: unknown) {
+  const bytes = new TextEncoder().encode(JSON.stringify(result));
+  expect(w.store.commitExpectedVersionDecision({ commandKind, targetAggregateId: w.nodeRef,
+    expectedVersion: w.store.getAggregateVersion(w.nodeRef), correlationId: "staged-replan-test", decidedAt: new Date().toISOString(),
+    key: { projectId: PROJECT_ID, principalId: "staged-agent", commandId: randomUUID() }, requestBytes: bytes, committedResultBytes: bytes,
+    events: [{ eventId: randomUUID(), eventType: "StagedDecision", payload: bytes }] }).decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+const pinned = (w: World, reviewVersion: number) =>
+  header() + "\nReplan context: " + JSON.stringify({ predecessorGoalId: GOAL_ID, nodeRef: w.nodeRef, reviewVersion });
+const contextOf = (instructions: string | null) => JSON.parse(instructions!.split("\n").at(-1)!);
 function successor(w: ReturnType<typeof reviewWorld>, instructions = header(), source = PRD) {
   const commandId = randomUUID();
   expect(send(w.store, envelope("goal.create_with_source", 0, { instructions,
@@ -81,6 +101,49 @@ it("joins the prepared UI's exact predecessor and review pins", async () => {
   const context = JSON.parse(instructions!.split("\n").at(-1)!);
   expect(context).toMatchObject({ predecessorGoalId: GOAL_ID, nodeRef: w.nodeRef, reviewVersion: 3 });
   expect(context.completeLatestFindings).toEqual(findings);
+});
+
+// An agent's re-plan grants nothing and leaves the latest round as it was; the human then decides at
+// the version that includes it. Measured by a drill: this reader threw for ever on that order.
+it("hands off a REPLAN recorded after an agent re-planned the exhausted review", async () => {
+  const w = await failedWorld(); agentReplan(w); decide(w);
+  const ledger = readReviewLedger(w.store, PROJECT_ID, w.nodeRef);
+  expect(ledger).toMatchObject({ replanned: true, version: 5 });
+  expect(ledger.rounds.at(-1)?.aggregateVersion).toBe(3);
+  const last = decisionsOf(w.store, 200).filter((row) => row.targetAggregateId === w.nodeRef
+    && row.effectDisposition === "EFFECTS_COMMITTED").at(-1)!;
+  expect(last).toMatchObject({ commandKind: "escalation.decide", previousVersion: 4, currentVersion: 5 });
+  const instructions = successor(w)();
+  expect(instructions).toContain(CLUE);
+  const context = contextOf(instructions);
+  expect(context.completeLatestFindings).toEqual(findings);
+  expect(context).toMatchObject({ reviewVersion: 3, replanDecisionId: last.decisionId, replanResultSha256: last.resultSha256 });
+});
+
+// The UI pins the version the human decided at (the offer's expectedVersion and `-vN`), while the
+// context names the reviewed round's. They differ exactly when a re-plan sits between the two.
+it("binds the prepared UI's pin to the version the REPLAN was decided at", async () => {
+  const w = await failedWorld(); agentReplan(w); decide(w);
+  expect(contextOf(successor(w, pinned(w, 4))())).toMatchObject({ reviewVersion: 3 });
+  expect(successor(w, pinned(w, 3))).toThrow("REPLAN_CONTEXT_UNAVAILABLE");
+});
+
+it("hands off a REPLAN on a node an agent re-planned before its later rounds", async () => {
+  const w = await failedWorld(findings, (round, world) => { if (round === 1) agentReplan(world); });
+  decide(w);
+  expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef)).toMatchObject({ replanned: true, version: 5 });
+  const context = contextOf(successor(w, pinned(w, 4))());
+  expect(context).toMatchObject({ reviewVersion: 4 });
+  expect(context.completeLatestFindings).toEqual(findings);
+});
+
+// REVIEW_NODE_REPLANNED refuses this now; a store written before that guard can still hold it.
+it("refuses a REPLAN a later agent re-plan followed", async () => {
+  const w = await failedWorld(); decide(w);
+  stageOnNode(w, "qualification.replan", { classifications: [{ classification: "INVALIDATED", nodeRef: w.nodeRef,
+    reasonCodes: [], sourceHash: "", targetHash: "" }], successorPlanRef: "legacy-successor-plan" });
+  expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef)).toMatchObject({ replanned: true, unreadable: false, version: 5 });
+  expect(successor(w)).toThrow("REPLAN_CONTEXT_UNAVAILABLE");
 });
 
 it("keeps a finding's compiler fence markers inside reversible quoted context", async () => {
@@ -164,9 +227,11 @@ it("does not reach past the diagnosed submission to an unrelated older guided ap
   expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).continuation).toBeUndefined();
 });
 
-it.each(["different PRD", "different node", "not replanned", "created before replan", "wrong pin", "malformed header"])(
+it.each(["different PRD", "different node", "not replanned", "created before replan", "wrong pin", "malformed header",
+  "foreign decision between"])(
   "refuses recognized replan context with %s", async (condition) => {
     const w = await failedWorld();
+    if (condition === "foreign decision between") stageOnNode(w, "internal.test.unrelated", {});
     if (condition !== "not replanned" && condition !== "created before replan") decide(w);
     const text = condition === "different node" ? header(GOAL_ID, "foreign-node")
       : condition === "malformed header" ? "REPLAN of goal incomplete" : header();

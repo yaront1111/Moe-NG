@@ -1198,7 +1198,11 @@ round and the node blocks on a human. Needs you offers the two answers
   goal's instructions to the compiler mission between `<<<OPERATOR INSTRUCTIONS`
   markers, and the decomposition seat is told to plan a different decomposition
   under new node keys. The predecessor goal reads `Replanned` on its status
-  strip; close it when the successor's work is verified.
+  strip; close it when the successor's work is verified. An agent's earlier
+  `qualification.replan` on the node blocks neither the handoff nor
+  `RELEASE_REPLANNED` — it grants no authority, leaves the reviewed round as it
+  was, and the human decided at a version that already includes it — while one
+  committed after the REPLAN is refused `REVIEW_NODE_REPLANNED`.
 
 ### Verifier authority (why a delivered node can wait forever)
 
@@ -1257,9 +1261,11 @@ proof: `ABORT_UNEXECUTED` for a reservation that never executed, or
 Measured 2026-09-09 on a real crashed landing: the Health screen's **Repository
 recovery** card offered `RECONCILE_LANDED` and refused `ABORT_UNEXECUTED` with
 `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN`, one click reconciled the landing, and
-the reservation left the view. `qualification.replan` opens a successor run when
-a review has exhausted its attempts (see *Replan*). `session.renew` extends a
-minted session without re-pairing.
+the reservation left the view. `qualification.replan` records an agent's re-plan
+classification of a node; it opens no run and retires nothing (nothing consumes
+its `successorPlanRef`). The successor run after an exhausted review is the
+human's `escalation.decide` REPLAN plus `goal.create_with_source` (see *Replan*).
+`session.renew` extends a minted session without re-pairing.
 
 ### The landing crash knob (DEVELOPMENT ONLY)
 

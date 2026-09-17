@@ -19,8 +19,17 @@ import { GOVERNANCE_PRINCIPAL_ID } from "../review/governance-policy-settings.js
 import { createReviewResumeWorld } from "./repository-review-resume-test-fixtures.js";
 import type { ReviewResumeWorldOptions } from "./repository-review-resume-test-fixtures.js";
 
+type ReviewResumeWorld = Awaited<ReturnType<typeof createReviewResumeWorld>>;
+
+export interface ReplanRecoveryWorldOptions extends ReviewResumeWorldOptions {
+  /** An agent's `qualification.replan` committed right after this round, at the node's version. */
+  readonly deltaAfterRound?: 1 | 3;
+  /** Runs after round 3 (and any delta after it), immediately before the REPLAN is decided. */
+  readonly beforeReplan?: (w: ReviewResumeWorld) => void;
+}
+
 export async function createReplanRecoveryWorld(
-  options: ReviewResumeWorldOptions = {},
+  options: ReplanRecoveryWorldOptions = {},
   replanAs: "human" | "governance" = "human",
 ) {
   const w = await createReviewResumeWorld(options);
@@ -43,10 +52,22 @@ export async function createReplanRecoveryWorld(
   // finding on the same prepared input would be a stall that asks for the decision at round 2.
   const findings = (round: number) => (w.request.payload.findings as readonly Record<string, unknown>[])
     .map((finding) => ({ ...finding, ruleId: `${String(finding["ruleId"])}-${String(round)}` }));
+  // Every command binds the node's CURRENT version, so an agent's re-plan between rounds shifts the
+  // later versions without changing the defaults (rounds at 1-3, REPLAN at 3).
+  const version = () => readReviewLedger(w.store, PROJECT_ID, w.owner.nodeRef).version;
+  const deltaAfter = (round: number) => {
+    if (options.deltaAfterRound !== round) return;
+    expect(runReviewCommand(w.store, bytes({ ...w.request, commandId: randomUUID(), kind: "qualification.replan",
+      expectedVersion: version(), payload: { nodes: [{ nodeRef: w.owner.nodeRef }], subjectRef: w.owner.nodeRef,
+        successorPlanRef: "agent-successor-plan" } }))).toMatchObject({ ok: true });
+  };
+  deltaAfter(1);
   for (const round of [2, 3]) {
-    expect(runReviewCommand(w.store, bytes({ ...w.request, commandId: randomUUID(), expectedVersion: round - 1,
+    expect(runReviewCommand(w.store, bytes({ ...w.request, commandId: randomUUID(), expectedVersion: version(),
       payload: { ...w.request.payload, findings: findings(round), round } }), undefined, w.prepared).ok).toBe(true);
+    deltaAfter(round);
   }
+  options.beforeReplan?.(w);
   const now = Date.parse(w.options.clock());
   const human = createOperatorSessionHandshakePort({ store: w.store, projectId: PROJECT_ID,
     operatorPrincipalId: "operator", capabilities: OPERATOR_CAPABILITIES, clock: () => now,
@@ -57,9 +78,10 @@ export async function createReplanRecoveryWorld(
   const ports = createDaemonCommandPorts({ store: w.store, projectId: PROJECT_ID,
     operatorPrincipalId: "operator", clock: w.options.clock });
   const replan = async () => {
-    const payload = { decision: "REPLAN", escalationRef: `ui-escalation-${w.owner.nodeRef}-v3`, subjectRef: w.owner.nodeRef };
+    const decidedVersion = version();
+    const payload = { decision: "REPLAN", escalationRef: `ui-escalation-${w.owner.nodeRef}-v${String(decidedVersion)}`, subjectRef: w.owner.nodeRef };
     return handleAsyncCommandRequest({ ...ports, authenticator }, {
-      body: bytes({ commandId: randomUUID(), commandKind: "escalation.decide", expectedVersion: 3,
+      body: bytes({ commandId: randomUUID(), commandKind: "escalation.decide", expectedVersion: decidedVersion,
         correlationId: "replan-recovery-fixture", targetAggregateId: w.owner.nodeRef, payload,
         requestDigest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
         schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: human.credential }),
@@ -74,8 +96,8 @@ export async function createReplanRecoveryWorld(
    */
   const replanAsGovernance = () => runReviewCommand(w.store, bytes({
     commandId: randomUUID(), correlationId: "replan-recovery-fixture", decidedAt: stamp,
-    expectedVersion: 3, kind: "escalation.decide",
-    payload: { decision: "REPLAN", escalationRef: `gov-escalation-${w.owner.nodeRef}-v3`, subjectRef: w.owner.nodeRef },
+    expectedVersion: version(), kind: "escalation.decide",
+    payload: { decision: "REPLAN", escalationRef: `gov-escalation-${w.owner.nodeRef}-v${String(version())}`, subjectRef: w.owner.nodeRef },
     principalId: GOVERNANCE_PRINCIPAL_ID, projectId: PROJECT_ID, schemaVersion: w.request.schemaVersion,
   }));
   if (replanAs === "governance") expect(replanAsGovernance()).toMatchObject({ ok: true });

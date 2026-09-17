@@ -11,8 +11,45 @@ import { createRepositoryRecoveryService } from "./repository-recovery-service.j
 import { repositoryRecoveryOwnerDigest } from "./repository-landing-intent.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 afterEach(closeReviewResumeWorlds);
+type ReplanWorld = Awaited<ReturnType<typeof createReplanRecoveryWorld>>;
+
+/** Stages a committed row on the node straight through the store seam, as no handler would write it. */
+function stageOnNode(w: Pick<ReplanWorld, "store" | "owner" | "options">, commandKind: string, result: unknown, commandId: string) {
+  const bytes = new TextEncoder().encode(JSON.stringify(result));
+  const staged = w.store.commitExpectedVersionDecision({ commandKind, targetAggregateId: w.owner.nodeRef,
+    expectedVersion: w.store.getAggregateVersion(w.owner.nodeRef), committedResultBytes: bytes, requestBytes: bytes,
+    key: { projectId: PROJECT_ID, principalId: "staged-agent", commandId }, correlationId: "replan-test",
+    decidedAt: w.options.clock(), events: [{ eventId: `${commandId}-event`, eventType: "StagedDecision", payload: bytes }] });
+  expect(staged.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+
+/** The release, its offer, its exact replay and every preserved byte, whatever came before the REPLAN. */
+async function expectReleased(w: ReplanWorld) {
+  const head = w.git("rev-parse", "HEAD"), app = readFileSync(join(w.workspace, "app.txt"));
+  const index = readFileSync(join(w.workspace, ".git", "index"));
+  const offered = w.service.readRecovery().reservations[0]?.actions.find((entry) => entry.action === "RELEASE_REPLANNED");
+  expect(offered, JSON.stringify(offered)).toMatchObject({ available: true, code: null,
+    expectedReviewVersion: w.input.payload.expectedReviewVersion, expectedReviewDigest: w.input.payload.expectedReviewDigest });
+  const result = await w.service.recover(w.input);
+  expect(result, JSON.stringify(result)).toMatchObject({ ok: true, disposition: "COMMITTED", resultCode: "REPOSITORY_RECOVERY_RELEASED" });
+  expect(w.drains()).toBe(1);
+  expect(w.port.readOwned(w.workspace, w.owner.storeId, PROJECT_ID)).toMatchObject({ ok: true, handle: null });
+  expect(w.git("rev-parse", "HEAD")).toBe(head);
+  expect(readFileSync(join(w.workspace, "app.txt"))).toEqual(app);
+  expect(readFileSync(join(w.workspace, ".git", "index"))).toEqual(index);
+  expect(await w.service.recover(w.input)).toMatchObject({ ok: true, disposition: "REPLAYED", resultCode: "REPOSITORY_RECOVERY_RELEASED" });
+  expect(w.drains()).toBe(1);
+  expect(readReviewLedger(w.store, PROJECT_ID, w.owner.nodeRef)).toMatchObject({ replanned: true, accepted: undefined });
+}
+
+async function expectRefusedAndHeld(w: ReplanWorld, input = w.input) {
+  expect(await w.service.recover(input)).toMatchObject({ ok: false, code: "REPOSITORY_REPLAN_EVIDENCE_INVALID" });
+  expect(w.drains()).toBe(0);
+  expect(w.port.readOwned(w.workspace, w.owner.storeId, PROJECT_ID)).toMatchObject({ ok: true, handle: w.blocked });
+}
 
 it("releases a human-replanned reservation after native drain while preserving the exact reviewed commit", async () => {
   const w = await createReplanRecoveryWorld();
@@ -31,6 +68,54 @@ it("releases a human-replanned reservation after native drain while preserving t
   expect(w.port.acquire(w.workspace, successor, { controllerId: "new-runtime", controllerPid: 78901 }).ok).toBe(true);
   expect(await w.service.recover(w.input)).toMatchObject({ ok: true, disposition: "REPLAYED", resultCode: "REPOSITORY_RECOVERY_RELEASED" });
   expect(w.drains()).toBe(1);
+});
+
+/**
+ * An agent's `qualification.replan` grants no authority (every node INVALIDATED), writes no Git
+ * effect and leaves the latest round untouched, so it is no evidence against releasing a node a
+ * human later retired. Measured by a drill: the review fold keeps `delta` for ever, and this gate
+ * refused REPOSITORY_REPLAN_EVIDENCE_INVALID on every read of such a node.
+ */
+it("releases a human REPLAN on a node an agent re-planned before its later rounds", async () => {
+  const w = await createReplanRecoveryWorld({ deltaAfterRound: 1 });
+  const ledger = readReviewLedger(w.store, PROJECT_ID, w.owner.nodeRef);
+  expect(ledger).toMatchObject({ version: 5, replanned: true, unreadable: false });
+  expect(ledger.rounds.at(-1)?.aggregateVersion).toBe(4);
+  expect(ledger.delta).toBeDefined();
+  await expectReleased(w);
+});
+
+it("releases a human REPLAN recorded after an agent re-planned the exhausted review", async () => {
+  const w = await createReplanRecoveryWorld({ deltaAfterRound: 3 });
+  const ledger = readReviewLedger(w.store, PROJECT_ID, w.owner.nodeRef);
+  expect(ledger).toMatchObject({ version: 5, replanned: true, unreadable: false });
+  expect(ledger.rounds.at(-1)?.aggregateVersion).toBe(3);
+  const replan = decisionsOf(w.store, 200).filter((row) => row.targetAggregateId === w.owner.nodeRef
+    && row.effectDisposition === "EFFECTS_COMMITTED").at(-1)!;
+  expect(replan).toMatchObject({ commandKind: "escalation.decide", previousVersion: 4, currentVersion: 5 });
+  expect(JSON.parse(new TextDecoder().decode(replan.resultBytes))).toMatchObject({
+    decision: "REPLAN", escalationRef: `ui-escalation-${w.owner.nodeRef}-v4` });
+  await expectReleased(w);
+});
+
+// REVIEW_NODE_REPLANNED refuses a new re-plan after the REPLAN; a store written before that guard
+// can still hold one, and then the human's decision no longer answers the node's latest state.
+it("refuses a REPLAN a later agent re-plan followed, as a store written before REVIEW_NODE_REPLANNED holds", async () => {
+  const w = await createReplanRecoveryWorld();
+  stageOnNode(w, "qualification.replan", { classifications: [{ classification: "INVALIDATED", nodeRef: w.owner.nodeRef,
+    reasonCodes: [], sourceHash: "", targetHash: "" }], successorPlanRef: "legacy-successor-plan" }, "legacy-replan-after-decision");
+  const ledger = readReviewLedger(w.store, PROJECT_ID, w.owner.nodeRef);
+  expect(ledger).toMatchObject({ version: 5, replanned: true, unreadable: false });
+  // The version the reader answers at, so the refusal is the REPLAN evidence's and not a stale input's.
+  await expectRefusedAndHeld(w, { ...w.input, payload: { ...w.input.payload, expectedReviewVersion: ledger.version } });
+});
+
+// Only a re-plan or an unspent human grant can reach a node between a failed round and its REPLAN.
+// A neutral unknown kind, not a verifier receipt, which the common evidence refuses first.
+it("refuses a REPLAN whose gap from the reviewed round holds a decision no review handler writes", async () => {
+  const w = await createReplanRecoveryWorld({ beforeReplan: (world) => stageOnNode(world, "internal.test.unrelated", {}, "unrelated-in-gap") });
+  expect(readReviewLedger(w.store, PROJECT_ID, w.owner.nodeRef)).toMatchObject({ version: 5, replanned: true, unreadable: false });
+  await expectRefusedAndHeld(w);
 });
 
 it.each(["ordinary", "--skip-worktree", "--assume-unchanged"])("retains dirty work even when Git hides it (%s)", async (flag) => {
