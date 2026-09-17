@@ -12,8 +12,6 @@ export const MOE_CLI_TOO_MANY_ARGUMENTS = "MOE_CLI_TOO_MANY_ARGUMENTS" as const;
 
 export const KNOWN_COMMANDS = Object.freeze(["init", "start", "recover-review", "recover-replan", "projects", "version", "help"] as const);
 
-export type CliCommand = (typeof KNOWN_COMMANDS)[number];
-
 export type CliArgvRefusalCode =
   | typeof MOE_CLI_TOO_MANY_ARGUMENTS
   | typeof MOE_CLI_UNKNOWN_COMMAND
@@ -58,9 +56,6 @@ export interface CliVersion {
   readonly command: "version";
   readonly ok: true;
 }
-
-/** The two commands that only print; kept apart so `command` stays a discriminant. */
-export type CliInform = CliHelp | CliVersion;
 
 export interface CliArgvRefused {
   readonly code: CliArgvRefusalCode;

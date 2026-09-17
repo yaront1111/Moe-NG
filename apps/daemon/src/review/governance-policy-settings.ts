@@ -54,8 +54,6 @@ export const GOVERNANCE_PRINCIPAL_ID = "daemon:governor" as const;
 /** Both members, so a sweep can prove neither branch is dead. */
 export const GOVERNANCE_POLICY_KINDS = Object.freeze(["REQUIRE_HUMAN", AI_GOVERNOR_MODE] as const);
 
-export type GovernancePolicyKind = (typeof GOVERNANCE_POLICY_KINDS)[number];
-
 export type GovernancePolicy =
   | { readonly kind: "REQUIRE_HUMAN" }
   | { readonly kind: typeof AI_GOVERNOR_MODE; readonly maxDecisions: number };
