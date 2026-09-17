@@ -15,6 +15,7 @@ export interface HumanApprovalAuthorityStore {
 }
 
 type RefusalCode =
+  | "ADMISSION_GATE_EVIDENCE_UNREADABLE"
   | "ADMISSION_GATE_SCOPE_MISMATCH"
   | "ADMISSION_GATE_SUBJECT_MISMATCH"
   | "ADMISSION_GATE_WITNESS_ABSENT";
@@ -28,6 +29,13 @@ const refuse = (code: RefusalCode): HumanApprovalAuthorityResult =>
   Object.freeze({ code, ok: false as const });
 const absent = (): HumanApprovalAuthorityResult => refuse("ADMISSION_GATE_WITNESS_ABSENT");
 const subject = (): HumanApprovalAuthorityResult => refuse("ADMISSION_GATE_SUBJECT_MISMATCH");
+/**
+ * THE READ FAILED — which is not the same fact as "nobody approved". Every caller treats this
+ * exactly as it treats `absent()`: it confers no approval and admits nothing. It simply stops
+ * the daemon from stating, durably and in the operator's face, that a human never acted.
+ */
+const unreadable = (): HumanApprovalAuthorityResult =>
+  refuse("ADMISSION_GATE_EVIDENCE_UNREADABLE");
 
 function objectValue(value: JsonValue | undefined): JsonObject | null {
   return value === null || value === undefined || typeof value !== "object"
@@ -84,13 +92,19 @@ function receiptAgrees(
     && receipt.requestSha256 === event.requestSha256;
 }
 
-function eventOf(store: HumanApprovalAuthorityStore, goalRef: string): StoredEvent | null {
+/** Returned by `eventOf` when the READ threw, which `null` (genuinely absent) must not mean. */
+const UNREADABLE = Symbol("ADMISSION_GATE_EVIDENCE_UNREADABLE");
+
+function eventOf(
+  store: HumanApprovalAuthorityStore, goalRef: string,
+): StoredEvent | null | typeof UNREADABLE {
   try {
     const events = store.readEvents(goalRef).filter((event) =>
       event.aggregateId === goalRef && event.eventType === "GoalExecutionEnabled");
     return events.length === 1 ? events[0] ?? null : null;
   } catch {
-    return null;
+    // Distinguished from "no such event" by the sentinel below: `null` keeps meaning absent.
+    return UNREADABLE;
   }
 }
 
@@ -103,6 +117,7 @@ export function readHumanApprovalAuthority(input: {
   readonly store: HumanApprovalAuthorityStore;
 }): HumanApprovalAuthorityResult {
   const event = eventOf(input.store, input.goalRef);
+  if (event === UNREADABLE) return unreadable();
   if (event === null || !Number.isSafeInteger(event.aggregateSequence)
     || event.aggregateSequence < 1 || !HEX64.test(event.requestSha256)) return absent();
   const trace = event.decisionTrace;
@@ -118,7 +133,7 @@ export function readHumanApprovalAuthority(input: {
       commandId: trace.commandId, principalId: trace.principalId, projectId: input.projectId,
     });
   } catch {
-    return absent();
+    return unreadable();
   }
   if (decision === null) return absent();
   if (!decisionAgrees(decision, event, trace, input.projectId)) return subject();
@@ -126,7 +141,7 @@ export function readHumanApprovalAuthority(input: {
   try {
     receipt = input.store.getCommandReceipt(event.commandId);
   } catch {
-    return absent();
+    return unreadable();
   }
   if (receipt === null) return absent();
   if (!receiptAgrees(receipt, decision, event)) return subject();

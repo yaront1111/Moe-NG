@@ -10,6 +10,7 @@ import type { PolicyEvaluationAuthorityRefused } from
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 
 type PolicyAdmissionOwnCode =
+  | "ADMISSION_GATE_EVIDENCE_UNREADABLE"
   | "ADMISSION_GATE_POLICY_SOURCE_ABSENT"
   | "ADMISSION_GATE_SUBJECT_MISMATCH"
   | "ADMISSION_GATE_WITNESS_ABSENT";
@@ -36,11 +37,22 @@ function payloadOf(event: StoredEvent): JsonObject | null {
     || Array.isArray(value) ? null : value as JsonObject;
 }
 
-function policyEvents(store: SqliteEventStore, aggregateId: string): readonly StoredEvent[] {
+/**
+ * Returned when the READ threw. An empty list cannot carry this fact: the tail of
+ * `readPolicyAdmission` turns "no rows" into ADMISSION_GATE_POLICY_SOURCE_ABSENT, an affirmative
+ * claim that this project has never had a policy evaluated. SQLITE_BUSY after the busy timeout,
+ * a corrupt page, a poisoned handle and a closed store each produced that claim about durable
+ * state the daemon had not read, and the operator's re-install could never clear it.
+ */
+const UNREADABLE = Symbol("ADMISSION_GATE_EVIDENCE_UNREADABLE");
+
+function policyEvents(
+  store: SqliteEventStore, aggregateId: string,
+): readonly StoredEvent[] | typeof UNREADABLE {
   try {
     return store.readEvents(aggregateId).filter((event) => event.aggregateId === aggregateId);
   } catch {
-    return [];
+    return UNREADABLE;
   }
 }
 
@@ -61,6 +73,8 @@ export function readPolicyAdmission(input: {
 }): PolicyAdmissionReadResult {
   const aggregateId = policyAggregateId(input.projectId);
   const events = policyEvents(input.store, aggregateId);
+  // Fails closed exactly as an absence does, and says which of the two it is.
+  if (events === UNREADABLE) return refused("ADMISSION_GATE_EVIDENCE_UNREADABLE");
   let sawVerifiedForeignSubject = false;
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const candidate = events[index];

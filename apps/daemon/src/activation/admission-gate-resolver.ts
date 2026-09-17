@@ -52,6 +52,13 @@ import type { SqliteEventStore } from "@moe/store";
  * remains the human-approval absence and sealed-policy-supersession answer. Both confer nothing,
  * but they are durably distinguishable and must not collapse into one generic code.
  *
+ * EVIDENCE_UNREADABLE is NOT an absence and must never be collapsed into one. A store read that
+ * THREW — SQLITE_BUSY after the busy timeout, a corrupt page, a poisoned or closed handle — used
+ * to answer POLICY_SOURCE_ABSENT and WITNESS_ABSENT, which are affirmative claims about durable
+ * state nobody read: "no policy was ever evaluated", "no human approved this". The operator then
+ * re-installs or re-approves, the write succeeds, and the refusal persists because the READ is
+ * what is failing. It confers exactly as little as the absences do; it just tells the truth.
+ *
  * SUBJECT_MISMATCH is a sealed policy decision for another action, principal, graph revision,
  * or node. It stays separate from ABSENT because the authority exists but does not govern this
  * activation. SCOPE_MISMATCH likewise stays separate for a human approval that names other nodes:
@@ -59,6 +66,7 @@ import type { SqliteEventStore } from "@moe/store";
  * admit every node in the goal — the forged-witness class this module closes.
  */
 export const ADMISSION_GATE_RESOLVER_CODES = Object.freeze([
+  "ADMISSION_GATE_EVIDENCE_UNREADABLE",
   "ADMISSION_GATE_POLICY_SOURCE_ABSENT",
   "ADMISSION_GATE_SCOPE_MISMATCH",
   "ADMISSION_GATE_SUBJECT_MISMATCH",

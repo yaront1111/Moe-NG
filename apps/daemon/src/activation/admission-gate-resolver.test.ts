@@ -1044,6 +1044,7 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
   it("covers every resolver code it claims to", () => {
     // Asserted so a roster that silently grows cannot leave an untested refusal behind.
     expect([...ADMISSION_GATE_RESOLVER_CODES]).toStrictEqual([
+      "ADMISSION_GATE_EVIDENCE_UNREADABLE",
       "ADMISSION_GATE_POLICY_SOURCE_ABSENT",
       "ADMISSION_GATE_SCOPE_MISMATCH",
       "ADMISSION_GATE_SUBJECT_MISMATCH",
