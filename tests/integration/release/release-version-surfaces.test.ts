@@ -235,6 +235,14 @@ const VERSION_OCCURRENCE_EXCLUSIONS: readonly VersionOccurrenceExclusion[] = Obj
     path: "apps/daemon/src/http/activation-read.test.ts",
     pattern: /reason: "not a trust boundary in (v[0-9]+\.[0-9]+)"/u,
   },
+  // A dated review report quoting the series it reviewed. It is a record of what was true on
+  // 2026-09-05, not a surface that must track the current release.
+  {
+    expectedCurrentCaptureCount: 1,
+    id: "deep-review-report-series-quote",
+    path: "Moe-NG_Deep_Review_2026-09-05.md",
+    pattern: /The (v[0-9]+.[0-9]+) verifier's agent-modifiable workspace/u,
+  },
   // A generated product starts its own version; these are not Moe release stamps.
   {
     expectedCurrentCaptureCount: 1,
@@ -887,7 +895,7 @@ describe("release version surfaces", () => {
       discovered.map(({ key }) => key),
     );
 
-    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(16);
+    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(17);
     for (const exclusion of VERSION_OCCURRENCE_EXCLUSIONS) {
       expect(exclusion.expectedCurrentCaptureCount, `empty exclusion: ${exclusion.id}`)
         .toBeGreaterThan(0);
@@ -895,7 +903,7 @@ describe("release version surfaces", () => {
     expect(surfaces.length).toBe(13);
     // 23 since the 2026-09-16 start-refusal arm injected a second replan recovery version;
     // 24 since 5f641399's released-owners refusal arm injected a third.
-    expect(exclusions.length).toBe(24);
+    expect(exclusions.length).toBe(25);
     expect(discovered.length).toBeGreaterThan(0);
     expect(new Set(discovered.map(({ key }) => key)).size).toBe(discovered.length);
     expect(new Set(declared.map(({ key }) => key)).size).toBe(declared.length);
