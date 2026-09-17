@@ -53,6 +53,9 @@ const HUMAN_ACTIONS = ["goal.create", "approval.decide", "goal.close"] as const;
  */
 const OWNED_KINDS = [
   "approval.decide",
+  // task 0b53ccc5 added `goal.cancel`, the browser's "Abandon the product" card. It landed
+  // SERVED without growing this hand transcription, so this arm was red on main.
+  "goal.cancel",
   "goal.close",
   "goal.create",
   "goal.create_with_source",
@@ -175,12 +178,12 @@ function isHumanAction(kind: string): boolean {
 afterEach(closeStores);
 
 describe("J1 command vocabulary", () => {
-  it("publishes exactly the sixteen owned kinds from the package root", () => {
+  it("publishes exactly the seventeen owned kinds from the package root", () => {
     expect(new Set<string>(daemon.BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
     // Moved 13 -> 15 from this arm's PRINTED expected-vs-received when the two deployment kinds
     // joined the family, never from a number in a plan.
-    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(16);
-    expect(OWNED_KINDS).toHaveLength(16);
+    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(17);
+    expect(OWNED_KINDS).toHaveLength(17);
   });
 
   it("routes every owned kind to a handler reachable from the package root", () => {
@@ -248,6 +251,9 @@ const UNDRIVEN_BY_LEGACY_JOURNEY: readonly string[] = Object.freeze([
   // Synchronous, but the legacy journey binds no deploy target: its payload names a network, an
   // ssh target and a url for an environment, and the kind's own suite drives it against those.
   "deployment.set_target",
+  // The legacy journey drives a goal to CLOSE. Abandoning it is the opposite terminal act, and
+  // driving it here would end the journey before the kinds after it could run at all.
+  "goal.cancel",
 ]);
 
 describe("each command is idempotent on replay (DoD 5)", () => {

@@ -216,6 +216,10 @@ const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   "escalation.decide",
   "product_contract.answer_clarification",
   "cutover.activate",
+  // 0b53ccc5 added `goal.cancel` as an operator-only kind, so the DERIVED exclusion grew and
+  // this hand transcription did not. Abandoning a product is a human act on the same terms
+  // as closing one.
+  "goal.cancel",
   "goal.close",
   "graph.approve",
   "graph.supersede",
@@ -250,9 +254,11 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     const allowed = new Set(advertisedNames());
 
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-    expect(EXCLUSION_CASES.length).toBe(28);
+    // 29 since `goal.cancel` landed (0b53ccc5): the set is DERIVED from the operator-only
+    // kinds, so an operator act joins it automatically. Verified the 29th entry IS goal.cancel.
+    expect(EXCLUSION_CASES.length).toBe(29);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(56);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(58);
     const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
     const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
     expect(production).toEqual(expected);

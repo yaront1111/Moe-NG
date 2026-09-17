@@ -484,29 +484,39 @@ describe("/affordances/read withholds goal.close until the product is verified",
   it("withholds close after node test acceptance and landing while retaining the publish offer", () => {
     const { store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
 
+    // `goal.cancel` (0b53ccc5) is the "Abandon the product" card and is offered throughout, on
+    // purpose: it is the operator's way OUT of exactly the state this arm pins, where close is
+    // withheld because the product is not verified. The subject of this arm is unchanged —
+    // `goal.close@<goal>` appears in none of these expectations.
     // A publishable commit proves landing, while criterion evidence still gates close.
-    expect(goalOffers(store)).toEqual([]);
+    expect(goalOffers(store)).toEqual([`goal.cancel@${GOAL_ID}`]);
 
     const nodeRef = acceptNode(store, "node-slice");
 
-    expect(goalOffers(store)).toEqual([]);
+    expect(goalOffers(store)).toEqual([`goal.cancel@${GOAL_ID}`]);
 
     seedLandingReceipt(store, nodeRef, "COMMITTED");
 
     expect(goalOffers(store)).toEqual([
+      `goal.cancel@${GOAL_ID}`,
       `repository.publish@publish:${GOAL_ID}`,
     ]);
+    // The subject, asserted rather than left to the shape of the array above: no arm of this
+    // test may ever pass while `goal.close` is on offer for an unverified product.
+    expect(goalOffers(store).some((offer) => offer.startsWith("goal.close@"))).toBe(false);
   }, 30_000);
 
   it("keeps close withheld and publish available when a new contract adds criteria", () => {
     const { sha, store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
     const nodeRef = acceptNode(store, "node-slice");
     seedLandingReceipt(store, nodeRef, "COMMITTED");
-    expect(goalOffers(store)).toEqual([`repository.publish@publish:${GOAL_ID}`]);
+    const withoutClose = [`goal.cancel@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`];
+    expect(goalOffers(store)).toEqual(withoutClose);
 
     proposeRevision(store, sha, SECOND_CONTRACT_ID, "rev-close-2", ["crit-4", "crit-5"]);
 
-    expect(goalOffers(store)).toEqual([`repository.publish@publish:${GOAL_ID}`]);
+    expect(goalOffers(store)).toEqual(withoutClose);
+    expect(goalOffers(store).some((offer) => offer.startsWith("goal.close@"))).toBe(false);
   }, 30_000);
 
   it("offers a contract-less goal exactly as it did before this gate existed", () => {

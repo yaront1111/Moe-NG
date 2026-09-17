@@ -849,6 +849,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "environment.set_variable", "environment.unset_variable",
         "escalation.decide", "events.resume", "foundation.dispatch",
         "foundation.verification",
+        // 0b53ccc5: the "Abandon the product" wire. SORTED, so it files before `goal.close`.
+        "goal.cancel",
         "goal.close",
         "goal.create",
         "goal.create_with_source",

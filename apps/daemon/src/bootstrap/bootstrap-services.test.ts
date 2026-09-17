@@ -52,6 +52,9 @@ function addressedPolicySlice(
  */
 const OWNED_KINDS = [
   "approval.decide",
+  // task 0b53ccc5 added `goal.cancel`, the browser's "Abandon the product" card. It landed
+  // SERVED without growing this hand transcription, so this arm was red on main.
+  "goal.cancel",
   "goal.close",
   "goal.create",
   "goal.create_with_source",
@@ -95,12 +98,12 @@ function validEnvelope(): Record<string, unknown> {
 }
 
 describe("bootstrap command vocabulary", () => {
-  it("covers exactly the sixteen command kinds this surface owns", () => {
+  it("covers exactly the seventeen command kinds this surface owns", () => {
     expect(new Set<string>(BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
     // Moved 13 -> 15 from the PRINTED expected-vs-received of this arm when the two deployment
     // kinds joined the family, never from a number in a plan.
-    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(16);
-    expect(OWNED_KINDS).toHaveLength(16);
+    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(17);
+    expect(OWNED_KINDS).toHaveLength(17);
   });
 
   it("names only kinds that exist in the runtime command vocabulary", () => {

@@ -212,6 +212,9 @@ const UNDRIVEN_KINDS: readonly string[] = Object.freeze([
   // REGISTERED kind in deployment/migrate-down-journey.test.ts, and against a live PostgreSQL
   // in deployment/migrate-down-real.test.ts.
   "deployment.migrate_down",
+  // This journey drives a goal to CLOSE. Abandoning it (0b53ccc5) is the opposite terminal act:
+  // driving it here would end the goal before the kinds after it could run at all.
+  "goal.cancel",
 ]);
 
 /** `plan.propose` and `policy.install` each appear twice; both repeats are asserted below. */
