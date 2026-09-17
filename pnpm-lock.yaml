@@ -133,6 +133,9 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.30.0
+        version: 1.30.0
       '@moe/benchmark':
         specifier: workspace:*
         version: link:../../packages/benchmark

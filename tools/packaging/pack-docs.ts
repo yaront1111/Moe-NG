@@ -84,6 +84,31 @@ needs serving. If that directory is absent, \`moe start\` refuses before
 spawning anything with \`PROJECT_SINGLE_ASSET_ROOT_MISSING PROJECT_SINGLE_MAIN\`
 (exit 1): re-extract the zip or restore the directory.
 
+## Headless access (no browser)
+
+\`moe mcp demo\` serves that project to an MCP client over stdio. There is no
+pairing step and no CSRF token: the browser control route is walled by Host,
+Origin and a token minted when you pair, which a script or an agent session has
+no way to obtain. The MCP transport authenticates by credential instead, and
+\`moe mcp\` reads \`moe.config.json\` itself — so NO credential belongs in the
+client config below. Point a client at it with:
+
+    {"mcpServers":{"moe-next":{"command":"moe","args":["mcp","C:\\\\work\\\\demo"]}}}
+
+That session can create goals — \`goal.create\`, and \`goal.create_with_source\`
+to bind a PRD — and read state through \`work.get_context\`, \`graph.get\`,
+\`graph.preview\`, \`product_contract.read\`, \`events.read\`,
+\`documents.source_read\` and \`design.read\`.
+
+It cannot approve a plan, close or cancel a goal, choose a provider, or roll
+back a deployment. Those are refused at the transport with
+\`CAPABILITY_DENIED\` before anything is dispatched, because they are human
+acts: this wire authenticates with your operator credential, so an MCP caller
+that reached them would be indistinguishable from you in the browser.
+
+One warning: stdout on this wire carries JSON-RPC. Everything \`moe mcp\`
+itself has to say — the project it opened, and any refusal — goes to stderr.
+
 ## What this build is NOT
 
 Supervised MVP, Windows + Claude only. No code signing, no auto-update, no

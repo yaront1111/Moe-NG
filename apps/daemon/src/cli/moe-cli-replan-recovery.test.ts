@@ -146,7 +146,7 @@ it.each(["recover-replan", "start"])("%s releases the exact human-replanned owne
   });
   const recoverReplan = vi.fn(async (request) => executeReplanRecovery(w.service, "operator", request.log, request.automatic === true));
   const logs: string[] = [];
-  const code = await runMoeCli({ artifactRoot: w.workspace, argv: [command], cwd: w.workspace, env: {}, log: line => logs.push(line),
+  const code = await runMoeCli({ artifactRoot: w.workspace, argv: [command], cwd: w.workspace, diagnostic: () => {}, env: {}, log: line => logs.push(line),
     nodeVersion: "v24.16.0", packageVersion: "0.1.0", randomHex: () => "a".repeat(64),
     recoverReplan, startStack: starts, startManager: async () => 0 });
   expect(code, logs.join("\n")).toBe(0);
@@ -169,7 +169,7 @@ it.each(["RUNTIME_REVIEW_DRAIN_UNPROVEN", "MOE_CLI_REPLAN_RECOVERY_SCOPE_AMBIGUO
     });
     const logs: string[] = [];
 
-    const code = await runMoeCli({ artifactRoot: root, argv: ["start"], cwd: root, env: {}, log: line => logs.push(line),
+    const code = await runMoeCli({ artifactRoot: root, argv: ["start"], cwd: root, diagnostic: () => {}, env: {}, log: line => logs.push(line),
       nodeVersion: "v24.16.0", packageVersion: "0.1.0", randomHex: () => "a".repeat(64),
       recoverReplan, startStack: starts, startManager: async () => 0 });
 
@@ -191,7 +191,7 @@ it("start does not claim every reservation was kept when the release already fre
     ({ code: "REPOSITORY_EXECUTION_REVISION_CONFLICT", ok: false as const, released: 2 }));
   const logs: string[] = [];
 
-  const code = await runMoeCli({ artifactRoot: root, argv: ["start"], cwd: root, env: {},
+  const code = await runMoeCli({ artifactRoot: root, argv: ["start"], cwd: root, diagnostic: () => {}, env: {},
     log: line => logs.push(line), nodeVersion: "v24.16.0", packageVersion: "0.1.0",
     randomHex: () => "a".repeat(64), recoverReplan, startStack: starts, startManager: async () => 0 });
 

@@ -11,7 +11,7 @@ afterEach(() => { for (const path of scratch.splice(0)) rmSync(path, { recursive
 async function fixture(overrides: Partial<CliIo> = {}) {
   const root = mkdtempSync(join(tmpdir(), "moe-review-cli-")); scratch.push(root);
   const events: string[] = []; const lines: string[] = [];
-  const io: CliIo = { artifactRoot: root, argv: ["init"], cwd: root, env: {},
+  const io: CliIo = { artifactRoot: root, argv: ["init"], cwd: root, diagnostic: () => {}, env: {},
     log: (line) => lines.push(line), nodeVersion: "v24.16.0", packageVersion: "test",
     randomHex: () => "ab".repeat(32), startManager: async () => { events.push("manager"); return 0; },
     startStack: async () => { events.push("start"); return 0; }, ...overrides };

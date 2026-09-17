@@ -263,6 +263,11 @@ describe("runMoeUp refuses before it spawns", () => {
     expect(harness.lines.join(String.fromCharCode(10)))
       .toContain(`CLAUDE_CONFIG_DIR=${join(home, ".claude")} (defaulted)`);
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 });
@@ -278,6 +283,11 @@ describe("runMoeUp daemon argv", () => {
     expect(daemon?.argv[2]?.replaceAll("\\", "/"))
       .toMatch(/^--dependencies=.*apps\/daemon\/src\/daemon-store-dependencies\.ts$/u);
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 
@@ -287,6 +297,11 @@ describe("runMoeUp daemon argv", () => {
     expect(harness.calls[0]?.argv.filter((entry) => entry.startsWith("--port"))).toEqual([]);
     expect(harness.calls[0]?.argv).toHaveLength(3);
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 
@@ -316,6 +331,11 @@ describe("runMoeUp daemon argv", () => {
     expect(env["MOE_DAEMON_CREDENTIAL"]).toMatch(/^[0-9a-f]{64}$/u);
     expect(env["ANTHROPIC_API_KEY"]).toBe("sk-test");
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 });
@@ -350,6 +370,11 @@ describe("runMoeUp origin handshake", () => {
     expect(printed).not.toContain("hosted by the daemon");
 
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 
@@ -371,6 +396,11 @@ describe("runMoeUp origin handshake", () => {
     expect(printed).not.toContain("localhost");
 
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 
@@ -433,6 +463,11 @@ describe("runMoeUp pairing handshake", () => {
     expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
 
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 
@@ -652,6 +687,11 @@ describe("runMoeUp pairing handshake", () => {
     expect(harness.lines.join("\n")).not.toContain("#pair=");
 
     harness.calls[0]?.child.exit(0);
+    // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
+    // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
+    // whole grace. Two pairing arms tripped the 5 s timeout that way; the rest merely paid
+    // the 10 s. No-op where the arm never got far enough to spawn a wrapper.
+    harness.calls[1]?.child.exit(0);
     await harness.result;
   });
 });

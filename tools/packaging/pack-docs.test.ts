@@ -185,6 +185,32 @@ describe("INSTALL.md quotes the lines the packaged moe start prints", () => {
     expect(quoted(DOC)).toContain("PROJECT_SINGLE_ASSET_ROOT_MISSING PROJECT_SINGLE_MAIN");
   });
 
+  /**
+   * The packaged doc is the only thing an operator reads after unzipping, so an
+   * unpinned section disappears silently on the next edit. Pinned by CAPABILITY,
+   * not by prose: the tool names and the refusal code are what a reader acts on.
+   */
+  it("documents the headless MCP path with the tools it actually serves", () => {
+    expect(DOC).toContain("moe mcp");
+    expect(quoted(DOC)).toContain("goal.create_with_source");
+    // The connect recipe, and the reason no credential belongs in it.
+    expect(DOC).toContain(`{"mcpServers":{"moe-next":{"command":"moe","args":["mcp",`);
+    expect(DOC).toMatch(/NO credential belongs in this file|NO credential belongs in the\s+client config/u);
+    // Every served query kind is named, so a reader learns the read surface from
+    // the doc rather than by probing the server.
+    for (const kind of [
+      "work.get_context", "graph.get", "graph.preview", "product_contract.read",
+      "events.read", "documents.source_read", "design.read",
+    ]) {
+      expect(quoted(DOC), kind).toContain(kind);
+    }
+    // What it cannot do, and the code it gets — a reader who hits this refusal
+    // must be able to find it here.
+    expect(quoted(DOC)).toContain("CAPABILITY_DENIED");
+    // The stdout hazard is the one thing that silently corrupts a client.
+    expect(DOC).toContain("stdout on this wire carries JSON-RPC");
+  });
+
   it("names the missing-credential refusal as the two-line shape moe start prints", () => {
     // The first line is the stable code+layer the smoke matches; the doc must quote it in
     // that exact form and describe the detail as the NEXT line, which is where it goes.

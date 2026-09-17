@@ -27,6 +27,7 @@ it("resolves init and start targets from the caller cwd while retaining the arti
   const io = {
     argv: ["init", "."],
     cwd: operatorCwd,
+    diagnostic: (): void => undefined,
     env: { ANTHROPIC_API_KEY: "sk-test" },
     log: (): void => undefined,
     nodeVersion: "v24.16.0",

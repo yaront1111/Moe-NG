@@ -10,7 +10,7 @@ export const MOE_CLI_UNKNOWN_COMMAND = "MOE_CLI_UNKNOWN_COMMAND" as const;
 export const MOE_CLI_UNKNOWN_OPTION = "MOE_CLI_UNKNOWN_OPTION" as const;
 export const MOE_CLI_TOO_MANY_ARGUMENTS = "MOE_CLI_TOO_MANY_ARGUMENTS" as const;
 
-export const KNOWN_COMMANDS = Object.freeze(["init", "start", "recover-review", "recover-replan", "projects", "version", "help"] as const);
+export const KNOWN_COMMANDS = Object.freeze(["init", "start", "mcp", "recover-review", "recover-replan", "projects", "version", "help"] as const);
 
 export type CliArgvRefusalCode =
   | typeof MOE_CLI_TOO_MANY_ARGUMENTS
@@ -29,6 +29,16 @@ export interface CliStart {
   readonly ok: true;
   /** Explicitly trusts this process's stdin as the private operator channel. */
   readonly operatorStdin?: true;
+  readonly targetDir: string;
+}
+
+/**
+ * Serves one project to a headless MCP client over stdio. It takes no options:
+ * pairing is a browser concept, and this wire has no browser on the far end.
+ */
+export interface CliMcp {
+  readonly command: "mcp";
+  readonly ok: true;
   readonly targetDir: string;
 }
 
@@ -65,7 +75,9 @@ export interface CliArgvRefused {
   readonly ok: false;
 }
 
-export type CliInvocation = CliArgvRefused | CliHelp | CliInit | CliProjects | CliRecoverReview | CliRecoverReplan | CliStart | CliVersion;
+export type CliInvocation =
+  | CliArgvRefused | CliHelp | CliInit | CliMcp | CliProjects
+  | CliRecoverReview | CliRecoverReplan | CliStart | CliVersion;
 
 const DEFAULT_TARGET_DIR = ".";
 const VERSION_WORDS = Object.freeze(["--version", "-v", "version"]);
@@ -142,6 +154,13 @@ export function parseCliArgv(argv: readonly string[]): CliInvocation {
       ...(parts.options.includes(OPERATOR_STDIN) ? { operatorStdin: true as const } : {}),
       targetDir: target,
     });
+  }
+  if (head === "mcp") {
+    const bad = unknownOption(parts, []);
+    if (bad !== null) return bad;
+    const target = targetOf(parts);
+    if (typeof target !== "string") return target;
+    return Object.freeze({ command: "mcp", ok: true, targetDir: target });
   }
   if (head === "projects") {
     const bad = unknownOption(parts, [OPERATOR_STDIN]);

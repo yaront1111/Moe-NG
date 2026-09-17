@@ -61,6 +61,16 @@ describe("parseCliArgv accepts the shipped roster", () => {
     });
   });
 
+  it("defaults an argument-free mcp to the current directory", () => {
+    expect(accepted(["mcp"])).toEqual({ command: "mcp", ok: true, targetDir: "." });
+  });
+
+  it("takes the mcp target from the first positional argument", () => {
+    expect(accepted(["mcp", "D:/projexts/UnAI"])).toEqual({
+      command: "mcp", ok: true, targetDir: "D:/projexts/UnAI",
+    });
+  });
+
   it("accepts the project manager as an argument-free command", () => {
     expect(accepted(["projects"])).toEqual({ command: "projects", ok: true });
   });
@@ -96,6 +106,18 @@ describe("parseCliArgv refuses by name", () => {
     for (const command of KNOWN_COMMANDS) expect(parsed.message).toContain(command);
   });
 
+  /**
+   * The arm above walks the roster to check the MESSAGE, so adding a name to
+   * KNOWN_COMMANDS grows that arm's own iteration and it stays green even when
+   * nothing parses the new verb. This is the opposite direction: every command
+   * the binary ADVERTISES must actually be SERVED by a parse branch.
+   */
+  it("parses every command it advertises, not merely names it", () => {
+    for (const command of KNOWN_COMMANDS) {
+      expect(parseCliArgv([command]).ok, command).toBe(true);
+    }
+  });
+
   it("refuses an unknown option and names the option, not the command", () => {
     const parsed = refused(["init", "--forse"]);
     expect(parsed.code).toBe(MOE_CLI_UNKNOWN_OPTION);
@@ -111,6 +133,20 @@ describe("parseCliArgv refuses by name", () => {
   it("refuses arguments and options on the project manager command", () => {
     expect(refused(["projects", "demo"]).code).toBe(MOE_CLI_TOO_MANY_ARGUMENTS);
     expect(refused(["projects", "--port=7"]).code).toBe(MOE_CLI_UNKNOWN_OPTION);
+  });
+
+  it("refuses a second positional argument on mcp and names the extra token", () => {
+    const parsed = refused(["mcp", "a", "b"]);
+    expect(parsed.code).toBe(MOE_CLI_TOO_MANY_ARGUMENTS);
+    expect(parsed.detail).toBe("b");
+  });
+
+  /** Pairing is a browser concept; it means nothing on a JSON-RPC stdio wire. */
+  it("refuses --operator-stdin on mcp, which accepts no options at all", () => {
+    const parsed = refused(["mcp", "--operator-stdin"]);
+    expect(parsed.code).toBe(MOE_CLI_UNKNOWN_OPTION);
+    expect(parsed.detail).toBe("--operator-stdin");
+    expect(parsed.message).toContain("options for this command: none");
   });
 
   it("refuses a second positional argument rather than silently ignoring it", () => {

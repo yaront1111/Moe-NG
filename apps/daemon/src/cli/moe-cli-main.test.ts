@@ -2,10 +2,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MOE_CLI_UNKNOWN_COMMAND } from "./moe-cli-argv.js";
 import { MOE_CLI_CONFIG_ABSENT, runMoeCli } from "./moe-cli-main.js";
+import { MOE_CLI_MCP_UNAVAILABLE } from "./moe-cli-mcp.js";
 import type { CliIo, StartRequest } from "./moe-cli-main.js";
 import {
   MOE_CLI_NODE_UNSUPPORTED, MOE_CONFIG_FILENAME, MOE_CONFIG_UNREADABLE,
@@ -14,6 +15,27 @@ import {
 
 const CREDENTIAL = "5c".repeat(32);
 const scratch: string[] = [];
+
+/**
+ * `moe mcp`'s launch seam. Stubbed so the arms below observe what the verb HANDS
+ * the stdio entry without opening a store or a transport; the snapshot is taken
+ * inside the call because `runMcp` mutates the real `process.env`.
+ */
+const mcpEntry = vi.hoisted(() => ({
+  calls: [] as Array<Record<string, string | undefined>>,
+  fail: null as string | null,
+}));
+vi.mock("../mcp-main.js", () => ({
+  runMcpMain: async (): Promise<void> => {
+    mcpEntry.calls.push({ ...process.env });
+    if (mcpEntry.fail !== null) throw new Error(mcpEntry.fail);
+    return Promise.resolve();
+  },
+}));
+
+const MCP_ENV_KEYS = Object.freeze([
+  "MOE_STORE_PATH", "MOE_PROJECT_ID", "MOE_DAEMON_CREDENTIAL", "MOE_SESSION_CREDENTIAL",
+]);
 
 function temp(): string {
   const dir = mkdtempSync(join(tmpdir(), "moe-cli-"));
@@ -31,16 +53,24 @@ function expectedProjectId(targetDir: string): string {
 
 afterEach(() => {
   while (scratch.length > 0) rmSync(scratch.pop() as string, { force: true, recursive: true });
+  // `runMcp` writes the operator credential into this process's own env. Left
+  // behind it would leak into every later arm in this file.
+  for (const key of MCP_ENV_KEYS) delete process.env[key];
+  mcpEntry.calls.length = 0;
+  mcpEntry.fail = null;
 });
 
 interface Run {
   readonly code: number;
+  /** STDERR. Kept apart from `lines` so a test can prove which sink a line took. */
+  readonly diagnostics: readonly string[];
   readonly lines: readonly string[];
   readonly managerStarts: number;
   readonly starts: readonly StartRequest[];
 }
 
 async function run(artifactRoot: string, argv: readonly string[], io: Partial<CliIo> = {}): Promise<Run> {
+  const diagnostics: string[] = [];
   const lines: string[] = [];
   const starts: StartRequest[] = [];
   let managerStarts = 0;
@@ -48,6 +78,7 @@ async function run(artifactRoot: string, argv: readonly string[], io: Partial<Cl
     artifactRoot,
     argv,
     cwd: artifactRoot,
+    diagnostic: (line) => diagnostics.push(line),
     env: { ANTHROPIC_API_KEY: "sk-test" },
     log: (line) => lines.push(line),
     nodeVersion: "v24.16.0",
@@ -60,7 +91,10 @@ async function run(artifactRoot: string, argv: readonly string[], io: Partial<Cl
     },
     ...io,
   });
-  return { code, lines: Object.freeze(lines), managerStarts, starts: Object.freeze(starts) };
+  return {
+    code, diagnostics: Object.freeze(diagnostics), lines: Object.freeze(lines),
+    managerStarts, starts: Object.freeze(starts),
+  };
 }
 
 describe("moe init", () => {
@@ -392,6 +426,67 @@ describe("moe projects", () => {
   });
 });
 
+describe("moe mcp", () => {
+  it("refuses by name when the target was never initialized, on stderr", async () => {
+    const root = temp();
+    const result = await run(root, ["mcp", "demo"]);
+    expect(result.code).toBe(1);
+    // Measured at moe-cli-main.ts:27 / readConfig's absent branch — an absent
+    // config is MOE_CLI_CONFIG_ABSENT, not a parse refusal.
+    expect(result.diagnostics.join("\n")).toContain(MOE_CLI_CONFIG_ABSENT);
+    // The sink matters as much as the code: this line on stdout would corrupt
+    // a client's JSON-RPC framing.
+    expect(result.lines).toEqual([]);
+    expect(mcpEntry.calls).toEqual([]);
+  });
+
+  it("refuses a corrupted config by name and never serves it", async () => {
+    const root = temp();
+    mkdirSync(join(root, "demo"), { recursive: true });
+    writeFileSync(join(root, "demo", MOE_CONFIG_FILENAME), "{not json");
+    const result = await run(root, ["mcp", "demo"]);
+    expect(result.code).toBe(1);
+    expect(result.diagnostics.join("\n")).toContain(MOE_CONFIG_UNREADABLE);
+    expect(result.lines).toEqual([]);
+    expect(mcpEntry.calls).toEqual([]);
+  });
+
+  it("discloses a failed launch by code rather than serving a half-open wire", async () => {
+    const root = temp();
+    await run(root, ["init", "demo"]);
+    mcpEntry.fail = "STORE_DEPENDENCIES_ENV_MISSING: MOE_STORE_PATH";
+    const result = await run(root, ["mcp", "demo"]);
+    expect(result.code).toBe(1);
+    expect(result.diagnostics.join("\n")).toContain(MOE_CLI_MCP_UNAVAILABLE);
+    expect(result.lines).toEqual([]);
+  });
+
+  it("hands the stdio entry the project's own identities and keeps stdout clear", async () => {
+    const root = temp();
+    await run(root, ["init", "demo"]);
+    const project = join(root, "demo");
+    const result = await run(root, ["mcp", "demo"]);
+
+    expect(result.code).toBe(0);
+    expect(mcpEntry.calls).toHaveLength(1);
+    const env = mcpEntry.calls[0] as Record<string, string | undefined>;
+    expect(env["MOE_PROJECT_ID"]).toBe(expectedProjectId(project));
+    expect(env["MOE_STORE_PATH"]).toBe(join(project, "store.sqlite"));
+    // Both credential variables take the operator secret: an MCP caller here
+    // dispatches AS the operator, which is why the roster, not the credential,
+    // is what fences operator-only kinds off this wire.
+    expect(env["MOE_DAEMON_CREDENTIAL"]).toBe(CREDENTIAL);
+    expect(env["MOE_SESSION_CREDENTIAL"]).toBe(CREDENTIAL);
+
+    // THE WIRE ARM. Asserted as emptiness, not as "it succeeded": one banner
+    // line on stdout is a protocol error a passing exit code cannot see.
+    expect(result.lines).toEqual([]);
+    expect(result.diagnostics.join("\n")).toContain(expectedProjectId(project));
+    // Provenance names the project, never the secret.
+    expect(result.diagnostics.join("\n")).not.toContain(CREDENTIAL);
+  });
+});
+
 describe("moe version, help, and the unknown command", () => {
   it("prints the version it was built with", async () => {
     const result = await run(temp(), ["--version"], { packageVersion: "0.1.0" });
@@ -409,9 +504,10 @@ describe("moe version, help, and the unknown command", () => {
     const result = await run(temp(), ["help"]);
     expect(result.code).toBe(0);
     const text = result.lines.join("\n");
-    for (const command of ["moe init", "moe start", "moe --version"]) {
+    for (const command of ["moe init", "moe start", "moe mcp [dir]", "moe --version"]) {
       expect(text).toContain(command);
     }
+    expect(text).toContain("no browser, no pairing");
     expect(text).toContain("open the plain origin");
     expect(text).toContain("--operator-stdin");
     expect(text).toContain("[dir] defaults to the current directory");

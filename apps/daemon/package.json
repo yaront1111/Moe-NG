@@ -17,6 +17,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@moe/benchmark": "workspace:*",
     "@moe/context": "workspace:*",
     "@moe/contracts": "workspace:*",

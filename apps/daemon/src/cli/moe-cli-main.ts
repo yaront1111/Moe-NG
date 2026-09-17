@@ -60,6 +60,13 @@ export interface CliIo {
   readonly argv: readonly string[];
   /** The operator's working directory; never inferred from the extracted artifact root. */
   readonly cwd: string;
+  /**
+   * STDERR. Separate from `log` because `moe mcp` hands stdout to a JSON-RPC
+   * client: one banner line on the wrong sink corrupts the client's framing.
+   * Required, not optional, so every composition root has to answer where its
+   * diagnostics go rather than silently dropping them.
+   */
+  readonly diagnostic: (line: string) => void;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly log: (line: string) => void;
   /** INJECTED so the engines guard is testable without a second Node install. */
@@ -77,6 +84,7 @@ const USAGE = Object.freeze([
   "",
   "  moe init [dir] [--force]   scaffold a store, mint an operator credential, write the config",
   "  moe start [dir] [--operator-stdin]   start one project and print its plain control-room origin",
+  "  moe mcp [dir]             serve this project to a headless MCP client over stdio (no browser, no pairing)",
   "  moe recover-review [dir] [--operator-stdin]   drain a blocked review runtime, recover it, and restart",
   "  moe recover-replan [dir] [--operator-stdin]   release a retired replan after preserving its reviewed commit, and restart",
   "  moe projects [--operator-stdin]      open the Windows manager at its plain loopback origin",
@@ -150,7 +158,12 @@ async function runInit(invocation: CliInit, io: CliIo): Promise<number> {
   return 0;
 }
 
-function readConfig(targetDir: string, io: CliIo): MoeConfig | null {
+/**
+ * Exported for `moe mcp`, which reads the same config but must never write to
+ * stdout: it passes an `io` whose `log` is the diagnostic sink. One reader, one
+ * set of refusal codes, two destinations.
+ */
+export function readConfig(targetDir: string, io: CliIo): MoeConfig | null {
   const configPath = resolve(targetDir, MOE_CONFIG_FILENAME);
   if (!existsSync(configPath)) {
     io.log(`${MOE_CLI_CONFIG_ABSENT}: ${configPath} — run 'moe init' there first`);
@@ -238,7 +251,10 @@ async function runRecoverReview(invocation: CliRecoverReview | CliRecoverReplan,
   return runStart({ ...invocation, command: "start" }, io);
 }
 
-function preparePackagedLinks(io: CliIo, command: "projects" | "recover-review" | "recover-replan" | "start"): boolean {
+export function preparePackagedLinks(
+  io: CliIo,
+  command: "mcp" | "projects" | "recover-review" | "recover-replan" | "start",
+): boolean {
   const links = ensureWorkspaceLinks(io.artifactRoot, readLinkManifest(io.artifactRoot));
   if (!links.ok) {
     io.log(links.message);
@@ -275,6 +291,10 @@ export async function runMoeCli(io: CliIo): Promise<number> {
   }
   if (invocation.command === "init") return runInit(invocation, io);
   if (invocation.command === "recover-review" || invocation.command === "recover-replan") return runRecoverReview(invocation, io);
+  if (invocation.command === "mcp") {
+    const { runMcp } = await import("./moe-cli-mcp.js");
+    return await runMcp(invocation, io);
+  }
   if (invocation.command === "projects") {
     if (!preparePackagedLinks(io, "projects")) return 1;
     return await io.startManager({
@@ -303,6 +323,7 @@ if (isMainModule(import.meta, process.argv[1])) {
     artifactRoot,
     argv: process.argv.slice(2),
     cwd: process.cwd(),
+    diagnostic: (line) => process.stderr.write(`${line}\n`),
     env: process.env,
     log: (line) => process.stdout.write(`${line}\n`),
     nodeVersion: process.version,

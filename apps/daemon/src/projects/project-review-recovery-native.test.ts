@@ -44,7 +44,7 @@ describe.skipIf(process.platform !== "win32")("private CLI review recovery with 
         expect(await privateListenerOpen(old.port)).toBe(false);
       };
       const io: CliIo = { artifactRoot: runtimeRoot, argv: ["recover-review", project, "--operator-stdin"], cwd: project,
-        env: {}, log: (line) => { logs.push(line); }, nodeVersion: process.version, packageVersion: "private-test", randomHex: () => "ab".repeat(32),
+        diagnostic: () => {}, env: {}, log: (line) => { logs.push(line); }, nodeVersion: process.version, packageVersion: "private-test", randomHex: () => "ab".repeat(32),
         startManager: async () => { throw new Error("MANAGER_MUST_NOT_START"); },
         recoverReview: async (request) => {
           events.push("recover");
