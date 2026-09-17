@@ -231,3 +231,37 @@ export {
   sessionAuthorityCanonicalString,
 } from "./session-authority-canonical.js";
 export type { SessionProofChallengeFields } from "./session-authority-canonical.js";
+export { DIAGNOSTIC_LEVELS, admitsDiagnosticLevel, isDiagnosticLevel }
+  from "./diagnostics/diagnostic-level.js";
+export type { DiagnosticLevel } from "./diagnostics/diagnostic-level.js";
+export {
+  MAX_DIAGNOSTIC_CAUSES,
+  MAX_DIAGNOSTIC_FIELDS,
+  MAX_DIAGNOSTIC_FIELD_CHARS,
+  MAX_DIAGNOSTIC_LINE_BYTES,
+  MAX_DIAGNOSTIC_MESSAGE_CHARS,
+  MAX_DIAGNOSTIC_STACK_LINES,
+  isDiagnosticComponent,
+  isDiagnosticEventCode,
+} from "./diagnostics/diagnostic-record.js";
+export type {
+  DiagnosticFieldValue,
+  DiagnosticFields,
+  DiagnosticRecord,
+  DiagnosticThrown,
+} from "./diagnostics/diagnostic-record.js";
+export { describeThrown } from "./diagnostics/diagnostic-error.js";
+export { DIAGNOSTIC_REDACTED, encodeDiagnosticLine } from "./diagnostics/diagnostic-codec.js";
+export type { DiagnosticEncodeOptions } from "./diagnostics/diagnostic-codec.js";
+export {
+  NULL_DIAGNOSTIC_SINK,
+  createDiagnosticEmitter,
+  fanOutDiagnostics,
+  filterDiagnostics,
+} from "./diagnostics/diagnostic-sink.js";
+export type {
+  DiagnosticDetail,
+  DiagnosticEmitter,
+  DiagnosticEmitterOptions,
+  DiagnosticSink,
+} from "./diagnostics/diagnostic-sink.js";
