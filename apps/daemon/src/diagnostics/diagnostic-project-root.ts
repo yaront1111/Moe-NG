@@ -27,3 +27,29 @@ export function diagnosticProjectRoot(storePath: string, cwd: string): string {
   // `/.moe/store.db` leaves nothing in front of it, which names no project to log against.
   return root === "" ? cwd : root;
 }
+
+const CONFIG_PREFIX = "--config=";
+
+/**
+ * The project root for an entry that is handed a CONFIG path rather than a store path.
+ *
+ * `moe.config.json` sits at the project root, so its directory IS the root — and it is known
+ * before any config is parsed, which matters: the two refusals a hosted host can make first
+ * (a failed incarnation mint, an unresolvable config) happen before any binding exists, and they
+ * are exactly the refusals an operator needs recorded.
+ *
+ * Falls back to the working directory for an absent or empty flag, on the same reasoning as
+ * `diagnosticProjectRoot`: a guess writes diagnostics somewhere nobody asked for.
+ */
+export function diagnosticRootFromConfigArgv(argv: readonly string[], cwd: string): string {
+  for (const entry of argv) {
+    if (!entry.startsWith(CONFIG_PREFIX)) continue;
+    const path = entry.slice(CONFIG_PREFIX.length);
+    if (path === "") continue;
+    const segments = path.split(SEPARATOR);
+    segments.pop();
+    const root = segments.join(sep);
+    return root === "" ? cwd : root;
+  }
+  return cwd;
+}

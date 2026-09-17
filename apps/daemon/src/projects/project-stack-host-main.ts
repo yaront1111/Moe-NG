@@ -10,6 +10,10 @@ import { fileURLToPath } from "node:url";
 import provider from "../daemon-store-dependencies.js";
 import { startDaemon } from "../daemon-entry.js";
 import type { DaemonStartOptions } from "../daemon-entry.js";
+import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
+import { diagnosticRootFromConfigArgv } from "../diagnostics/diagnostic-project-root.js";
+import { teeDiagnosticLine } from "../diagnostics/diagnostic-line-tee.js";
+import { credentialValues } from "../orchestrator/credential-scrub.js";
 import { NODE_TRANSFORM_TYPES_FLAG } from "../orchestrator/moe-up-spawn.js";
 import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import {
@@ -283,8 +287,22 @@ export async function runProjectStackHostMain(
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
   const wrapperEntry = fileURLToPath(new URL("../orchestrator/agent-wrapper-main.ts", import.meta.url));
-  const hostLog = (line: string): void => { process.stderr.write(`${line}\n`); };
-  process.exitCode = await runProjectStackHostMain(process.argv.slice(2), {
+  const argv = process.argv.slice(2);
+  // THE HOSTED DAEMON'S ACCOUNT, MADE DURABLE. The root comes from the `--config` path rather
+  // than from a binding, because the first two refusals this entry can make — a failed
+  // incarnation mint and an unresolvable config — happen before any binding exists, and they are
+  // precisely the ones an operator needs after `moe start` did nothing. Stderr is unchanged.
+  const diagnostics = createDiagnosticRuntime({
+    env: process.env,
+    projectRoot: diagnosticRootFromConfigArgv(argv, process.cwd()),
+    secrets: credentialValues(process.env),
+  });
+  const hostLog = teeDiagnosticLine({
+    emitter: diagnostics.emitterFor("host"),
+    event: "HOST_LINE",
+    write: (line) => { process.stderr.write(`${line}\n`); },
+  });
+  process.exitCode = await runProjectStackHostMain(argv, {
     env: process.env,
     fs: createNodeProjectStackConfigFs(),
     incarnationId: randomUUID,

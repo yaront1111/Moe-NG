@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { diagnosticProjectRoot } from "./diagnostic-project-root.js";
+import {
+  diagnosticProjectRoot, diagnosticRootFromConfigArgv,
+} from "./diagnostic-project-root.js";
 
 const normalise = (path: string): string => path.replaceAll("\\", "/");
 
@@ -42,5 +44,34 @@ describe("diagnosticProjectRoot", () => {
 
   it("falls back when .moe IS the root, which names no project to log against", () => {
     expect(normalise(diagnosticProjectRoot("/.moe/store.db", "/work/demo"))).toBe("/work/demo");
+  });
+});
+
+describe("diagnosticRootFromConfigArgv", () => {
+  it("takes the directory holding moe.config.json", () => {
+    expect(normalise(diagnosticRootFromConfigArgv(
+      ["--config=/work/demo/moe.config.json", "--asset-root=/x"], "/elsewhere",
+    ))).toBe("/work/demo");
+  });
+
+  it("accepts Windows separators", () => {
+    const flag = `--config=${windowsPath("D:", "projexts", "demo", "moe.config.json")}`;
+
+    expect(normalise(diagnosticRootFromConfigArgv([flag], windowsPath("C:", "x"))))
+      .toBe("D:/projexts/demo");
+  });
+
+  it("falls back when no config flag is present", () => {
+    expect(normalise(diagnosticRootFromConfigArgv(["--asset-root=/x"], "/work/demo")))
+      .toBe("/work/demo");
+  });
+
+  it("falls back for an empty flag value rather than writing at the filesystem root", () => {
+    expect(normalise(diagnosticRootFromConfigArgv(["--config="], "/work/demo"))).toBe("/work/demo");
+  });
+
+  it("falls back for a bare filename, which names no directory", () => {
+    expect(normalise(diagnosticRootFromConfigArgv(["--config=moe.config.json"], "/work/demo")))
+      .toBe("/work/demo");
   });
 });
