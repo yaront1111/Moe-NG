@@ -13,10 +13,12 @@ import {
   deltaNodeWithCallerEvidence,
   driveRounds,
   envelope,
+  escalationPayload,
   finding,
   hex64,
   openStore,
   replanPayload,
+  seedVerifierReceipt,
   send,
   submitPayload,
 } from "./review-test-fixtures.js";
@@ -251,6 +253,119 @@ describe("a delta approval that cannot classify commits nothing", () => {
     expect(outcome.code).toBe("REVIEW_REPLAN_WITHOUT_ROUND");
     expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
     expect(decisionCount(store)).toBe(0);
+  });
+});
+
+/**
+ * A re-plan is agent-reachable (`review.write`), while funding another attempt or retiring the
+ * node is the human's decision (`escalation.decide`, operator-only). A re-plan may therefore never
+ * move a node's version out from under either human answer.
+ */
+describe("a re-plan never overrides a human's escalation decision", () => {
+  it("refuses while a human's approved attempt is unspent, so that attempt still reads back", () => {
+    const store = openStore();
+    driveRounds(store, 3);
+    expect(send(store, envelope("escalation.decide", 3, escalationPayload(), "cmd-allow")).ok).toBe(true);
+    const before = decisionRows(store);
+
+    const outcome = send(store, envelope("qualification.replan", 4,
+      replanPayload([deltaNode("node-1")]), "cmd-replan-over-allow"));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_CONTINUATION_ALREADY_AVAILABLE");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionRows(store)).toEqual(before);
+
+    // The grant is spendable only by the round committed at its decision version + 1. Before this
+    // refusal the re-plan took that slot, the round below still committed, and every later
+    // command on the node refused REVIEW_LINEAGE_UNREADABLE with no way back.
+    const spent = send(store, envelope("review.submit", 4,
+      submitPayload(4, [finding({ ruleId: "rule-4" })]), "cmd-round-4"));
+    expect(spent.ok, spent.ok ? "" : spent.code).toBe(true);
+    const ledger = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
+    expect(ledger).toMatchObject({ delta: undefined, unreadable: false, version: 5 });
+    expect(ledger.continuation).toBeUndefined();
+    expect(ledger.rounds).toHaveLength(4);
+    expect(ledger.rounds[3]?.continuation?.approval.decisionVersion).toBe(4);
+    // Still answerable: the human can decide again, and a re-plan is a successor once more.
+    expect(send(store, envelope("escalation.decide", 5, escalationPayload(), "cmd-allow-2")).ok).toBe(true);
+    expect(send(store, envelope("review.submit", 6,
+      submitPayload(5, [finding({ ruleId: "rule-5" })]), "cmd-round-5")).ok).toBe(true);
+    const successor = send(store, envelope("qualification.replan", 7,
+      replanPayload([deltaNode("node-1")]), "cmd-replan-after-spend"));
+    expect(successor.ok, successor.ok ? "" : successor.code).toBe(true);
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF)).toMatchObject({ unreadable: false, version: 8 });
+  });
+
+  it("refuses on a node a human retired with REPLAN, leaving that decision its terminal fact", () => {
+    const store = openStore();
+    driveRounds(store, 3);
+    expect(send(store, envelope("escalation.decide", 3, escalationPayload({ decision: "REPLAN" }),
+      "cmd-replan-decision")).ok).toBe(true);
+    const before = decisionRows(store);
+
+    const outcome = send(store, envelope("qualification.replan", 4,
+      replanPayload([deltaNode("node-1")]), "cmd-replan-retired"));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_NODE_REPLANNED");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionRows(store)).toEqual(before);
+    // The successor handoff reads the human REPLAN as the node's LAST decision with no delta
+    // (planning/replan-context.ts, repository/repository-replan-recovery-evidence.ts). A delta
+    // committed after it moved the version past that REPLAN and failed both readers closed.
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF))
+      .toMatchObject({ delta: undefined, replanned: true, unreadable: false, version: 4 });
+  });
+
+  // The funded clean round's receipt and acceptance both bind the node's version at that round,
+  // while its three failed rounds keep the decision due. A delta committed there left no command
+  // that succeeds: the round refused REVIEW_ESCALATION_REQUIRED, the decision
+  // REVIEW_ESCALATION_NOT_REACHED, and the receipt and the acceptance read stale.
+  it.each([false, true])(
+    "refuses while the clean attempt a human funded awaits acceptance (receipt already recorded: %s)",
+    (receiptFirst) => {
+      const store = openStore();
+      driveRounds(store, 3);
+      expect(send(store, envelope("escalation.decide", 3, escalationPayload(), "cmd-allow")).ok).toBe(true);
+      const clean = send(store, envelope("review.submit", 4, submitPayload(4, []), "cmd-clean-round-4"));
+      expect(clean.ok, clean.ok ? "" : clean.code).toBe(true);
+      const early = receiptFirst ? seedVerifierReceipt(store) : undefined;
+      const before = decisionRows(store);
+
+      const outcome = send(store, envelope("qualification.replan", early?.currentVersion ?? 5,
+        replanPayload([deltaNode("node-1")]), "cmd-replan-over-funded-round"));
+
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) throw new Error("expected refusal");
+      expect(outcome.code).toBe("REVIEW_ACCEPTANCE_PENDING");
+      expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+      expect(decisionRows(store)).toEqual(before);
+      const receipt = early ?? seedVerifierReceipt(store);
+      const accepted = send(store, envelope("integration.accept_output", receipt.currentVersion,
+        { receiptId: receipt.receiptId, subjectRef: SUBJECT_REF }, "cmd-accept-funded-round"));
+      expect(accepted.ok, accepted.ok ? "" : accepted.code).toBe(true);
+      // Past acceptance a re-plan is a successor again (goals/goal-live-evidence.test.ts).
+      const successor = send(store, envelope("qualification.replan", receipt.currentVersion + 1,
+        replanPayload([deltaNode("node-1")]), "cmd-replan-after-acceptance"));
+      expect(successor.ok, successor.ok ? "" : successor.code).toBe(true);
+      expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF)).toMatchObject({ unreadable: false, version: 8 });
+    },
+  );
+
+  it("still admits a re-plan over an unaccepted clean round when no decision is due", () => {
+    const store = openStore();
+    driveRounds(store, 1);
+    expect(send(store, envelope("review.submit", 1, submitPayload(2, []), "cmd-clean-round-2")).ok).toBe(true);
+
+    const outcome = send(store, envelope("qualification.replan", 2,
+      replanPayload([deltaNode("node-1")]), "cmd-replan-over-clean-round"));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    // Not a dead end: the next round is admissible without a decision.
+    expect(send(store, envelope("review.submit", 3, submitPayload(3, []), "cmd-clean-round-3")).ok).toBe(true);
   });
 });
 

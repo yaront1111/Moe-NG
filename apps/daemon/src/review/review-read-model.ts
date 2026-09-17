@@ -61,7 +61,10 @@ export interface AcceptanceRecord {
 }
 
 export interface ReviewLedger {
-  /** One unconsumed human approval. Consumed authority remains on its exact review round. */
+  /**
+   * One unconsumed human approval the next round can still spend. Consumed authority remains on
+   * its exact review round; a stranded approval (see `ledgerOf`) is not offered at all.
+   */
   readonly continuation?: ReviewContinuationApproval;
   /** The recorded acceptance, or undefined when none qualified. */
   readonly accepted: AcceptanceRecord | undefined;
@@ -178,8 +181,14 @@ function fold(
 
 function ledgerOf(acc: Accumulator, decisionCount: number): ReviewLedger {
   const latest = acc.rounds[acc.rounds.length - 1];
+  // Only the round committed at the approval's own version + 1 can spend it
+  // (`readReviewContinuationUse`). An approval another decision has already moved past is
+  // STRANDED: offering it would fund a round that reads back unreadable. The fold keeps it, so a
+  // round that spends it anyway still fails closed; it is withheld only from callers, which then
+  // need a new decision.
   return Object.freeze({
-    ...(acc.continuation === undefined ? {} : { continuation: acc.continuation }),
+    ...(acc.continuation === undefined || acc.continuation.decisionVersion !== acc.version
+      ? {} : { continuation: acc.continuation }),
     accepted: acc.accepted,
     decisionCount,
     delta: acc.delta,

@@ -97,8 +97,14 @@ export type ReviewIngressRefusalCode = (typeof REVIEW_INGRESS_REFUSAL_CODES)[num
  * version into the request identity, so a resubmit at the refreshed version raised
  * IdempotencyConflictError from the commit seam — a bare 409 — while the replay comment
  * promised "decided again from scratch". The id is spent; resubmit under a new one.
+ *
+ * `REVIEW_ACCEPTANCE_PENDING` refuses a re-plan over the clean round a human's grant funded while
+ * that round still awaits its verifier receipt and acceptance: both bind the node's version at
+ * that round, and with the decision still due no round or decision is admissible either, so a
+ * delta committed there would leave the node no command that succeeds.
  */
 export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
+  "REVIEW_ACCEPTANCE_PENDING",
   "REVIEW_ALREADY_ACCEPTED",
   "REVIEW_CONTINUATION_ALREADY_AVAILABLE",
   "REVIEW_COMMAND_BYTES_CONFLICT",

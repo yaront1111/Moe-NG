@@ -2,8 +2,8 @@ import { afterEach, expect, it } from "vitest";
 import { buildReviewPackage, recordReviewRound } from "@moe/review";
 import { readReviewLedger } from "./review-read-model.js";
 import { readReviewLedgers } from "./review-read-model.js";
-import { PROJECT_ID, SUBJECT_REF, closeStores, commitRaw, driveRounds, envelope, escalationPayload,
-  finding, openRestartableStore, openStore, packageItems, reopen, seedVerifierReceipt, send, submitPayload } from "./review-test-fixtures.js";
+import { PROJECT_ID, SUBJECT_REF, closeStores, commitRaw, deltaNode, driveRounds, envelope, escalationPayload,
+  finding, openRestartableStore, openStore, packageItems, reopen, replanPayload, seedVerifierReceipt, send, submitPayload } from "./review-test-fixtures.js";
 
 afterEach(closeStores);
 function allow(store: ReturnType<typeof openStore>, id = "allow-1") {
@@ -107,4 +107,25 @@ it("allows a human to replace an unused continuation with REPLAN and never reviv
   expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).continuation).toBeUndefined();
   expect(allow(store, "revive")).toMatchObject({ ok: false, code: "REVIEW_NODE_REPLANNED" });
   expect(next(store)).toMatchObject({ ok: false, code: "REVIEW_NODE_REPLANNED" });
+});
+
+// A store written before qualification.replan refused over an unspent grant can already hold that
+// re-plan. The grant can no longer be spent (its round would read unreadable), so it is no grant:
+// the round refuses instead of bricking the node, and the human decides the attempt afresh.
+it("never spends an approval a committed re-plan already stranded, and lets a human fund it again", () => {
+  const store = openStore(); driveRounds(store, 3); expect(allow(store).ok).toBe(true);
+  expect(commitRaw(store, envelope("qualification.replan", 4, replanPayload([deltaNode("node-1")]), "legacy-replan"), {
+    classifications: [{ classification: "INVALIDATED", nodeRef: "node-1", reasonCodes: [], sourceHash: "", targetHash: "" }],
+    successorPlanRef: "plan-revision-2",
+  }, "ReplanDeltaClassified").ok).toBe(true);
+  expect(next(store)).toMatchObject({ ok: false, code: "REVIEW_ESCALATION_REQUIRED" });
+  expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF)).toMatchObject({ unreadable: false, version: 5 });
+  expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).continuation).toBeUndefined();
+  expect(allow(store, "allow-again").ok).toBe(true);
+  expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).continuation?.decisionVersion).toBe(6);
+  expect(next(store).ok).toBe(true);
+  const ledger = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
+  expect(ledger).toMatchObject({ unreadable: false, version: 7 });
+  expect(ledger.continuation).toBeUndefined();
+  expect(ledger.rounds.at(-1)?.continuation?.approval.decisionVersion).toBe(6);
 });

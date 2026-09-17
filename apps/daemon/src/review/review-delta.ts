@@ -6,8 +6,10 @@ import type {
 } from "../planning/carry-forward-evidence.js";
 import { isPlainJsonObject } from "./review-contracts.js";
 import type { DeltaNodeClassification } from "./review-contracts.js";
+import { reviewContinuationAvailable } from "./review-continuation.js";
 import { commitAccepted, payloadArray, payloadRef, refuse } from "./review-ledger.js";
 import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
+import { reviewDecisionRequired } from "./review-stall.js";
 
 /**
  * Delta approval for a re-plan. Carry authority is unobtainable server-side today: the durable
@@ -86,6 +88,22 @@ export const classifyReplanDelta: CommandHandler = (context): ReviewOutcome => {
   }
   if (ledger.unreadable) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
+  }
+  // Funding another attempt and retiring the node are the human's answers (`escalation.decide` is
+  // operator-only); this kind is agent-reachable, and its commit moves the node's version. So it
+  // may override neither. An unspent grant can be spent only by the round committed right after
+  // it, and taking that slot made the spending round, then the whole lineage, unreadable. Past a
+  // REPLAN the successor handoff reads that decision as the node's last, with no delta after it.
+  if (ledger.replanned) return refuse(request.kind, "REVIEW_NODE_REPLANNED", "DAEMON_PREREQUISITE");
+  if (reviewContinuationAvailable(ledger)) {
+    return refuse(request.kind, "REVIEW_CONTINUATION_ALREADY_AVAILABLE", "DAEMON_PREREQUISITE");
+  }
+  // Nor may it take the version the funded attempt's clean round binds its receipt and acceptance
+  // to while the decision is still due: past that no round, decision, receipt or acceptance is
+  // admissible. Once accepted, or with no decision due, a re-plan is a successor again.
+  if (ledger.rounds.at(-1)?.routing.route === "ACCEPT" && ledger.accepted === undefined
+    && reviewDecisionRequired(ledger)) {
+    return refuse(request.kind, "REVIEW_ACCEPTANCE_PENDING", "DAEMON_PREREQUISITE");
   }
   // A re-plan is a SUCCESSOR. With no recorded round there is nothing it succeeds, and a delta
   // approval recorded against no rejection would claim a lineage it does not have.

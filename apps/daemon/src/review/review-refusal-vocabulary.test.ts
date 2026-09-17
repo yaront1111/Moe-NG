@@ -60,6 +60,7 @@ import {
 const encoder = new TextEncoder();
 
 const EXPECTED_DAEMON_CODES = [
+  "REVIEW_ACCEPTANCE_PENDING",
   "REVIEW_ALREADY_ACCEPTED",
   "REVIEW_CONTINUATION_ALREADY_AVAILABLE",
   "REVIEW_COMMAND_BYTES_CONFLICT",
@@ -131,6 +132,11 @@ function driveDaemonRefusals(): readonly string[] {
     "escalation.decide", 3, escalationPayload({ decision: "REPLAN" }), "cmd-replan-decision",
   ));
   if (!replanned.ok) throw new Error(replanned.code);
+  // Three failed rounds, a human ALLOW, and the clean round it funded, not yet accepted.
+  const fundedStore = openStore();
+  driveRounds(fundedStore, 3);
+  expect(send(fundedStore, envelope("escalation.decide", 3, escalationPayload(), "cmd-allow-funded")).ok).toBe(true);
+  expect(send(fundedStore, envelope("review.submit", 4, submitPayload(4, []), "cmd-funded-clean")).ok).toBe(true);
   const callerEvidenceStore = openStore();
   driveRounds(callerEvidenceStore, 1);
   const corruptStore = openStore();
@@ -234,6 +240,9 @@ function driveDaemonRefusals(): readonly string[] {
     ))),
     daemonCode("replan with no round to succeed", send(openStore(), envelope(
       "qualification.replan", 0, replanPayload([deltaNode("node-1")]),
+    ))),
+    daemonCode("replan over a funded clean round awaiting acceptance", send(fundedStore, envelope(
+      "qualification.replan", 5, replanPayload([deltaNode("node-1")]), "cmd-replan-funded",
     ))),
     daemonCode("escalation below the limit", send(openStore(), envelope(
       "escalation.decide", 0, escalationPayload(),
