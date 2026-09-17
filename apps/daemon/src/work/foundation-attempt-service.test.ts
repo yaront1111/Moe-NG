@@ -1562,7 +1562,11 @@ describe("foundation attempt dispatch — request fencing", () => {
       fixture.store, fixture.bound, fixture.record, { ...fixture.value, observation });
 
     expect(admitted).not.toBeNull();
-    expect(admitted?.[0]).toMatchObject({
+    // Not the unreadable sentinel either: this arm is about an ADMITTED observation, and a
+    // store fault answering here would otherwise read as one.
+    expect(typeof admitted).not.toBe("symbol");
+    const pair = admitted as readonly [unknown, unknown];
+    expect(pair[0]).toMatchObject({
       contextManifestDigest: observation.contextManifestDigest, deliveredByteLength,
     });
   });
@@ -2220,7 +2224,11 @@ function provenGround(label: string): ProvenGround {
   const fixture = durableObservedFixture(label);
   const observed = readDurableFoundationObservation(
     fixture.store, fixture.bound, fixture.record, fixture.value);
-  if (observed === null) throw new Error("durable observation fixture was refused");
+  // Both refusals, apart: `null` is a durable tail that disagrees, the symbol is a store that
+  // could not be read. A ground fixture must hit neither.
+  if (observed === null || typeof observed === "symbol") {
+    throw new Error("durable observation fixture was refused");
+  }
   reserveDispatch(fixture.store, fixture.bound, fixture.record);
   return {
     bound: fixture.bound, observation: observed[0], record: fixture.record,

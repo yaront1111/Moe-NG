@@ -235,6 +235,18 @@ export function createFoundationAttemptServiceWithProviderRun(
     }
     // Settlement consumes the launcher's own untouched result.
     const observed = readDurableFoundationObservation(store, bound, record, launched.result);
+    // THE STREAM COULD NOT BE READ, which is not the same fact as a tail that disagrees. The
+    // SETTLE DIRECTION IS DELIBERATELY UNCHANGED — an attempt whose tail cannot be read must not
+    // earn the resumable release reason, exactly as `unproven` argues — but the durable row now
+    // names the store read instead of inheriting FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN, which blamed
+    // a launch that had in fact succeeded. `settleUnprovenFoundationAttempt` reads the reason off
+    // this result, so the honest code travels with no new mechanism. Matched by `typeof`: the
+    // sentinel is the only symbol this union can hold, and it narrows the tuple arm below.
+    if (typeof observed === "symbol") {
+      return unproven(bound, record, manifest, {
+        code: "FOUNDATION_ATTEMPT_ACTIVATION_UNREADABLE", layer: DAEMON_FOUNDATION_ATTEMPT,
+      });
+    }
     if (observed === null) {
       return unproven(bound, record, manifest, launched.result as unknown as Record<string, unknown>);
     }

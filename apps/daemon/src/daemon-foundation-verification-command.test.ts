@@ -690,7 +690,11 @@ function driftProvenAttempt(store: SqliteEventStore, label: string, tree: Candid
     ok: true, registration: { ...DRIFT_REGISTRATION }, truthClass: "PROVEN",
   };
   const observed = readDurableFoundationObservation(store, bound, record, value);
-  if (observed === null) throw new Error("durable observation fixture was refused");
+  // Both refusals, apart: `null` is a durable tail that disagrees, the symbol is a store that
+  // could not be read. A fixture must hit neither.
+  if (observed === null || typeof observed === "symbol") {
+    throw new Error("durable observation fixture was refused");
+  }
   const reservation = encodeFoundationPayload({
     activationDigest: record.activationDigest, attemptAggregateId: bound.aggregateId,
     attemptId: record.attempt.attemptId, grantId: record.grant.grantId, nodeKey: bound.nodeKey,

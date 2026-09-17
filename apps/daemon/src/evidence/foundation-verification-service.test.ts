@@ -324,7 +324,11 @@ function ground(
     ok: true, registration: { ...REGISTRATION }, truthClass: "PROVEN",
   };
   const observed = readDurableFoundationObservation(store, bound, record, value);
-  if (observed === null) throw new Error("durable observation fixture was refused");
+  // Both refusals, apart: `null` is a durable tail that disagrees, the symbol is a store that
+  // could not be read. A fixture must hit neither.
+  if (observed === null || typeof observed === "symbol") {
+    throw new Error("durable observation fixture was refused");
+  }
   // The RECORDED event commits at expectedVersion 1, so the dispatch aggregate
   // must already carry its RESERVED event — the production reservation, not a
   // shortcut around it.

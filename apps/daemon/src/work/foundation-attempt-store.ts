@@ -73,12 +73,21 @@ function sameObservation(
     && value["processIdentity"] === registration["processIdentity"];
 }
 
+/**
+ * The activation stream could not be READ. Distinct from `null`, which means the stream WAS read
+ * and does not back the launcher's result — a different fact and a different repair. This read
+ * is reached only after the provider process launched and its run row committed, so answering
+ * `null` for a store fault made the daemon settle the run it had just performed as never proven,
+ * under a code naming the LAUNCH as unknown when the launch was fine.
+ */
+export const FOUNDATION_ACTIVATION_UNREADABLE = Symbol("FOUNDATION_ACTIVATION_UNREADABLE");
+
 /** A PROVEN launcher answer is usable only when the same durable aggregate now
  * carries the complete grant -> preflight -> process tail for that identity. */
 export function readDurableFoundationObservation(
   store: SqliteEventStore, bound: FoundationAttemptBound, record: ActivationLedgerRecord,
   value: unknown,
-): readonly [unknown, unknown] | null {
+): readonly [unknown, unknown] | null | typeof FOUNDATION_ACTIVATION_UNREADABLE {
   const result = snapshotFoundationRecord(value, RESULT_KEYS);
   if (result === null || result["kind"] !== "OBSERVED" || result["ok"] !== true
     || result["truthClass"] !== "PROVEN" || result["code"] !== null
@@ -88,7 +97,11 @@ export function readDurableFoundationObservation(
   const observation = snapshotFoundationRecord(result["observation"], OBSERVATION_KEYS);
   if (consumedGrant === null || registration === null || observation === null) return null;
   let events: readonly StoredEvent[];
-  try { events = store.readEvents(bound.aggregateId); } catch { return null; }
+  try {
+    events = store.readEvents(bound.aggregateId);
+  } catch {
+    return FOUNDATION_ACTIVATION_UNREADABLE;
+  }
   const history = readFoundationActivationHistory(bound.aggregateId, events, bound.projectId);
   if (!history.ok || history.history.transitions.length !== 3) return null;
   const durable = history.history.record;
