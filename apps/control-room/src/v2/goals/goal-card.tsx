@@ -9,6 +9,7 @@ import type { GoalCardModel, GoalFact, GoalStateLabel, HeadlineTone } from "./go
 const STATE_WORDS: Readonly<Record<GoalStateLabel, string>> = Object.freeze({
   ACTIVE: "Active",
   BLOCKED: "Blocked",
+  CANCELLED: "Abandoned",
   DONE: "Done",
   DRAFT: "Draft",
 });

@@ -206,17 +206,28 @@ function withCoverage(
   const complete = criteria > 0 && verified === criteria && !pending;
   const gate = pending ? "Gate 1 pending" : "contract approved";
   // The lifecycle is the daemon fold of the goal aggregate; DONE is exactly COMPLETED.
+  // A goal.cancel commits GoalCancelled, folding the goal to CANCELLED. Before this
+  // branch a cancelled goal fell through to `card.state` (DRAFT) and kept the
+  // "N of M acceptance criteria verified \u00b7 contract approved" headline, so an
+  // abandoned product read as an untouched draft that was still being worked. It is
+  // terminal like DONE: the acceptance count is frozen, not a live target, so the
+  // headline says the product was abandoned rather than restating unmet criteria.
   const lifecycle = outcome.goals.find((goal) => goal.goalId === card.goalId)?.lifecycle ?? null;
-  const state: GoalCardModel["state"] = lifecycle === "COMPLETED" ? "DONE"
+  const cancelled = lifecycle === "CANCELLED";
+  const state: GoalCardModel["state"] = cancelled ? "CANCELLED"
+    : lifecycle === "COMPLETED" ? "DONE"
     : lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" ? "ACTIVE" : card.state;
+  const headline = cancelled
+    ? `Abandoned \u00b7 ${String(verified)} of ${String(criteria)} acceptance criteria verified when work stopped`
+    : complete
+      ? `All ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`
+      : `${String(verified)} of ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`;
   return Object.freeze({
     ...card,
-    headline: complete
-      ? `All ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`
-      : `${String(verified)} of ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`,
-    headlineTone: complete ? "verified" : "accent",
+    headline,
+    headlineTone: cancelled ? "danger" : complete ? "verified" : "accent",
     lastEventLabel,
-    needsYou: pending,
+    needsYou: cancelled ? false : pending,
     progress: criteria === 0 ? undefined : Object.freeze({
       done: verified, noun: "acceptance criteria verified", total: criteria,
     }),

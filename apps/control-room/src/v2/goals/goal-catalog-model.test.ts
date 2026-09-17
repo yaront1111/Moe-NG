@@ -324,10 +324,26 @@ describe("deriveGoalCatalog maps the coverage read's goal lifecycle onto the sta
   });
   it.each([
     ["COMPLETED", "DONE"], ["EXECUTION_ENABLED", "ACTIVE"], ["CLOSING", "ACTIVE"],
+    ["CANCELLED", "CANCELLED"],
     ["PLAN_REVIEW", "DRAFT"], ["DRAFT", "DRAFT"], [null, "DRAFT"],
   ])("lifecycle %s renders as %s", (lifecycle, state) => {
     const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", withLifecycle(lifecycle)]])).goals[0];
     expect(card?.state).toBe(state);
+  });
+
+  // An abandoned product is terminal: it must not restate its frozen acceptance count as
+  // "N of M verified · contract approved" (which reads as live, unfinished work), and it
+  // must never demand attention. The count is folded into an "Abandoned" headline instead.
+  it("marks a CANCELLED goal abandoned, freezes its count, and clears needs-you", () => {
+    const card = deriveGoalCatalog(
+      catalog([entry]), new Map([["goal-cov", withLifecycle("CANCELLED")]]),
+    ).goals[0];
+    expect(card?.state).toBe("CANCELLED");
+    expect(card?.headline).toBe(
+      "Abandoned · 2 of 2 acceptance criteria verified when work stopped",
+    );
+    expect(card?.headlineTone).toBe("danger");
+    expect(card?.needsYou).toBe(false);
   });
 });
 
