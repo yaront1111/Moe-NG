@@ -283,6 +283,36 @@ describe("hostedDaemonStartOptions", () => {
       expect(options.assetSecrets).toEqual([CREDENTIAL]);
     }
   });
+
+  it("carries a log through, which is the daemon's whole log channel on this path", () => {
+    // `DaemonStartOptions.log` is forwarded straight into the listener. While this object
+    // omitted it, `listening on <origin>` and LISTENER_REQUEST_FAILED — the only host-side
+    // record that a route answered 500 — were both `log?.()` no-ops on the path `moe start`
+    // takes. `moe-daemon` and `moe up` never had the hole; both pass a log of their own.
+    const resolved = resolveProjectStackConfig({
+      argv: [`--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`],
+      env: { ...env, MOE_OPERATOR_CHANNEL: "true" },
+      fs: configFs(),
+    });
+    if (!resolved.ok) throw new Error(resolved.code);
+    const lines: string[] = [];
+
+    const options = hostedDaemonStartOptions(resolved.bindings, (line) => { lines.push(line); });
+    options.log?.("listening on http://127.0.0.1:1234");
+
+    expect(lines).toEqual(["listening on http://127.0.0.1:1234"]);
+  });
+
+  it("omits the log when none is supplied, so the old callers are byte-identical", () => {
+    const resolved = resolveProjectStackConfig({
+      argv: [`--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`],
+      env: { ...env, MOE_OPERATOR_CHANNEL: "true" },
+      fs: configFs(),
+    });
+    if (!resolved.ok) throw new Error(resolved.code);
+
+    expect("log" in hostedDaemonStartOptions(resolved.bindings)).toBe(false);
+  });
 });
 
 describe("wrapperHandleFor", () => {

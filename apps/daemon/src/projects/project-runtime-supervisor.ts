@@ -24,7 +24,15 @@ export type ProjectRuntimeActionResult = ProjectRuntimeAccepted | ProjectRuntime
 export type ProjectRuntimeCompletionResult = ProjectRuntimeRefused | Readonly<{ readonly code: "PROJECT_RUNTIME_COMPLETED"; readonly exitCode: number; readonly layer: typeof PROJECT_RUNTIME_SUPERVISOR_LAYER; readonly ok: true }>;
 export type ProjectRuntimeOpenResult = ProjectRuntimeActionResult | Readonly<{ readonly code: "PROJECT_RUNTIME_OPENED"; readonly layer: typeof PROJECT_RUNTIME_SUPERVISOR_LAYER; readonly ok: true; readonly origin: string }>;
 export interface ProjectRuntimeSupervisorOptions { readonly timeoutMs?: number;
-  readonly openBoundary: (entry: ProjectCatalogEntry) => ProjectRuntimeBoundary | ProjectRuntimeBoundaryUnknown }
+  readonly openBoundary: (entry: ProjectCatalogEntry) => ProjectRuntimeBoundary | ProjectRuntimeBoundaryUnknown;
+  /**
+   * Each line the stack host writes to stderr. ABSENT KEEPS THE OLD BEHAVIOUR EXACTLY: the
+   * stream is still fully consumed, because back-pressure on it hangs the host, and the bytes
+   * are still discarded. Supplied, it is the only way the host's config refusals, uncaught
+   * exceptions and `STORE_DEPENDENCIES_ENV_MISSING: <the exact variables>` reach anybody — that
+   * channel is why `moe start` failed as a bare timeout with the cause already destroyed.
+   */
+  readonly observeHostStderr?: (entry: ProjectCatalogEntry, line: string) => void }
 export interface ProjectRuntimeSupervisor {
   approvePairing(instanceId: string, confirmationLabel: string): Promise<ProjectRuntimeActionResult>;
   list(entries: readonly ProjectCatalogEntry[]): readonly ProjectRuntimeView[];
@@ -102,7 +110,11 @@ export function createProjectRuntimeSupervisor(options: ProjectRuntimeSupervisor
     );
   }
   function startSession(record: RuntimeRecord, boundary: ProjectRuntimeBoundary): ProjectRuntimeSession {
-    void drainProjectRuntimeStderr(boundary.providerStderr);
+    const observe = options.observeHostStderr;
+    void drainProjectRuntimeStderr(
+      boundary.providerStderr,
+      observe === undefined ? undefined : (line) => { observe(record.entry, line); },
+    );
     return new ProjectRuntimeSession({
       instanceId: record.entry.instanceId, projectId: record.entry.projectId,
       onTerminal: (exitCode) => {

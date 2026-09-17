@@ -254,7 +254,60 @@ export class ProjectRuntimeSession {
   }
 }
 
-/** Consumes stderr to prevent child backpressure; bytes are deliberately discarded. */
-export async function drainProjectRuntimeStderr(stderr: Readable): Promise<void> {
-  try { for await (const _chunk of stderr) { /* discard */ } } catch { /* discard */ }
+/** One host stderr line, bounded. A host printing a megabyte costs the same as a quiet one. */
+export const MAX_HOST_STDERR_LINE_BYTES = 16_384;
+
+/**
+ * Consumes stderr to prevent child backpressure, and OFFERS each whole line to `observe`.
+ *
+ * The consumption is the load-bearing part and is unchanged: a full stderr pipe blocks the
+ * stack host, which is why this drain exists. What changed is that the bytes are no longer
+ * only discarded. This stream is the single channel carrying the host's config refusals, its
+ * uncaught exceptions and stack traces, and `STORE_DEPENDENCIES_ENV_MISSING: <the exact
+ * variables>` — an operator sentence that was formatted and then destroyed, leaving `moe start`
+ * to fail ten seconds later as a bare PROJECT_RUNTIME_START_TIMEOUT with no cause anywhere.
+ *
+ * Bounded on both axes, because the process least able to afford work is the one that is
+ * failing: one line is capped, and a stream that never sends a newline is cut into capped
+ * pieces rather than buffered whole. An observer that throws is contained — a broken sink must
+ * never stop the draining and hang the host.
+ */
+export async function drainProjectRuntimeStderr(
+  stderr: Readable, observe?: (line: string) => void,
+): Promise<void> {
+  let pending = "";
+  const offer = (line: string): void => {
+    const text = line.endsWith("\r") ? line.slice(0, -1) : line;
+    if (text === "") return;
+    try {
+      observe?.(text);
+    } catch {
+      // A broken observer is not the host's problem, and the drain must not stop for it.
+    }
+  };
+  try {
+    for await (const chunk of stderr) {
+      if (observe === undefined) continue;
+      pending += String(chunk);
+      for (;;) {
+        const at = pending.indexOf("\n");
+        if (at >= 0) {
+          offer(pending.slice(0, at));
+          pending = pending.slice(at + 1);
+          continue;
+        }
+        // No newline in sight: cut at the bound rather than growing without limit.
+        if (pending.length > MAX_HOST_STDERR_LINE_BYTES) {
+          offer(pending.slice(0, MAX_HOST_STDERR_LINE_BYTES));
+          pending = pending.slice(MAX_HOST_STDERR_LINE_BYTES);
+          continue;
+        }
+        break;
+      }
+    }
+  } catch {
+    // Unchanged: a broken pipe is the ordinary end of a dead child, not a fault to report here.
+  }
+  // The host's last words often arrive without a terminating newline, because it died.
+  offer(pending.slice(0, MAX_HOST_STDERR_LINE_BYTES));
 }

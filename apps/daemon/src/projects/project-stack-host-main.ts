@@ -174,12 +174,26 @@ export async function* projectStackControlLines(input: Readable): AsyncIterable<
  * told a piped-stdio operator to type a label nobody read (measured 2026-09-13, Git Bash,
  * `process.stdin.isTTY` undefined, no consumer attached).
  */
-export function hostedDaemonStartOptions(bindings: ProjectStackBindings): DaemonStartOptions {
+/**
+ * `log` IS THE WHOLE DAEMON LOG CHANNEL ON THE PATH `moe start` ACTUALLY TAKES.
+ *
+ * `DaemonStartOptions.log` is forwarded straight into the listener, so while this object omitted
+ * it, `listening on <origin>` and LISTENER_REQUEST_FAILED — the only host-side record that a
+ * route answered 500 — were both `log?.()` no-ops. The control room was up and a failing route
+ * left no line anywhere; restart-to-reproduce was the only diagnostic. `moe-daemon` and `moe up`
+ * never had this hole because both pass a log of their own.
+ *
+ * Optional so the existing single-argument callers keep their exact behaviour.
+ */
+export function hostedDaemonStartOptions(
+  bindings: ProjectStackBindings, log?: (line: string) => void,
+): DaemonStartOptions {
   return Object.freeze({
     assetRoot: bindings.assetRoot,
     assetSecrets: [bindings.credential],
     dependencies: provider,
     pairingOperatorChannelAvailable: bindings.operatorChannelAvailable,
+    ...(log === undefined ? {} : { log }),
   });
 }
 
@@ -269,14 +283,17 @@ export async function runProjectStackHostMain(
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
   const wrapperEntry = fileURLToPath(new URL("../orchestrator/agent-wrapper-main.ts", import.meta.url));
+  const hostLog = (line: string): void => { process.stderr.write(`${line}\n`); };
   process.exitCode = await runProjectStackHostMain(process.argv.slice(2), {
     env: process.env,
     fs: createNodeProjectStackConfigFs(),
     incarnationId: randomUUID,
     input: process.stdin,
-    log: (line) => process.stderr.write(`${line}\n`),
+    log: hostLog,
     prepareRepository: prepareRuntimeMetadataExcludes,
-    startDaemon: async (bindings) => startDaemon(hostedDaemonStartOptions(bindings)),
+    // The daemon's lines join the host's own, on STDERR — stdout carries the protocol frames
+    // the supervisor parses, and a `listening on ...` line written there would be read as one.
+    startDaemon: async (bindings) => startDaemon(hostedDaemonStartOptions(bindings, hostLog)),
     startWrapper: (bindings) => startNodeWrapper(bindings, process.env, wrapperEntry),
     write: (line) => { process.stdout.write(line); },
   });
