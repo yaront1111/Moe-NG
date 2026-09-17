@@ -34,14 +34,19 @@ const LAYER = "DAEMON_RUN_POLICY_SELECTION" as const;
 export type RunPolicySelectionLayer = typeof LAYER;
 
 /**
- * Five codes, one per mechanism that can answer. They are deliberately NOT collapsed:
+ * Six codes, one per mechanism that can answer. They are deliberately NOT collapsed:
  * `ABSENT` (no row) and `ROW_UNREADABLE` (a row exists and will not decode) are different
  * operator problems, and folding the second into the first would let a corrupt row read as
  * "this run was never evaluated" — which the seam would then report as a fact still to be
  * produced rather than as durable state that needs repair.
+ *
+ * `STORE_UNREADABLE` is that same rule applied to the read itself, which the catch below used to
+ * break: a store that cannot answer became the empty list and therefore `ABSENT`, the one claim
+ * this roster exists to keep apart from unread durable state.
  */
 export const RUN_POLICY_SELECTION_CODES = Object.freeze([
   "RUN_POLICY_SELECTION_ABSENT",
+  "RUN_POLICY_SELECTION_STORE_UNREADABLE",
   "RUN_POLICY_SELECTION_AMBIGUOUS",
   "RUN_POLICY_SELECTION_ROW_UNREADABLE",
   "RUN_POLICY_SELECTION_RUN_MISMATCH",
@@ -80,20 +85,29 @@ function refuse(
     : Object.freeze({ code, layer: LAYER, ok: false as const, upstream: Object.freeze(upstream) });
 }
 
+/** The read THREW. An empty list cannot carry that: the tail turns one into `ABSENT`. */
+const UNREADABLE = Symbol("RUN_POLICY_SELECTION_STORE_UNREADABLE");
+
 /**
  * The run's own `PolicyEvaluated` rows.
  *
- * A store throw yields the empty list, which surfaces as `ABSENT` — the same containment
- * `approval-policy-ref.ts:29-33` applies. That is fail-closed at the seam: the caller's next
- * move is to refuse for a missing fact either way, and no unread row can become a tier.
+ * A store throw used to yield the empty list, which surfaces as `ABSENT`. Fail-closed, and the
+ * caller does refuse either way — but the DIAGNOSIS was wrong, and it is the diagnosis this
+ * seam exists to carry: `approval-record-facts.ts` forwards this code verbatim as the single
+ * `upstream` on APPROVAL_INTENT_RISK_TIER_UNAVAILABLE, and `release-auto-approval.ts` reads the
+ * same absence as an unresolved tier and silently declines to auto-release a goal it is
+ * entitled to release. "Never evaluated" sends the operator to produce a fact that already
+ * exists; "could not read" sends them to the store.
  */
-function runRows(store: SqliteEventStore, aggregateId: string): readonly StoredEvent[] {
+function runRows(
+  store: SqliteEventStore, aggregateId: string,
+): readonly StoredEvent[] | typeof UNREADABLE {
   try {
     return store.readEvents(aggregateId).filter(
       (event) => event.aggregateId === aggregateId && event.eventType === RUN_POLICY_EVENT_TYPE,
     );
   } catch {
-    return [];
+    return UNREADABLE;
   }
 }
 
@@ -118,6 +132,8 @@ export function readRunPolicyEvaluation(
 ): RunPolicySelectionResult {
   const aggregateId = runPolicyAggregateId(request.runId);
   const rows = runRows(store, aggregateId);
+  // Fails closed exactly as ABSENT does, and says which of the two it is.
+  if (typeof rows === "symbol") return refuse("RUN_POLICY_SELECTION_STORE_UNREADABLE");
   if (rows.length === 0) return refuse("RUN_POLICY_SELECTION_ABSENT");
   if (rows.length > 1) return refuse("RUN_POLICY_SELECTION_AMBIGUOUS");
   const row = rows[0];

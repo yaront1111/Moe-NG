@@ -300,6 +300,14 @@ describe("readRunPolicyEvaluation — the run's own evaluation, never the newest
       );
     });
 
+    // The store itself refuses to answer. Driven directly rather than through `drive`, which
+    // seeds a real store: the point of this arm is a read that never lands at all.
+    const unreadable = readRunPolicyEvaluation(
+      { readEvents: (): never => { throw new Error("SQLITE_BUSY"); } } as unknown as SqliteEventStore,
+      { projectId: PROJECT_ID, runId: RUN_ID },
+    );
+    if (!unreadable.ok) served.add(unreadable.code);
+
     expect([...served].sort()).toStrictEqual([...RUN_POLICY_SELECTION_CODES].sort());
   });
 
