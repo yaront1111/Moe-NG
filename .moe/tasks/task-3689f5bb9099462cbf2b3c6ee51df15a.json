@@ -1,0 +1,30 @@
+{
+  "id": "task-3689f5bb9099462cbf2b3c6ee51df15a",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Verifier DB provisioning must be product-configurable: image, DB-URL env vars, and TLS",
+  "description": "MEASURED LIVE (UnAI, 2026-09-17): every DB-backed node fails the daemon verifier and loops to the review ceiling. goal-b2cc3b54's foundation node (257b0697) climbed to round 9+ ESCALATE despite 325 passing tests, purely because the daemon's verifier cannot provision the database the product needs.\n\nROOT CAUSE (apps/daemon/src/orchestrator/verifier-database.ts, DisposableDatabase): it hard-codes `postgres:17-alpine` (line ~161, no pgvector, no TLS) and injects ONLY `DATABASE_URL` (line ~34/188). But the UnAI product's `pnpm db:migrate` (packages/postgres/src/migrate-cli.ts) does:\n  const url = process.env.UNAI_MIGRATION_DATABASE_URL;\n  const caPath = process.env.UNAI_DATABASE_CA_PATH;\n  if (!url || !caPath) throw new Error('MIGRATION_TLS_CONFIGURATION_REQUIRED');\n  new Pool({ connectionString:url, ssl:{ ca:readFile(caPath), rejectUnauthorized:true }, ... })\nSo it refuses before any migration (`MIGRATION_FAILED file:null`) → verifier exit 1 → FAILED_ROUND_RECORDED. The seats diagnosed this exactly and refused to weaken the product's TLS to get around it (correct). This is a bootstrap gap: the verifier is what's broken, so product-building seats cannot fix it — it must be fixed in the daemon.\n\nFIX (make verifier DB provisioning product/operator-configurable):\n- Env-driven config read at verifier construction (agent-wrapper-main.ts, createVerifierDatabaseRunner): MOE_VERIFIER_DB_IMAGE (default postgres:17-alpine), MOE_VERIFIER_DB_URL_VARS (comma list, default DATABASE_URL), MOE_VERIFIER_DB_TLS (1/true/on), MOE_VERIFIER_DB_CA_VAR (env var name for the CA path).\n- DisposableDatabase: use the configured image; inject the generated URL under EVERY urlVariable; when tls, provision TLS and inject the CA path under caPathVariable.\n- TLS approach (product uses ssl verify-ca, rejectUnauthorized:true): generate ONE self-signed cert with subjectAltName=IP:127.0.0.1 and basicConstraints=CA:TRUE INSIDE the container (its own openssl, no host dependency), place it as server.crt/server.key in the data dir (chown postgres, chmod 600 key), enable ssl via ALTER SYSTEM + pg_reload_conf(), then extract the cert to a host temp file used as BOTH the server cert and the client CA. Client verifies the self-signed server cert against that same cert; SAN IP:127.0.0.1 satisfies hostname check for the loopback-mapped port.\n- Keep current behavior byte-identical when the env config is absent (image postgres:17-alpine, DATABASE_URL only, no TLS).\n- Operator wiring: UnAI .moe-next/start.ps1 sets the four MOE_VERIFIER_DB_* vars.\n\nDocker note: the verifier already forwards DOCKER_* client vars; TLS work is docker exec inside the same disposable container, cleaned up on the same path.",
+  "definitionOfDone": [
+    "verifier-database.ts provisions a configurable image and injects the generated DB URL under every configured url-variable; unit test (injectable spawn) asserts the docker run image and the delivered env keys for both default and configured cases.",
+    "When TLS is configured, the runner generates a self-signed cert (SAN IP:127.0.0.1, CA:TRUE) in-container, enables Postgres ssl, extracts the cert to a host file, and injects that path under the configured CA variable; unit test asserts the docker exec command shape (openssl args, ALTER SYSTEM ssl, pg_reload_conf, cert extraction) and that the CA path + URL vars are delivered.",
+    "Absent env config => byte-identical to today (postgres:17-alpine, DATABASE_URL only, no TLS); a regression test pins this.",
+    "End-to-end on real Docker: a product whose db:migrate requires UNAI_MIGRATION_DATABASE_URL + UNAI_DATABASE_CA_PATH and pgvector migrates and verifies GREEN under the fixed verifier (validated on the UnAI build; the node that looped now reaches accepted).",
+    "Reason codes preserved: a genuine migration failure still reports MIGRATION_FAILED with a safe basename; a missing/DOWN docker still reports DOCKER_UNAVAILABLE; no secret (password, URL, key) reaches operator-facing output."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 161,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-17T21:33:32.308Z",
+  "updatedAt": "2026-09-17T21:33:32.308Z"
+}
