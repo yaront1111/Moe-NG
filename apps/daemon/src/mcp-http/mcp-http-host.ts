@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { createHttpMcpAdapter } from "@moe/mcp";
 import type { HttpMcpAdapter } from "@moe/mcp";
 
+import { describeBindFailure } from "../http/bind-failure-detail.js";
 import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "../http/http-contract.js";
@@ -59,7 +60,12 @@ export interface McpHttpHostOptions {
 }
 
 export type McpHttpStartResult =
-  | { readonly ok: false; readonly code: McpHttpHostRefusalCode }
+  | {
+    readonly ok: false;
+    readonly code: McpHttpHostRefusalCode;
+    /** The bind facts an operator acts on: `listen EADDRINUSE 127.0.0.1:8080`. One line, no stack. */
+    readonly detail?: string;
+  }
   | { readonly ok: true; readonly origin: string; readonly port: number };
 
 /** Closed refusal vocabulary for the host's own lifecycle. No other code is selectable. */
@@ -110,8 +116,8 @@ function originOf(host: string, port: number): string {
   return `http://${authority}:${String(port)}`;
 }
 
-function refuse(code: McpHttpHostRefusalCode): McpHttpStartResult {
-  return Object.freeze({ code, ok: false as const });
+function refuse(code: McpHttpHostRefusalCode, detail?: string): McpHttpStartResult {
+  return Object.freeze({ code, ...(detail === undefined ? {} : { detail }), ok: false as const });
 }
 
 function closeServer(server: Server): Promise<void> {
@@ -227,16 +233,20 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
       const address = listener.address();
       if (address === null || typeof address === "string") {
         await closeServer(listener);
-        return refuse("MCP_HTTP_HOST_BIND_FAILED");
+        // Bound, but no address object to name it by — a different fault from a refused bind.
+        return refuse("MCP_HTTP_HOST_BIND_FAILED", `listen answered no address for ${host}`);
       }
       origin = originOf(host, address.port);
       server = listener;
       return Object.freeze({ ok: true as const, origin, port: address.port });
-    } catch {
+    } catch (error) {
       // Closed on the failure path too: a half-bound server left behind surfaces later as EBUSY
       // on Windows rather than as the real error.
       if (bound !== null) await closeServer(bound);
-      return refuse("MCP_HTTP_HOST_BIND_FAILED");
+      // BOUND. The wrapper turns this refusal into a throw and dies before staffing anyone, so
+      // this string is the ONLY thing standing between the operator and an unexplained fleet
+      // that never starts. MOE_MCP_HTTP_PORT makes a fixed-port conflict an ordinary case.
+      return refuse("MCP_HTTP_HOST_BIND_FAILED", describeBindFailure(error, host, options.port));
     }
   };
 

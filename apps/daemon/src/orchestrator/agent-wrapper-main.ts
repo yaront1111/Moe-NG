@@ -331,7 +331,14 @@ async function main(): Promise<void> {
       v2Deps,
     });
     const mcpStarted = await mcpHost.start();
-    if (!mcpStarted.ok) throw new Error(mcpStarted.code);
+    // The code ALONE killed the fleet unexplained: this throw reaches main().catch, which prints
+    // one line and exits 1, and every seat in the project is unstaffable. The host now names the
+    // errno and the address it could not take, so carry that through instead of dropping it.
+    if (!mcpStarted.ok) {
+      throw new Error(mcpStarted.detail === undefined
+        ? mcpStarted.code
+        : `${mcpStarted.code}: ${mcpStarted.detail}`);
+    }
     if (stop.requested()) return;
     // The admission-shaped boundary, not the lifetime-shaped one: `claudeSpawner`
     // resolves only when the agent EXITS, so a refused start was indistinguishable

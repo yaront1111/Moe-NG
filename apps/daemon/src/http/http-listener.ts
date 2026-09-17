@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
+import { describeBindFailure } from "./bind-failure-detail.js";
 import type { AffordancePort } from "./affordance-contract.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { DocumentIngestPort } from "./document-ingest-route.js";
@@ -352,7 +353,9 @@ export async function startControlRoomListener(
     const address = bound.address();
     if (address === null || typeof address === "string") {
       await closeServer(bound);
-      return refuse("LISTENER_BIND_FAILED");
+      // Bound, but the runtime served no address object to name it by. Distinct from a refused
+      // bind and it must read that way: nothing about the port or the errno explains this one.
+      return refuse("LISTENER_BIND_FAILED", `listen answered no address for ${host}`);
     }
     const port = address.port;
     authority = authorityOf(host, port);
@@ -375,11 +378,14 @@ export async function startControlRoomListener(
       origin,
       port,
     } as const);
-  } catch {
+  } catch (error) {
     // Closed on the failure path too: a half-bound server left behind surfaces
     // later as EBUSY on Windows rather than as the real error.
     if (server !== null) await closeServer(server);
-    return refuse("LISTENER_BIND_FAILED");
+    // BOUND, NOT DISCARDED. EADDRINUSE (another daemon holds the port), EACCES (privileged
+    // port) and EADDRNOTAVAIL (the host is gone) each demand a different action, and every one
+    // of them reached the operator as the same bare token until the error was bound here.
+    return refuse("LISTENER_BIND_FAILED", describeBindFailure(error, host, options.port));
   }
 }
 

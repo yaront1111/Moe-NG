@@ -85,11 +85,15 @@ it("keeps a valid provider's occupied-port refusal at the listener layer", async
       dependencies: { provide: fixtureDependencies },
       port: occupied.port,
     });
-    expect(result).toEqual({
+    // The refusal now NAMES the cause: `listen EADDRINUSE 127.0.0.1:<port>`. The code and layer
+    // are unchanged — what an operator can act on was added, not substituted. See
+    // http-listener-bind-failure.test.ts for the detail's own contract.
+    expect(result).toMatchObject({
       code: "LISTENER_BIND_FAILED",
       layer: CONTROL_ROOM_LISTENER_LAYER,
       ok: false,
     });
+    expect((result as { readonly detail?: string }).detail).toContain("EADDRINUSE");
   } finally {
     await occupied.close();
   }
