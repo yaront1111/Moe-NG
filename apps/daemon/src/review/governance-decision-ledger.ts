@@ -93,19 +93,33 @@ export interface GovernanceDecisionRecord extends GovernanceDecisionInput {
   readonly version: typeof GOVERNANCE_DECISION_VERSION;
 }
 
+/**
+ * NULL MEANS "COULD NOT READ", AND IT IS NEVER AN EMPTY HISTORY.
+ *
+ * Every read below answered `[]` on a store throw and on a row that would not decode, so an
+ * unreadable ledger counted as ZERO funded attempts — the bound was then never reached and
+ * governance funded another attempt, and another, each one spending a real model call and real
+ * repository work. The comment on the read itself already stated the rule: "a list that silently
+ * drops decisions would under-count the bound and show the owner a shorter history than actually
+ * happened." Returning `[]` under-counted it maximally.
+ */
 export interface GovernanceDecisionLedger {
-  /** Keeps the decision. False when it could not be kept or was not well formed. */
+  /** Keeps the decision. False when it could not be kept, could not be read, or was malformed. */
   readonly record: (input: GovernanceDecisionInput) => boolean;
-  /** Every decision recorded for this project, oldest first. The building-blocks list. */
-  readonly all: () => readonly GovernanceDecisionRecord[];
-  /** Every decision recorded for one node, oldest first. */
-  readonly forSubject: (subjectRef: string) => readonly GovernanceDecisionRecord[];
+  /** Every decision recorded for this project, oldest first, or null if it cannot be read. */
+  readonly all: () => readonly GovernanceDecisionRecord[] | null;
+  /** Every decision recorded for one node, oldest first, or null if it cannot be read. */
+  readonly forSubject: (subjectRef: string) => readonly GovernanceDecisionRecord[] | null;
   /**
    * How many attempts governance has FUNDED on this node — the quantity the policy bounds. It is
    * a count of distinct review versions, not of decision rows: one attempt may answer six
    * questions at once, and that is one attempt, not six.
+   *
+   * NULL when the ledger cannot be read. A caller must treat that as "the bound cannot be
+   * proven unspent", never as zero: funding an attempt is authority, and unverifiable evidence
+   * gains none.
    */
-  readonly fundedOn: (subjectRef: string) => number;
+  readonly fundedOn: (subjectRef: string) => number | null;
 }
 
 type DecisionStore = Pick<SqliteEventStore, "commit" | "getAggregateVersion" | "readEvents">;
@@ -179,7 +193,7 @@ export function createGovernanceDecisionLedger(
   projectId: string,
 ): GovernanceDecisionLedger {
   const aggregateId = governanceAggregateId(projectId);
-  const read = (): readonly GovernanceDecisionRecord[] => {
+  const read = (): readonly GovernanceDecisionRecord[] | null => {
     try {
       const records: GovernanceDecisionRecord[] = [];
       for (const event of [...store.readEvents(aggregateId)]
@@ -188,11 +202,15 @@ export function createGovernanceDecisionLedger(
         const decision = recordOf(event.payload);
         // An unreadable row is not skipped past: a list that silently drops decisions would
         // under-count the bound and show the owner a shorter history than actually happened.
-        if (decision === null) return [];
+        // NULL, not []: an empty list is itself an under-count, and the maximal one.
+        if (decision === null) return null;
         records.push(decision);
       }
       return Object.freeze(records);
-    } catch { return []; }
+    } catch {
+      // The store could not answer. That is not a history, and it is certainly not an empty one.
+      return null;
+    }
   };
   return Object.freeze({
     record(input: GovernanceDecisionInput): boolean {
@@ -200,7 +218,11 @@ export function createGovernanceDecisionLedger(
       const decisionId = governanceDecisionId(input);
       try {
         // Same question, same review version, same node: already recorded, not a second block.
-        if (read().some((existing) => existing.decisionId === decisionId)) return true;
+        // An unreadable ledger cannot answer that question, and a write that assumes "not
+        // recorded" writes the block twice — so it refuses instead.
+        const existing = read();
+        if (existing === null) return false;
+        if (existing.some((decision) => decision.decisionId === decisionId)) return true;
         const record: GovernanceDecisionRecord = Object.freeze({
           ...input, decisionId, version: GOVERNANCE_DECISION_VERSION,
         });
@@ -221,14 +243,19 @@ export function createGovernanceDecisionLedger(
         return true;
       } catch { return false; }
     },
-    all(): readonly GovernanceDecisionRecord[] {
+    all(): readonly GovernanceDecisionRecord[] | null {
       return read();
     },
-    forSubject(subjectRef: string): readonly GovernanceDecisionRecord[] {
-      return Object.freeze(read().filter((decision) => decision.subjectRef === subjectRef));
+    forSubject(subjectRef: string): readonly GovernanceDecisionRecord[] | null {
+      const decisions = read();
+      return decisions === null
+        ? null
+        : Object.freeze(decisions.filter((decision) => decision.subjectRef === subjectRef));
     },
-    fundedOn(subjectRef: string): number {
-      return new Set(read()
+    fundedOn(subjectRef: string): number | null {
+      const decisions = read();
+      if (decisions === null) return null;
+      return new Set(decisions
         .filter((decision) => decision.subjectRef === subjectRef)
         .map((decision) => decision.reviewVersion)).size;
     },

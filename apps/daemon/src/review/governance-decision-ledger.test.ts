@@ -59,7 +59,7 @@ describe("a governance decision record", () => {
 
     expect(ledger.record(decided())).toBe(true);
 
-    const [kept] = ledger.forSubject(NODE);
+    const [kept] = ledger.forSubject(NODE) ?? [];
     expect(kept).toMatchObject({
       answer: "shared.obligation.description is SET.",
       basis: "GOVERNANCE_DECIDED",
@@ -77,7 +77,7 @@ describe("a governance decision record", () => {
     const ledger = createGovernanceDecisionLedger(openStore(), PROJECT);
     ledger.record(decided());
 
-    const [kept] = ledger.all();
+    const [kept] = ledger.all() ?? [];
     expect(Object.keys(kept ?? {}).sort()).toEqual([
       "answer", "basis", "citation", "criterionId", "decisionId", "findingId", "findingSubject",
       "question", "rationale", "reviewVersion", "subjectRef", "supersedes", "version",
@@ -145,9 +145,12 @@ describe("a governance decision record", () => {
     expect(ledger.fundedOn("node:v1:other")).toBe(1);
   });
 
-  it("shows nothing rather than a short history when a row cannot be read", () => {
-    // Skipping an unreadable row would under-count the bound AND show the owner fewer
-    // decisions than were actually taken. Both are worse than an empty list.
+  it("says it cannot read rather than showing a short history when a row will not decode", () => {
+    // Skipping an unreadable row would under-count the bound AND show the owner fewer decisions
+    // than were actually taken. This arm used to pin an EMPTY LIST as the safe answer — but an
+    // empty list is itself an under-count, and the maximal one: `fundedOn` read it as zero
+    // funded attempts, so the bound was never reached and governance kept funding. NULL is the
+    // honest answer, and the decider stops for the human on it.
     const store = openStore();
     const ledger = createGovernanceDecisionLedger(store, PROJECT);
     ledger.record(decided());
@@ -166,8 +169,8 @@ describe("a governance decision record", () => {
       expectedVersion: store.getAggregateVersion(aggregateId),
     });
 
-    expect(ledger.all()).toEqual([]);
-    expect(ledger.fundedOn(NODE)).toBe(0);
+    expect(ledger.all()).toBeNull();
+    expect(ledger.fundedOn(NODE)).toBeNull();
   });
 });
 
@@ -230,8 +233,9 @@ describe("what a decision has to carry", () => {
     }))).toBe(true);
 
     const all = ledger.all();
+    expect(all, "the governance ledger could not be read").not.toBeNull();
     expect(all).toHaveLength(2);
-    expect(all[0]?.answer).toContain("SET");
-    expect(all[1]?.supersedes).toBe(first);
+    expect(all?.[0]?.answer).toContain("SET");
+    expect(all?.[1]?.supersedes).toBe(first);
   });
 });

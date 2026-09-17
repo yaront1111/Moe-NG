@@ -156,8 +156,11 @@ it("writes the decision where a later round and the owner can both read it", asy
   await decideGovernanceEscalation(depsFor(world, answers), world.nodeRef);
 
   const kept = createGovernanceDecisionLedger(world.store, PROJECT_ID).forSubject(world.nodeRef);
-  expect(kept.length).toBeGreaterThan(0);
-  expect(kept[0]).toMatchObject({
+  // Null is "the ledger could not be read", which is a different failure from "nothing kept"
+  // and must not pass as one.
+  expect(kept, "the governance ledger could not be read").not.toBeNull();
+  expect(kept?.length).toBeGreaterThan(0);
+  expect(kept?.[0]).toMatchObject({
     answer: "shared.obligation.description is SET.",
     basis: "GOVERNANCE_DECIDED",
     subjectRef: world.nodeRef,
@@ -175,7 +178,9 @@ it("spends the bound on the attempt it funded, even when the PRD gave the answer
     .toBe("ALLOWED");
 
   const records = createGovernanceDecisionLedger(world.store, PROJECT_ID);
-  expect(records.forSubject(world.nodeRef).length).toBeGreaterThan(0);
+  expect(records.forSubject(world.nodeRef), "the governance ledger could not be read")
+    .not.toBeNull();
+  expect(records.forSubject(world.nodeRef)?.length).toBeGreaterThan(0);
   expect(records.fundedOn(world.nodeRef)).toBe(1);
 }, 180_000);
 

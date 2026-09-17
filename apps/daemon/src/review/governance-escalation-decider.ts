@@ -99,7 +99,10 @@ export type GovernanceOutcome =
   /** Governance answered and funded one more attempt. */
   | { readonly kind: "ALLOWED"; readonly decisionIds: readonly string[] }
   /** Governance stopped and left the node for the human. It commits NOTHING on this arm. */
-  | { readonly kind: "HUMAN_NEEDED"; readonly why: "BOUND_SPENT" | "NO_ANSWER" | "ROUND_CEILING" }
+  | {
+    readonly kind: "HUMAN_NEEDED";
+    readonly why: "BOUND_SPENT" | "LEDGER_UNREADABLE" | "NO_ANSWER" | "ROUND_CEILING";
+  }
   /** The durable decision refused; the node stays exactly as it was. */
   | { readonly kind: "REFUSED"; readonly code: string };
 
@@ -217,7 +220,13 @@ export async function decideGovernanceEscalation(
   // governor that cited the PRD fund attempts for ever at `maxDecisions: 1`, because a citation
   // was free — free of new AUTHORITY, but not of the tokens and repository work an attempt costs,
   // which is the whole thing the bound protects.
-  if (records.fundedOn(subjectRef) >= deps.policy.maxDecisions) {
+  const funded = records.fundedOn(subjectRef);
+  // AN UNPROVABLE BOUND IS A SPENT ONE. The ledger used to answer 0 for a store it could not
+  // read, so the bound was never reached and governance funded attempt after attempt, each one
+  // a real model call against a real repository — the exact runaway the bound exists to stop.
+  // Funding is authority, and unverifiable evidence gains none, so this stops for the human.
+  if (funded === null) return { kind: "HUMAN_NEEDED", why: "LEDGER_UNREADABLE" };
+  if (funded >= deps.policy.maxDecisions) {
     return { kind: "HUMAN_NEEDED", why: "BOUND_SPENT" };
   }
 
