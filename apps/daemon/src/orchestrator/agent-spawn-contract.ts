@@ -245,7 +245,10 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // minutes. Goals come from the operator's browser (or the PRD lane), never
   // from a self-staffed agent.
   "approval.decide", "approval.decide_intent",
-  "goal.close", "goal.create", "goal.create_with_source",
+  // `goal.cancel` is the browser's "Abandon the product" card and a HUMAN act, fenced here on
+  // exactly the terms as its siblings. It landed operator-only on 2026-09-17 and was refused
+  // over MCP by the DERIVED exclusion, but this roster is hand-kept and was not grown with it.
+  "goal.cancel", "goal.close", "goal.create", "goal.create_with_source",
   // Pushing the operator's repository to a remote is the operator's decision; the wrapper
   // performs it as an effect of that decision, never as staffed work.
   "repository.publish",

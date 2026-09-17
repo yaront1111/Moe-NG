@@ -78,7 +78,9 @@ const WRAPPER_FENCED_SERVED_KINDS: readonly string[] = Object.freeze([
   "criterion_check.approve", "criterion_check.verify",
   "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
   "environment.set_variable", "environment.unset_variable",
-  "goal.close", "goal.create", "goal.create_with_source",
+  // Sorted before `goal.close`: this arm is strict-equal over a sorted set, so position is
+  // asserted, not only membership. Added when the kind became wrapper-fenced.
+  "goal.cancel", "goal.close", "goal.create", "goal.create_with_source",
   // task-eb37494e. The wrapper fence (HUMAN_ONLY_STEPS) was landed with the ADVERTISEMENT by
   // task-749e585afc; this transcription could only grow once the kind became SERVED, which is
   // what that row's dispatch registration did.
