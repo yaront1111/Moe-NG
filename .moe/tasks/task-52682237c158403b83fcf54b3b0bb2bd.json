@@ -1,0 +1,99 @@
+{
+  "id": "task-52682237c158403b83fcf54b3b0bb2bd",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "Persist the last publisher observation and show it on the Publish card, widening the exact-key wire body at both ends",
+  "description": "CHILD of task-21be6e9055984413a651ce6ee331e2c8 (the operator exit for an UNKNOWN publish), filed by architect-73d103f8 on 2026-09-18. Delivers that row's DoD 1. task-21be6e90 is the integration parent and declares dependsOn on this row.\n\nWHAT IT DOES. node-publisher records the last observation of an unresolved publish — the remote tip it observed, the sha it expected, the reason, and when — so the Publish card can say, for example, \\\"remote master is at 2ce84e5a, expected 9ca01b31; push refused: <git's words>\\\". Today nothing on any surface says what git said; only the wrapper log line of the pass that pushed carries it. Record an observation only when it CHANGES from the last one recorded, never once per pass, or every wrapper pass writes an event.\n\nREUSE task-78dea88b's EVIDENCE. That row records an additive transmission event (pre-push tip + push outcome) in apps/daemon/src/repository/publication-effect-ledger.ts. The observation is a SEPARATE additive event on the same aggregate — never new keys on `moe-publication-intent/1` or on the transmission event (the exact-key-set hazard fixed four times on this board today). To show git's own words, the push's stderr tail must reach the record: check whether task-78dea88b's push outcome already carries it, and if not, carry it through without widening an existing durable record.\n\nTHE WIRE HAZARD — widen BOTH ends in THIS row. The daemon serves the publish state as `RunGoalPublish` (apps/daemon/src/http/runs-read-contract.ts:103, built by apps/daemon/src/http/run-goal-publication.ts). The control-room decodes it with an EXACT 8-key set at apps/control-room/src/live/live-runs.ts:206 — `exactDataRecord(value, [\\\"branch\\\",\\\"code\\\",\\\"decisionId\\\",\\\"outcome\\\",\\\"remoteUrl\\\",\\\"requestedAt\\\",\\\"sha\\\",\\\"url\\\"])` — and the parent run body at :249 nests it under `publish`. Adding a field on the daemon side ALONE makes the control-room reject the entire runs read, taking down the Publish card and very likely the whole runs view. A wire body carries no legacy data (daemon and control-room ship in one artifact), so the fix is simply to widen the daemon type AND the exact-key list together, keeping exact-key decoding as DoD 1 requires. The card, apps/control-room/src/v2/goals/goal-publish.tsx, then displays it for a PENDING or UNKNOWN publish.\n\nSERIALIZATION — node-publisher.ts and publication-effect-ledger.ts are hotspots. They are edited, in order, by task-78dea88b (auto-resolve), task-baefab32 and task-04160615 (the release chain). This row declares dependsOn on task-04160615, which transitively follows the others, so no two rows edit those files at once; in the shared checkout a whole-file pathspec commit sweeps a peer's uncommitted hunk.\n\nOUT OF SCOPE: the resolve service and its release reason (sibling child), the resolve offer and the card's resolve CONTROL (sibling child).",
+  "definitionOfDone": [
+    "An unresolved publish records an additive observation event (observed remote tip, expected sha, reason, at) only when the observation CHANGES; an arm drives several identical passes and asserts exactly one event was written, and a changed observation writes a second.",
+    "`RunGoalPublish` carries the observation and the control-room's exact-key decoder at live-runs.ts:206 accepts it: an arm decodes the widened body; a second arm asserts a body with an UNKNOWN extra key is still REJECTED, so exact-key decoding is preserved rather than loosened.",
+    "The Publish card shows the observation for a PENDING or UNKNOWN publish, e.g. the observed tip, the expected sha and git's reason; a control-room arm asserts the rendered text by value, and a publish with no observation renders without it.",
+    "No existing durable record is widened: `moe-publication-intent/1` and task-78dea88b's transmission event decode unchanged, asserted by an arm.",
+    "Gates quoted with `Test Files N passed` lines: `pnpm --filter @moe/daemon test` for src/orchestrator/node-publisher*, src/repository/publication-effect-ledger*, src/http/run*, and `pnpm --filter @moe/control-room test` (apps/control-room is in no other gate); `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE PREREQUISITES AND RE-MEASURE, then stop. (a) Confirm task-04160615 is DONE (it transitively follows task-78dea88b and task-baefab32, which edit node-publisher.ts and publication-effect-ledger.ts first); read task-78dea88b's transmission event in publication-effect-ledger.ts and record its push-outcome values, since this row's `reason` reads them. (b) Confirm `RunGoalPublish` still has exactly the eight fields at runs-read-contract.ts:103 and that live-runs.ts:206 still decodes it with the matching exact list. (c) Find where the CONTROL-ROOM declares its own view type for the publish body — the decoder at live-runs.ts:206 produces it — and record the file; if it lives outside live-runs.ts, it joins this row's paths and the row is at eleven files, so stop and report rather than exceed the cap. (d) Re-confirm the three `readRunGoalPublication` test consumers still use a partial match or read only `.outcome` (planningNotes insight 2); if any now uses a full `toEqual`, stop and report — an always-present key would red it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED then GREEN — the observation record. In apps/daemon/src/repository/publication-effect-ledger.test.ts first add arms, each by value: recording an observation for a decision and reading back the LATEST one; a second observation that is IDENTICAL to the latest is NOT written; a changed one IS; a decision with no observation reads null; and — the hazard arm — `moe-publication-intent/1` and task-78dea88b's transmission event both still decode unchanged with an observation event beside them. Confirm RED. Then in apps/daemon/src/repository/publication-effect-ledger.ts add a SEPARATE event type on the intent's aggregate with its own exact-key decoder, a writer that reads the latest observation and writes only on change, and a reader returning the latest or null. Declare its TypeScript type in this same file. Do NOT add keys to the intent or the transmission event. Confirm GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/publication-effect-ledger.ts",
+        "apps/daemon/src/repository/publication-effect-ledger.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Record it from the publisher. In apps/daemon/src/orchestrator/node-publisher.ts, on the path that returns UNKNOWN after the post-push observe, record `{ observedSha, expectedSha, reason, observedAt }` through step 2's writer, where `observedSha` is the tip observe returned (null for an absent branch), `expectedSha` the approved sha, and `reason` the push outcome from task-78dea88b's transmission record — or a named UNKNOWN when there is none. An unreadable observe records nothing: an unknown tip is not an observation. A write failure must NEVER change the publish's own outcome — the push, the observe and task-78dea88b's resolve rule behave exactly as before. Keep the file under 250 lines. In apps/daemon/src/orchestrator/node-publisher.test.ts add arms: several identical UNKNOWN passes write EXACTLY one observation (assert the count, so a per-pass write reds); a changed observed tip writes a second; a PUSHED publish writes none; and an unreadable observe writes none.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Widen the wire at BOTH ends in this one step — widening only the daemon makes the control-room reject the entire runs read. (a) apps/daemon/src/http/runs-read-contract.ts: add `readonly observation: { readonly observedSha: string | null; readonly expectedSha: string; readonly reason: string; readonly observedAt: string } | null` to `RunGoalPublish`. (b) apps/daemon/src/http/run-goal-publication.ts: read the latest observation for the decision the card reports and ALWAYS emit the key — `null` when none — because the control-room's `exactDataRecord` is a true exact-set check and cannot accept a sometimes-absent key. (c) apps/control-room/src/live/live-runs.ts: add `\"observation\"` to the exact key list at :206 and decode it as `null` or as an object checked with its OWN exact key list, so the nested object is held to the same standard as its parent. In apps/control-room/src/live/live-runs.test.ts add arms by value: a body with an observation decodes to it; a body with `observation: null` decodes to null; and — the arm that proves exact-key decoding was widened rather than loosened — a body carrying an UNKNOWN extra key is still REJECTED, as is an observation object with an extra key.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/runs-read-contract.ts",
+        "apps/daemon/src/http/run-goal-publication.ts",
+        "apps/control-room/src/live/live-runs.ts",
+        "apps/control-room/src/live/live-runs.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Show it on the card (DoD 1). In apps/control-room/src/v2/goals/goal-publish.tsx, for a PENDING or UNKNOWN publish that carries an observation, render one plain line in the card's register saying where the remote is versus where it was expected to be, and why — for example the branch, the observed tip (or that the branch does not exist on the remote), the expected sha, and the recorded reason. Render nothing extra when the observation is null. Do not add the resolve control here: that is task-bbe7a5d2, which depends on this row and sits beside this text. In apps/control-room/src/v2/goals/goal-publish.test.tsx add arms asserting the rendered text by value: an UNKNOWN publish with an observation shows the observed tip, the expected sha and the reason; an observation whose tip is null says the branch is absent on the remote; and a publish with no observation renders without the line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-publish.tsx",
+        "apps/control-room/src/v2/goals/goal-publish.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GATES AND ADVERSARIAL REVIEW. Read each leg's OUTPUT, not its exit code. (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/publication-effect-ledger.test.ts src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/release/release-auto-decide.test.ts src/release/release-auto-decide-store-fault.test.ts`, count quoted — the three readRunGoalPublication consumers are in the gate to prove the always-present key edited none of them. (B) `pnpm --filter @moe/control-room test`, count quoted — apps/control-room is in no other gate, and this row changed its decoder. (C) The full `pnpm --filter @moe/daemon test` and `pnpm typecheck`, both quoted; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (D) ADVERSARIAL REVIEW, in the completion record: Does any path now write an observation every wrapper pass? Can a failed observation write change a publish's outcome? Does any runs-read consumer, in either package, still expect eight keys? Can an observation carry anything secret? (E) Record as a follow-up comment on this row, not a new row: carrying git's own stderr to the card, which needs credential redaction because git can echo a remote URL with embedded credentials.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1020.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T19:14:17.738Z",
+  "updatedAt": "2026-09-18T19:37:17.602Z",
+  "dependsOn": [
+    "task-0416061566de49939e91bbd6351be79e"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-18T19:34:08.343Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10
+  },
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T19:37:15.334Z",
+  "planningNotes": {
+    "codebaseInsights": "Filed by me today as a CHILD of task-21be6e90 (the integration parent), delivering its DoD 1. dependsOn task-04160615, which transitively follows task-78dea88b and task-baefab32 — the rows that edit node-publisher.ts and publication-effect-ledger.ts before this one. Measured at HEAD 2026-09-18.\n\n(1) THE WIRE SHAPE. `RunGoalPublish` (apps/daemon/src/http/runs-read-contract.ts:103-112) has exactly eight fields — branch, code, decisionId, outcome, remoteUrl, requestedAt, sha, url — matching the EXACT key list the control-room decodes at apps/control-room/src/live/live-runs.ts:206. `exactDataRecord` (apps/control-room/src/live/live-wire-primitives.ts:23) is a TRUE exact-set check: `keys.length !== expectedKeys.length || keys.some(k => !expectedKeys.includes(k))` returns null. So an optional, sometimes-absent key cannot pass it; the daemon must ALWAYS send the new key — an object, or null when there is nothing to show — and the decoder's list gains that ninth key. Widening only the daemon side makes the control-room reject the ENTIRE runs read.\n\n(2) EVERY CONSUMER OF readRunGoalPublication IS SAFE — measured, not assumed. It is asserted in three test files: apps/daemon/src/orchestrator/node-publisher-approved.test.ts:99-100 uses `toMatchObject` (a partial match that ignores extra keys); apps/daemon/src/release/release-auto-decide.test.ts:882-887 and release-auto-decide-store-fault.test.ts:78-80 read only `.outcome`. So an always-present `observation` key edits none of them — including node-publisher-approved.test.ts, which the whole publish chain requires to pass UNCHANGED.\n\n(3) THE DECODER'S TEST. apps/control-room/src/live/live-runs.test.ts is the file that covers the publish body decoded at :206.\n\n(4) A DELIBERATE SIMPLIFICATION, and why. This row's description suggested carrying git's own stderr (e.g. 'Permission denied (publickey)') through to the card. That costs two more files (the publication port's push result and its test) and pushes the row to twelve, past the cap; and git's stderr can echo a remote URL carrying embedded credentials, so persisting it would add a credential-redaction surface. DoD 1 asks for 'reason and observed remote sha'. The recorded push outcome from task-78dea88b's transmission record (REJECTED or INDETERMINATE) together with the observed and expected shas is enough for the operator to DECIDE a resolve, which is what the card is for. git's words help FIX the cause, not decide the resolve, so they are recorded as a follow-up rather than built here."
+  },
+  "planApprovedAt": "2026-09-18T19:37:17.602Z"
+}

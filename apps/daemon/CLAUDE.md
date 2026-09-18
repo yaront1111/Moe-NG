@@ -126,6 +126,16 @@ its own: a caller that injects no dependency provider is refused, never served a
   external SIGTERM never reaches a Node handler; it asks the wrapper to stop over stdin
   (`WRAPPER_STDIN_STOP_TOKEN`) before terminating it, since only the wrapper's own exit path
   `taskkill /T`s the seat trees.
+- **The publisher pushes once, then only observes.** `orchestrator/node-publisher.ts` journals
+  a `moe-publication-intent/1` before its one push, and the intent is never permission to push
+  again. Beside it, a separate `internal.repository.publication_transmission` record keeps the
+  remote tip read before the push and git's answer. A publish whose push git REJECTED (a numeric
+  non-zero exit, `PUBLISH_PUSH_REJECTED`) and whose remote tip is still that pre-push tip is
+  released automatically: a REFUSED `PUBLISH_NOT_LANDED` receipt, then the hold goes back as
+  `PUBLISH_NOT_TRANSMITTED`. Both halves are required, because git can exit non-zero after the
+  ref moved, and a push that landed and was force-pushed back leaves the tip unchanged too. A push
+  that succeeded, timed out, threw, or lost its answer is never auto-resolved and waits for an
+  operator. So does a publish stuck before this rule existed: it has no evidence to resolve on.
 
 - **The publisher names its outcome.** `orchestrator/node-publisher.ts` reports `WAITING`
   (the single repository reservation is held by a seat, a landing or a criterion check; nothing

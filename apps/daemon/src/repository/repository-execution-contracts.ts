@@ -6,9 +6,11 @@ export type RepositoryExecutionPhase = typeof REPOSITORY_EXECUTION_PHASES[number
  * LANDED_NOTHING releases a landing that refused before it journaled any intent: no Git effect exists to reconcile.
  * YIELDED gives back a RESERVED checkout whose caller proved it idle: no live seat, a review between
  * attempts, and a clean tree, so nothing can be lost; the node re-acquires with a fresh baseline.
+ * PUBLISH_NOT_TRANSMITTED gives back a PUBLISHING hold whose push git refused while the remote tip
+ * provably stayed where it was before the push: nothing landed, so a fresh decision may push again.
  */
 export type RepositoryExecutionReleaseReason = "ABORTED_BEFORE_EXECUTION" | "LANDED" | "LANDED_NOTHING" | "PUBLISHED"
-  | "CRITERIA_COMPLETED" | "YIELDED";
+  | "PUBLISH_NOT_TRANSMITTED" | "CRITERIA_COMPLETED" | "YIELDED";
 
 /** Daemon-only authority. Never serialize an owner or handle onto a public surface. */
 export interface RepositoryExecutionOwner {

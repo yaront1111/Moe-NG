@@ -1,0 +1,90 @@
+{
+  "id": "task-2c3f878ba94940428d34f204dc74de95",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "repository.publish_resolve is wired in the daemon registry and fenced to the operator: human-only, MCP-excluded",
+  "description": "ROW 3 of 4 for task-21be6e9055984413a651ce6ee331e2c8 (\"An UNKNOWN publish effect has no operator exit\"), filed by architect-73d103f8 on 2026-09-18. Depends on row 2 (the refusal vocabulary, which itself follows row 1's roster slice task-f3182818). task-21be6e90 (the behaviour) depends on this row. Precedent: `preview.decide`'s task-5f883e4e and `release.decide`'s task-54b74b80.\n\nWHAT IT WIRES. The payload keys (e.g. `[\\\"decisionId\\\", \\\"resolution\\\"]`, `resolution` being `NOT_TRANSMITTED` or `ABANDON`) in apps/daemon/src/daemon-command-payload-keys.ts beside `\\\"repository.publish\\\"` (:184); the registry entry, following how release.decide is registered as an async entry in apps/daemon/src/daemon-command-async-entries.ts; and membership of OPERATOR_PRINCIPAL_KINDS in apps/daemon/src/daemon-command-vocabulary.ts:379. The handler this row registers may REFUSE every dispatch with a stable code until task-21be6e90 lands the behaviour — it must never pretend to resolve.\n\nHUMAN-ONLY BY THE EXISTING DERIVATION. Resolving an UNKNOWN publish is the operator asserting that the remote does not hold a sha; only they can make that call. Adding the kind to OPERATOR_PRINCIPAL_KINDS makes it human-only AND removes it from the MCP roster automatically, because `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED from OPERATOR_PRINCIPAL_KINDS (apps/daemon/src/mcp-tool-allowlist.ts). The MCP stdio entry authenticates with the operator credential as its fallback, so an operator kind advertised over MCP would be an agent arriving AS the operator; the derived exclusion is the fence, and this row must not hand-type a second exclusion list.\n\nPINNED CONSUMERS THIS MOVES, and the rule for them. apps/daemon/src/mcp-tool-allowlist.test.ts:278 pins `{ excluded: 29, queries: 7, vocabulary: 65, wired: 43 }` at HEAD 2026-09-18; an operator-only kind moves `vocabulary` and `excluded` and leaves `wired` unchanged. Per this epic's rail, NEVER FREEZE A ROSTER COUNT IN A DoD: run the leg and take the PRINTED expected-vs-received as authoritative, because a concurrent kind-publishing row can move the same literal first. Also census apps/daemon/src/gates-human-only-fence.test.ts and apps/daemon/src/gates-roster-coherence.test.ts (which classifies every roster kind), plus any MCP-exclusion or vocabulary test the full-tree grep turns up. If the census exceeds this row's path cap, split before submitting.\n\nOUT OF SCOPE: the resolve behaviour, the persisted observation and the Publish card (task-21be6e90).",
+  "definitionOfDone": [
+    "`repository.publish_resolve` has payload keys, a registry entry and OPERATOR_PRINCIPAL_KINDS membership; a dispatch by a non-operator principal is refused with the registry's operator-fence code, asserted by value WITH its layer.",
+    "The kind is absent from `wiredMcpToolKinds()` through the EXISTING derivation (no hand-typed exclusion added), proven by an arm; and the bidirectional allowlist arms in mcp-tool-allowlist.test.ts pass, with the pinned counts at :278 re-aimed from the leg's PRINTED expected-vs-received rather than a number frozen in advance.",
+    "Until task-21be6e90 lands, an operator dispatch of the kind is refused with a stable, named code — never accepted, never a silent no-op — asserted by value.",
+    "gates-human-only-fence.test.ts and gates-roster-coherence.test.ts classify the new kind as human-only, and the completion record names every file the census found and its verdict.",
+    "Gates quoted with `Test Files N passed` lines: the full `pnpm --filter @moe/daemon test`, and `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE THE TEMPLATE AND THE CENSUS, then stop. (a) Follow preview.decide through every wiring site named in planningNotes insight 1 and record each file:line at YOUR tree; confirm REPOSITORY_RECOVERY_FAMILY still exists (daemon-command-vocabulary.ts:181) and that joining it adds no bootstrap-sequence entry. (b) Confirm row 2 (task-adeabf1f) is DONE and apps/daemon/src/repository/publish-resolve-contracts.ts exports the kind constant this row wires. (c) RE-RUN THE CENSUS WITH `:(glob)` — without it `git grep` does not recurse `**` and silently skips files, which is how the first census missed mcp-tool-allowlist.test.ts: `git grep -nE \"MCP_EXCLUDED_COMMAND_KINDS\\)\\.toEqual|expectedExcluded|excluded: [0-9]+|vocabulary: [0-9]+|OPERATOR_PRINCIPAL_KINDS.size\" -- ':(glob)apps/daemon/src/**/*.test.ts' ':(glob)tests/**/*.ts'`. Record every hit. If it finds a whole-set pin outside mcp-tool-allowlist.test.ts and daemon-command-vocabulary.test.ts, stop and report rather than taking an unnamed path.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST — move the pins to the NEW truth before wiring. In apps/daemon/src/mcp-tool-allowlist.test.ts add `repository.publish_resolve` to the exact excluded list at :157 and to the hand-listed `expectedExcluded` at :228-249, in its sorted position; and update the counts at :278 — `excluded` and `vocabulary` each rise by one and `wired` does NOT, because the kind is excluded. In apps/daemon/src/daemon-command-vocabulary.test.ts bump `OPERATOR_PRINCIPAL_KINDS.size` at :465 by one. Take every new number from the leg's PRINTED expected-vs-received rather than computing it by hand, and never write a count into the DoD (this epic's rail). In apps/daemon/src/gates-human-only-fence.test.ts add an arm asserting `repository.publish_resolve` is operator-only AND absent from `wiredMcpToolKinds()`. Confirm these arms are RED against today's code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/gates-human-only-fence.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN — wire the kind, mirroring preview.decide. (1) apps/daemon/src/daemon-command-payload-keys.ts: payload keys `[\"decisionId\", \"resolution\"]`. (2) apps/daemon/src/daemon-command-vocabulary.ts: add the kind to REPOSITORY_RECOVERY_FAMILY (or the family step 1 justified) with a capability chosen for a stated reason — the operator holds every capability, so it gates only REACH for other principals; add it to the wired-kind type union and to OPERATOR_PRINCIPAL_KINDS; and give `familyCapabilityOf` whatever the family needs, following preview.decide. (3) apps/daemon/src/daemon-command-families.ts: its family classification, if preview.decide's pattern at :126 requires one. (4) apps/daemon/src/daemon-command-async-entries.ts: a registry entry beside release.decide's (:353) whose handler REFUSES every dispatch with a stable, named code — prefer an existing registry code meaning 'recognised but not yet serviceable' over minting one for a stub task-a47babf8 will replace, and say so in a comment naming that row. Do NOT add a hand-typed MCP exclusion: the derivation from OPERATOR_PRINCIPAL_KINDS is the fence. Confirm step 2's arms are now GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Pin the fence and the stub by dispatch, in apps/daemon/src/daemon-command-registry.test.ts, each asserting the code AND its layer by value — never merely that the dispatch failed, because more than one layer can refuse and an arm that checks only the outcome stays green when the fence moves to a weaker layer (global rail). (DoD 1) A NON-operator principal dispatching `repository.publish_resolve` is refused by the registry's operator fence, with that fence's own code and layer. (DoD 3) The OPERATOR dispatching it is refused by the stub with the stable code step 3 chose — never accepted and never a silent no-op. MUTATION-VERIFY the DoD 1 arm: back up apps/daemon/src/daemon-command-vocabulary.ts to %TEMP%/moe-task-2c3f878b-daemon-command-vocabulary-<workerId>.ts recording its SHA256 (task id in the path, because seat ids are reused and a seat-only backup can hold the wrong vintage), remove the kind from OPERATOR_PRINCIPAL_KINDS, and confirm BOTH the DoD 1 arm and step 2's gates-human-only-fence arm go RED — quote the lines. Restore by copying the backup back, never `git checkout --` on this shared tree, and prove the restore by SHA256 equality in a call SEPARATE from the restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GATES AND ADVERSARIAL REVIEW. (A) THE FULL `pnpm --filter @moe/daemon test` is this row's authoritative census: any red outside the pins step 1 named is an UNNAMED CONSUMER — stop and report it rather than editing it or renaming the kind to evade it (global rail). Quote the count line, re-run any failing file ALONE before attributing it (the full suite throws spurious 5s-timeout reds under parallelism), and capture stderr. (B) `pnpm --filter @moe/control-room test`, count quoted — row 1 rotated mirrors there, and nothing else in this chain runs that package. (C) `pnpm typecheck`, projects counted. (D) Confirm gates-roster-coherence.test.ts passes with NO edit, and say so: this row's description expected it to classify the kind as human-only, but it checks roster coherence, which rows 1 and 3 together satisfy. (E) ADVERSARIAL REVIEW, in the completion record: Can the kind reach an agent by ANY path — MCP stdio, MCP HTTP, or a staffable affordance? Is the stub's refusal honest, so nothing downstream reads it as a successful resolve? Does any hand-typed exclusion list now duplicate the derived one? Name every file the census touched and its verdict.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1019.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T19:11:22.330Z",
+  "updatedAt": "2026-09-18T19:33:52.940Z",
+  "dependsOn": [
+    "task-adeabf1f8c9e4e2c8b778491f9e20b71"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-18T19:28:56.428Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T19:33:50.755Z",
+  "planningNotes": {
+    "codebaseInsights": "Filed by me today as ROW 3 of the owner-directed split of task-21be6e90. dependsOn row 2 (task-adeabf1f), which follows row 1 (task-f3182818). The service child task-a47babf8 replaces this row's refusing stub with the real behaviour. Measured at HEAD 2026-09-18.\n\n(1) THE TEMPLATE IS preview.decide, NOT repository.publish. `repository.publish` is a BOOTSTRAP kind (apps/daemon/src/bootstrap/bootstrap-contracts.ts:44) with a bootstrap-sequence entry (bootstrap-sequence.ts:29, :176) — joining that family would drag the bootstrap sequence in. `preview.decide`, a non-bootstrap operator decision, is wired through: its payload keys (daemon-command-payload-keys.ts:37, :167); its family map with a capability (daemon-command-vocabulary.ts:169-171, `CAPABILITIES.REVIEW`); the wired-kind type union (:255); `familyCapabilityOf` (:296); OPERATOR_PRINCIPAL_KINDS (:401); and a family classification in daemon-command-families.ts (:126). It never touches the bootstrap sequence.\n\n(2) THE REGISTRATION HOME. `release.decide`, the other operator decide kind, is registered in apps/daemon/src/daemon-command-async-entries.ts:353 as `[RELEASE_DECIDE_COMMAND_KIND]: Object.freeze({ ... payloadKeys: PAYLOAD_KEYS[...], requiredCapability: CAPABILITIES.GOAL })`. That file already holds preview.* and deployment.* operator entries; the refusing stub goes there.\n\n(3) A SEMANTIC HOME ALREADY EXISTS. `REPOSITORY_RECOVERY_FAMILY = Object.freeze({ \"repository.recover\": CAPABILITIES.ADMIN })` (daemon-command-vocabulary.ts:181, composed at :278). Resolving a stuck publish is a repository RECOVERY action, and repository.recover is already operator-only. Joining that family keeps the kind out of the bootstrap sequence entirely. The worker confirms it adds no sequence coupling and chooses the capability with a stated reason.\n\n(4) THE CENSUS, and how it was nearly missed. A first `git grep` of kind-count pins returned almost nothing because `git grep` does not recurse `**` without the `:(glob)` magic — it silently skipped mcp-tool-allowlist.test.ts, which holds a pin known to exist. That is exactly the 'a sweep that yields zero cases passes' failure the rails warn about. Re-run with `:(glob)`, the pins a new operator-only kind moves are: apps/daemon/src/mcp-tool-allowlist.test.ts:157 (`expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(...)`, an exact list); :228-249 (`expectedExcluded`, documented as an 'EXACT, frozen exclusion denominator', listing every excluded kind by hand); and :278 (`{ excluded: 29, queries: 7, vocabulary: 65, wired: 43 }` — `excluded` and `vocabulary` each rise by one, `wired` does not). :258-259 is DERIVED from OPERATOR_PRINCIPAL_KINDS and needs no edit. apps/daemon/src/daemon-command-vocabulary.test.ts:465 pins `expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(30)`. Of the fourteen test files that reference OPERATOR_PRINCIPAL_KINDS or HUMAN_ONLY_STEPS, a triage found only daemon-command-vocabulary.test.ts pinning the WHOLE set; the other thirteen check membership of specific kinds, which a new kind cannot disturb. That triage is a regex and is not proof: the worker's own full daemon run is the final census.\n\n(5) gates-roster-coherence.test.ts NEEDS NO EDIT, contrary to this row's description. It checks roster COHERENCE — served is a subset of advertised (:79-85), the generated client equals the roster (:89-94), and every band kind is on all three surfaces (:97-108) — not human-only classification. With row 1 advertising the kind and this row serving it, it is satisfied as-is. Human-only classification is gates-human-only-fence.test.ts plus the derived MCP exclusion."
+  },
+  "planApprovedAt": "2026-09-18T19:33:52.940Z"
+}

@@ -270,6 +270,7 @@ export interface GeneratedCommandBuilders {
   readonly ["replan.propose_unblock"]: CommandBuilder<"replan.propose_unblock">;
   readonly ["repository.bootstrap"]: CommandBuilder<"repository.bootstrap">;
   readonly ["repository.publish"]: CommandBuilder<"repository.publish">;
+  readonly ["repository.publish_resolve"]: CommandBuilder<"repository.publish_resolve">;
   readonly ["repository.recover"]: CommandBuilder<"repository.recover">;
   readonly ["resource.confirm_released"]: CommandBuilder<"resource.confirm_released">;
   readonly ["resource.reconcile"]: CommandBuilder<"resource.reconcile">;
@@ -395,6 +396,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["replan.propose_unblock"]: commandBuilderFor("replan.propose_unblock"),
     ["repository.bootstrap"]: commandBuilderFor("repository.bootstrap"),
     ["repository.publish"]: commandBuilderFor("repository.publish"),
+    ["repository.publish_resolve"]: commandBuilderFor("repository.publish_resolve"),
     ["repository.recover"]: commandBuilderFor("repository.recover"),
     ["resource.confirm_released"]: commandBuilderFor("resource.confirm_released"),
     ["resource.reconcile"]: commandBuilderFor("resource.reconcile"),
@@ -940,7 +942,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "cbe06719726c8bb40ff2e6273a91666adc63921d1138d1864f85becc5a2e5708";
+export const GENERATED_CONTRACT_DIGEST = "10d93d2d9117b749658bff66f366cd2ecaa3f0fb6b30f0f59cd6734a636d4ce9";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

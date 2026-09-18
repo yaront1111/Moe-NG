@@ -4,10 +4,14 @@ import { publicationRepositoryId } from "./publication-approval-contracts.js";
 import type { GitRunner } from "./git-landing-port.js";
 const identity = { root: "D:/approved", gitDirectory: "D:/approved/.git" };
 const candidate = { identity, approval: { branch: "approved", sha: "a".repeat(40), remoteUrl: "https://github.com/o/r.git", repositoryId: publicationRepositoryId(identity) } };
-function fixture(output = `${candidate.approval.sha}\trefs/heads/approved\n`) {
+function fixture(output = `${candidate.approval.sha}\trefs/heads/approved\n`, push: number | null | "throw" = 0) {
   const calls: readonly string[][] = [];
   const run: GitRunner = async (_cwd, args) => {
     (calls as string[][]).push([...args]);
+    if (args.includes("push")) {
+      if (push === "throw") throw new Error("spawn lost");
+      return { code: push, stderr: "", stdout: "" };
+    }
     return { code: 0, stderr: "", stdout: args.includes("config") ? "credential.helper\nfixture-manager\0" : args.includes("ls-remote") ? output
       : args.includes("--git-path") ? "D:/approved/.git/objects\n" : args.includes("cat-file") ? "commit\n" : "" };
   };
@@ -23,6 +27,20 @@ describe("immutable publication Git port", () => {
     expect(push?.[0]).toMatch(/^--git-dir=/u); expect(push?.[0]).not.toContain(identity.gitDirectory);
     expect(f.calls.some((args) => args.includes("HEAD"))).toBe(false);
   });
+  it("tells a push git refused (a numeric exit) from one that never answered (a null code or a throw)", async () => {
+    const answers = new Map<number | null | "throw", unknown>([[0, { ok: true }],
+      [1, { ok: false, code: "PUBLISH_PUSH_REJECTED" }],
+      [128, { ok: false, code: "PUBLISH_PUSH_REJECTED" }],
+      [null, { ok: false, code: "PUBLISH_PUSH_UNKNOWN" }],
+      ["throw", { ok: false, code: "PUBLISH_PUSH_UNKNOWN" }]]);
+    for (const [exit, answer] of answers) {
+      const f = fixture(undefined, exit);
+      expect(await f.port.push(candidate)).toMatchObject(answer as object);
+      // The push leg itself answered: no earlier layer refused first.
+      expect(f.calls.filter((args) => args.includes("push"))).toHaveLength(1);
+    }
+    expect(answers.size).toBe(5);
+  });
   it("observes only one exact approved destination branch", async () => {
     expect(await fixture().port.observe(candidate)).toEqual({ ok: true, sha: candidate.approval.sha });
     expect(await fixture("").port.observe(candidate)).toEqual({ ok: true, sha: null });
@@ -37,7 +55,7 @@ describe("immutable publication Git port", () => {
       : { code: 0, stderr: "", stdout: args.includes("config") ? "" : args.includes("--git-path") ? "D:/approved/.git/objects\n" : "commit\n" };
     const denied = createGitPublicationPort({ run: failing("git@github.com: Permission denied (publickey).\r\nfatal: Could not read from remote repository.\n"),
       resolveIdentity: () => ({ ok: true, identity }) });
-    expect(await denied.push(candidate)).toEqual({ ok: false, code: "PUBLISH_PUSH_UNKNOWN",
+    expect(await denied.push(candidate)).toEqual({ ok: false, code: "PUBLISH_PUSH_REJECTED",
       detail: "git exited 128: git@github.com: Permission denied (publickey). fatal: Could not read from remote repository." });
     expect(await denied.observe(candidate)).toMatchObject({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: expect.stringContaining("Permission denied") });
     const leaking = createGitPublicationPort({ run: failing("fatal: unable to access 'https://alice:ghp_secret123@github.com/o/r.git/': 403", 128),

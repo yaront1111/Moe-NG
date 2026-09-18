@@ -63,7 +63,7 @@ const EXPECTED_COMMAND_KINDS = [
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
   "recovery.reconcile_external", "release.decide", "replan.propose_unblock", "repository.bootstrap",
-  "repository.publish", "repository.recover", "resource.confirm_released",
+  "repository.publish", "repository.publish_resolve", "repository.recover", "resource.confirm_released",
   "resource.reconcile", "resource.release", "resource.renew", "resource.request",
   "review.release", "review.start", "review.submit", "safe_boundary.observe",
   "session.close", "session.open", "session.renew", "session.rotate", "step.checkpoint",
@@ -108,9 +108,10 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 121, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the Set only,
-    // so the literal is what catches it. 122 -> 121 when design.read moved to the query roster.
-    expect(commands.size).toBe(121);
+    // Literal 122, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the Set only,
+    // so the literal is what catches it. 122 -> 121 when design.read moved to the query roster;
+    // 121 -> 122 when repository.publish_resolve joined (task-f3182818).
+    expect(commands.size).toBe(122);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     // task-749e585a: the operator's per-environment health-probe interval. Named here as well as
     // in EXPECTED_COMMAND_KINDS so a mistranscription of the hand-written roster above cannot
@@ -184,6 +185,11 @@ describe("runtime vocabulary is closed and disjoint", () => {
     expect(sourcePosition).toBeGreaterThan(-1);
     expect(RUNTIME_COMMAND_KINDS[sourcePosition - 1]).toBe("goal.create");
     expect(RUNTIME_COMMAND_KINDS[sourcePosition + 1]).toBe("goal.pause");
+    // task-f3182818: the generator sorts its own copy, so only this pin catches a misplaced source tuple.
+    const resolvePosition = RUNTIME_COMMAND_KINDS.indexOf("repository.publish_resolve");
+    expect(resolvePosition).toBeGreaterThan(-1);
+    expect(RUNTIME_COMMAND_KINDS[resolvePosition - 1]).toBe("repository.publish");
+    expect(RUNTIME_COMMAND_KINDS[resolvePosition + 1]).toBe("repository.recover");
   });
 
   it("admits both Foundation kinds through isCommandKind and refuses lookalikes", () => {
