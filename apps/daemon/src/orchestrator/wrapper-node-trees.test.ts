@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { NodeMission } from "./agent-wrapper.js";
 import { NODE_TREES_DIRECTORY, forgetNodeTrees, nodeTreeName } from "./node-worktrees.js";
-import { createNodeTreeMissions } from "./wrapper-node-trees.js";
+import { createNodeTreeMissions, nodeWorkspaceOf } from "./wrapper-node-trees.js";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -83,4 +83,18 @@ describe("briefing a node into its own tree", () => {
   it("has no mission to move when the node has none", () => {
     expect(createNodeTreeMissions(() => {}, unheld)(null, "node:v1:absent")).toBeNull();
   });
+
+  /** Review evidence is captured here, so it must be the SAME answer the mission got. */
+  it("names, without making anything, the workspace the mission was briefed into", () => {
+    const root = project();
+    // No tree yet: the project, and asking made none.
+    expect(nodeWorkspaceOf(root, "node:v1:alpha", unheld)).toBe(root);
+    const moved = createNodeTreeMissions(() => {}, unheld)(brief(root), "node:v1:alpha");
+    expect(moved?.workspace).not.toBe(root);
+    // Briefed into a tree: the evidence is captured from that tree, not the shared checkout.
+    expect(nodeWorkspaceOf(root, "node:v1:alpha", unheld)).toBe(moved?.workspace);
+    expect(nodeWorkspaceOf(root, "node:v1:beta", unheld)).toBe(root);
+    // A node finishing in the checkout it holds stays there even though a tree of its exists.
+    expect(nodeWorkspaceOf(root, "node:v1:alpha", () => "node:v1:alpha")).toBe(root);
+  }, 120_000);
 });

@@ -4,6 +4,8 @@ import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
 
 type CapturePort = Pick<VerifiedWorkspacePort, "capture"> | undefined;
+/** The one refusal the verifier can recover from by itself: the seat submits again. */
+export const SUBMISSION_CHANGED = "workspace changed after review submission";
 const refusal = (code: string, detail: string): VerifiedWorkspaceRefusal => ({ code, detail, ok: false });
 
 export async function checkVerifiedWorkspace(
@@ -25,7 +27,7 @@ export async function runBoundVerification(
   const before = await port.capture(brief.workspace);
   if (!before.ok) return before;
   if (submitted !== undefined && !sameVerifiedWorkspace(submitted, before.binding)) {
-    return refusal("VERIFIER_WORKSPACE_CHANGED", "workspace changed after review submission");
+    return refusal("VERIFIER_WORKSPACE_CHANGED", SUBMISSION_CHANGED);
   }
   const capture = await runTest(brief);
   const after = await port.capture(brief.workspace);

@@ -30,6 +30,7 @@ import {
 } from "./identity/session-handshake.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
+import { nodeWorkspaceOf } from "./orchestrator/wrapper-node-trees.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -262,6 +263,10 @@ export function createStoreDependencies(
       // Deferred until dispatch; the shared authenticator is constructed below before ports
       // are exposed. Capture rechecks the same durable identity after its asynchronous work.
       reviewSubmission: { workspace: repositoryWorkspace,
+        // The same knob the wrapper briefs nodes by, read where it is set: with node trees on, a
+        // node's evidence is captured from ITS tree, the workspace the verifier will test.
+        ...(process.env["MOE_NODE_TREES"] === "1"
+          ? { workspaceOf: (nodeRef: string) => nodeWorkspaceOf(repositoryWorkspace, nodeRef) } : {}),
         authenticate: (credential) => authenticator.authenticate(credential) },
     }),
     ...(config.deploymentDeploy === undefined ? {} : { deploymentDeploy: config.deploymentDeploy }),
