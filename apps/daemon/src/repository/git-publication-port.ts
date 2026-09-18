@@ -27,6 +27,21 @@ export interface GitPublicationOptions {
   readonly resolveIdentity?: typeof resolveRepositoryExecutionIdentity;
 }
 
+const GIT_WORDS_LIMIT = 400;
+/**
+ * Git's own last words, bounded and on one line, with any `scheme://user:secret@host` the
+ * remote or git echoed back reduced to `scheme://***@host`. A refusal used to carry only its
+ * code, so "PUBLISH_PUSH_UNKNOWN" stood for a missing ssh key, a rejected non-fast-forward
+ * and a dead network alike (UnAI 2026-09-18).
+ */
+export function gitFailureWords(code: number | null, stderr: string): string {
+  const words = stderr.replace(/\s+/gu, " ").replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/giu, "$1***@").trim();
+  const clipped = words.length > GIT_WORDS_LIMIT ? `${words.slice(0, GIT_WORDS_LIMIT)}…` : words;
+  return `git exited ${code === null ? "without a code" : String(code)}${clipped === "" ? "" : `: ${clipped}`}`;
+}
+const refusedWith = (code: string, detail: string) => Object.freeze({ ok: false as const, code, detail });
+const said = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
 export function createGitPublicationPort(options: GitPublicationOptions = {}): PublicationGitPort {
   const run = options.run ?? publicationGitRunner;
   const identityOf = options.resolveIdentity ?? resolveRepositoryExecutionIdentity;
@@ -65,9 +80,9 @@ export function createGitPublicationPort(options: GitPublicationOptions = {}): P
           const authentication = await publicationCredentialArguments(configRunner, candidate);
           const pushed = await run(directory, [`--git-dir=${directory}`, ...authentication, "push", "--no-verify", "--", candidate.approval.remoteUrl,
             `${candidate.approval.sha}:refs/heads/${candidate.approval.branch}`]);
-          return pushed.code === 0 ? { ok: true as const } : publicationRefused("PUBLISH_PUSH_UNKNOWN");
+          return pushed.code === 0 ? { ok: true as const } : refusedWith("PUBLISH_PUSH_UNKNOWN", gitFailureWords(pushed.code, pushed.stderr));
         });
-      } catch { return publicationRefused("PUBLISH_PUSH_UNKNOWN"); }
+      } catch (error) { return refusedWith("PUBLISH_PUSH_UNKNOWN", `push threw: ${said(error)}`); }
     },
     async observe(raw: PublicationCandidate) {
       const candidate = admit(raw);
@@ -77,14 +92,15 @@ export function createGitPublicationPort(options: GitPublicationOptions = {}): P
           const ref = `refs/heads/${candidate.approval.branch}`;
           const authentication = await publicationCredentialArguments(configRunner, candidate);
           const result = await run(directory, [`--git-dir=${directory}`, ...authentication, "ls-remote", "--refs", "--", candidate.approval.remoteUrl, ref]);
-          if (result.code !== 0) return publicationRefused("PUBLISH_REMOTE_UNREADABLE");
+          if (result.code !== 0) return refusedWith("PUBLISH_REMOTE_UNREADABLE", gitFailureWords(result.code, result.stderr));
           const rows = result.stdout.replace(/\r?\n$/u, "").split(/\r?\n/u).filter(Boolean);
           if (rows.length === 0) return { ok: true as const, sha: null };
           const pair = rows[0]?.split("\t");
           return rows.length === 1 && pair?.length === 2 && validPublicationSha(pair[0]) && pair[1] === ref
-            ? { ok: true as const, sha: pair[0] } : publicationRefused("PUBLISH_REMOTE_UNREADABLE");
+            ? { ok: true as const, sha: pair[0] }
+            : refusedWith("PUBLISH_REMOTE_UNREADABLE", `ls-remote answered ${String(rows.length)} row(s) for ${ref}, expected exactly one`);
         });
-      } catch { return publicationRefused("PUBLISH_REMOTE_UNREADABLE"); }
+      } catch (error) { return refusedWith("PUBLISH_REMOTE_UNREADABLE", `ls-remote threw: ${said(error)}`); }
     },
   });
 }

@@ -78,6 +78,16 @@ its own: a caller that injects no dependency provider is refused, never served a
   (`WRAPPER_STDIN_STOP_TOKEN`) before terminating it, since only the wrapper's own exit path
   `taskkill /T`s the seat trees.
 
+- **The publisher names its outcome.** `orchestrator/node-publisher.ts` reports `WAITING`
+  (the single repository reservation is held by a seat, a landing or a criterion check; nothing
+  journaled, next pass retries), `UNKNOWN` with `PUBLISH_EFFECT_RECONCILIATION_REQUIRED: <the
+  check that failed>` (git's exit code and last words ride along from
+  `repository/git-publication-port.ts`, URL secrets redacted), `PUSHED`, `REFUSED` or
+  `WORKSPACE_UNSET`. A journaled intent is never permission to push again. A free repository
+  is left to an approved publish that has not held it yet: `RepositoryDeliveryConfig.publishWaiting`
+  (wired to `pendingPublication`) turns deliveries away in `admission` and `start`, because the
+  delivery pass runs before the publisher's and won every race (UnAI 2026-09-18).
+
 ## Gotchas
 
 - **927 `.js` bridges beside 1733 `.ts` modules.** `runtime-entrypoint.test.ts` and

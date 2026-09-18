@@ -6,7 +6,7 @@ import { readPublishLedger } from "../repository/publish-ledger.js";
 import { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId } from "../repository/publish-receipt-contracts.js";
 import type { RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 import { PROJECT_ID, closeStores, openStore, openRestartableStore, reopen } from "../review/review-test-fixtures.js";
-import { createNodePublisher } from "./node-publisher.js";
+import { createNodePublisher, pendingPublication } from "./node-publisher.js";
 import { readRunGoalPublication } from "../http/run-goal-publication.js";
 
 afterEach(closeStores);
@@ -51,26 +51,36 @@ function reservation() {
       expect(reason).toBe("PUBLISHED"); held = null; return { ok: true, released: true };
     },
   };
-  return { port, held: () => held };
+  // A coding seat's hold, as the delivery coordinator leaves it: another owner, EXECUTING.
+  const hold = (nodeRef: string): void => {
+    const owner = { nodeRef, projectId: PROJECT_ID, storeId: "D:/store.db", ownershipToken: "seat-token" };
+    held = { owner, reservation: { ...owner, controllerId: "controller-1", controllerPid: 1234, identity, phase: "EXECUTING",
+      baselineId: "baseline-1", sessionId: "sess-1", pid: 4242, revision: 7 } };
+  };
+  return { port, held: () => held, hold, free: () => { held = null; } };
 }
 function world(bound = true, store = openStore()) {
   const decisionId = requestPublish(store, "publish-1", bound); const fence = reservation();
-  let pushes = 0; let remote: string | null = null; let failPush = false; let throwPush = false;
+  let pushes = 0; let remote: string | null = null; let failPush = false; let throwPush = false; let unreadable = false;
   const git: PublicationGitPort = {
     async push(given) {
       pushes += 1; expect(given).toEqual(candidate);
       expect(fence.held()?.reservation.phase).toBe("PUBLISHING");
       expect(readPublicationIntent(store, PROJECT_ID, GOAL, decisionId)).toMatchObject({ candidate, decisionId });
       if (throwPush) throw new Error("lost effect response");
-      if (failPush) return { ok: false, code: "PUBLISH_PUSH_UNKNOWN", detail: "unknown" };
+      if (failPush) return { ok: false, code: "PUBLISH_PUSH_UNKNOWN", detail: "git exited 128: Permission denied (publickey)." };
       remote = approval.sha; return { ok: true };
     },
-    async observe(given) { expect(given).toEqual(candidate); return { ok: true, sha: remote }; },
+    async observe(given) {
+      expect(given).toEqual(candidate);
+      return unreadable ? { ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "git exited 128: Could not resolve host" } : { ok: true, sha: remote };
+    },
   };
   const config = { git, projectId: PROJECT_ID, store, workspace: identity.root, repository: fence.port,
     storeId: "D:/store.db", controller: { controllerId: "controller-1", controllerPid: 1234 }, processAlive: () => false };
   return { config, store, decisionId, fence, pushes: () => pushes,
-    remote: (sha: string | null) => { remote = sha; }, fail: () => { failPush = true; }, throw: () => { throwPush = true; } };
+    remote: (sha: string | null) => { remote = sha; }, fail: () => { failPush = true; }, throw: () => { throwPush = true; },
+    unreadable: (value: boolean) => { unreadable = value; } };
 }
 
 describe("approved node publication", () => {
@@ -102,7 +112,44 @@ describe("approved node publication", () => {
   it("never adopts a live controller's effect", async () => {
     const w = world(); w.fail(); await createNodePublisher(w.config).publishOnce(); w.remote(approval.sha);
     const other = createNodePublisher({ ...w.config, controller: { controllerId: "other", controllerPid: 99 }, processAlive: () => true });
-    expect(await other.publishOnce()).toMatchObject([{ outcome: "UNKNOWN" }]); expect(w.fence.held()).not.toBeNull();
+    expect(await other.publishOnce()).toMatchObject([{ outcome: "UNKNOWN",
+      detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: another live controller (pid 1234) owns this publication" }]);
+    expect(w.fence.held()).not.toBeNull();
+  });
+  it("waits, journaling and pushing nothing, while a coding seat holds the repository, then publishes once it is free", async () => {
+    // UnAI 2026-09-18: nine passes of "UNKNOWN (PUBLISH_EFFECT_RECONCILIATION_REQUIRED)" while
+    // node 3's seat held the repository. Nothing was unknown: the publisher had never held it.
+    const w = world(); w.fence.hold("node:v1:seat-3");
+    const publisher = createNodePublisher(w.config);
+    expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "WAITING", detail: "repository held by node:v1:seat-3 (EXECUTING)" }]);
+    expect(w.pushes()).toBe(0);
+    expect(readPublicationIntent(w.store, PROJECT_ID, GOAL, w.decisionId)).toBeNull();
+    // The runs read stays PENDING (an UNKNOWN there needs a journaled intent), so the operator
+    // may still decide; and the delivery coordinator is told a publish is waiting.
+    expect(readRunGoalPublication(w.store, PROJECT_ID, readPublishLedger(w.store, PROJECT_ID).get(GOAL))).toMatchObject({ outcome: "PENDING" });
+    expect(pendingPublication(w.store, PROJECT_ID)).toBe(GOAL);
+    w.fence.free();
+    expect(await publisher.publishOnce()).toMatchObject([{ outcome: "PUSHED" }]);
+    expect(w.pushes()).toBe(1); expect(w.fence.held()).toBeNull();
+    expect(pendingPublication(w.store, PROJECT_ID)).toBeNull();
+  });
+  it("names the check behind every UNKNOWN, and stops naming a waiting publish once its intent is journaled", async () => {
+    const w = world(); w.fail(); const publisher = createNodePublisher(w.config);
+    expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: "
+      + "remote approved-branch is at absent, expected aaaaaaaaaa; push refused PUBLISH_PUSH_UNKNOWN: git exited 128: Permission denied (publickey)." }]);
+    // An intent exists now: a wedged effect must not turn every delivery away from the repository.
+    expect(pendingPublication(w.store, PROJECT_ID)).toBeNull();
+    expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: "
+      + "remote approved-branch is at absent, expected aaaaaaaaaa; no push this pass (an intent was already journaled)" }]);
+    w.unreadable(true);
+    expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: "
+      + "remote unreadable PUBLISH_REMOTE_UNREADABLE: git exited 128: Could not resolve host; no push this pass (an intent was already journaled)" }]);
+    expect(w.pushes()).toBe(1);
+  });
+  it("names a thrown push in the pass that threw it", async () => {
+    const w = world(); w.throw();
+    expect(await createNodePublisher(w.config).publishOnce()).toEqual([{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: "
+      + "remote approved-branch is at absent, expected aaaaaaaaaa; push threw: lost effect response" }]);
   });
   it("reopens a file-backed store and reconciles a durable unknown effect without another push", async () => {
     const durable = openRestartableStore(); const w = world(true, durable.store); w.fail();

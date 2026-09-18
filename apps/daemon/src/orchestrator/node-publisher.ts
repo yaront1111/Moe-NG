@@ -20,8 +20,44 @@ export interface NodePublisherConfig {
   readonly controller: RepositoryExecutionController;
   readonly processAlive?: (pid: number) => boolean;
 }
+/**
+ * One report per publish request per pass. `outcome` is one of:
+ * - `PUSHED`   — the remote branch was observed at exactly the approved sha; receipt recorded.
+ * - `REFUSED`  — a REFUSED receipt was recorded (today only for a legacy unbound decision).
+ * - `WAITING`  — the single repository reservation is held by another owner (a coding seat, a
+ *   landing, a criterion check); nothing was recorded or transmitted, and the next pass retries.
+ * - `UNKNOWN`  — the durable state and the remote could not be brought to agreement this pass;
+ *   `detail` names the check that failed (`PUBLISH_EFFECT_RECONCILIATION_REQUIRED: <reason>`).
+ *   Once an intent is journaled the push is never repeated; recovery only observes.
+ * - `WORKSPACE_UNSET` — no MOE_NODE_WORKSPACE, nothing attempted.
+ */
 export interface PublishReport { readonly detail: string; readonly goalId: string; readonly outcome: string }
 const report = (goalId: string, outcome: string, detail = outcome): PublishReport => ({ detail, goalId, outcome });
+export const PUBLISH_EFFECT_RECONCILIATION_REQUIRED = "PUBLISH_EFFECT_RECONCILIATION_REQUIRED";
+
+const said = (error: unknown): string => error instanceof Error ? error.message : String(error);
+const short = (sha: string | null): string => sha === null ? "absent" : sha.slice(0, 10);
+
+/**
+ * The goal of the oldest approved publish that has neither a receipt nor a journaled intent —
+ * a publish the operator decided that has not yet held the repository — or null. The delivery
+ * coordinator leaves a free repository alone while this names one (`publishWaiting`), so the
+ * publisher's pass, which runs after the delivery pass, can take it. A request WITH an intent
+ * is excluded on purpose: the publisher already holds the reservation for it, and a wedged
+ * effect must not turn every delivery away. Read failures answer null: a broken ledger must
+ * not stall deliveries, and the publisher's own pass reports it.
+ */
+export function pendingPublication(store: SqliteEventStore, projectId: string): string | null {
+  try {
+    for (const [, state] of readPublishLedger(store, projectId)) {
+      for (const request of state.requests) {
+        if (state.receipts.has(request.decisionId) || request.candidate === null) continue;
+        if (readPublicationIntent(store, projectId, request.goalId, request.decisionId) === null) return request.goalId;
+      }
+    }
+  } catch { return null; }
+  return null;
+}
 
 /** A persisted effect intent is never permission to repeat a push. Recovery only observes. */
 export function createNodePublisher(config: NodePublisherConfig) {
@@ -36,44 +72,59 @@ export function createNodePublisher(config: NodePublisherConfig) {
         remoteUrl: request.remoteUrl, sha: null, url: null });
       return report(goalId, "REFUSED", "PUBLISH_APPROVAL_REQUIRED");
     }
-    const unknown = () => report(goalId, "UNKNOWN", "PUBLISH_EFFECT_RECONCILIATION_REQUIRED");
+    // EVERY UNKNOWN NAMES ITS CHECK. Ten exits used to share one bare code; the wrapper log then
+    // read "UNKNOWN (PUBLISH_EFFECT_RECONCILIATION_REQUIRED)" whether the repository was merely
+    // held by a seat, the push was refused by the remote, or the receipt did not persist.
+    const unknown = (reason: string) => report(goalId, "UNKNOWN", `${PUBLISH_EFFECT_RECONCILIATION_REQUIRED}: ${reason}`);
     try {
-      let handle = publicationReservation({ ...config, workspace: config.workspace,
+      const reserved = publicationReservation({ ...config, workspace: config.workspace,
         processAlive: config.processAlive ?? probeProcessAlive }, decisionId, candidate);
-      if (handle === null) return unknown();
+      if (!reserved.ok) return reserved.waiting ? report(goalId, "WAITING", reserved.detail) : unknown(reserved.detail);
+      let handle = reserved.handle;
       let intent = readPublicationIntent(config.store, config.projectId, goalId, decisionId);
       let fresh = false;
       if (intent === null) {
-        if (handle.reservation.phase !== "RESERVED") return unknown();
+        if (handle.reservation.phase !== "RESERVED") return unknown(`reservation phase ${handle.reservation.phase} before any intent was journaled`);
         const recorded = recordPublicationIntent(config.store, { version: "moe-publication-intent/1", candidate,
           decisionId, goalId, projectId: config.projectId, ownerDigest: publicationOwnerDigest(handle.owner),
           reservationRevision: handle.reservation.revision, controllerId: config.controller.controllerId, intendedAt: clock() });
         intent = recorded.intent; fresh = !recorded.replayed;
       }
-      if (!samePublicationApproval(intent.candidate.approval, candidate.approval)
-        || intent.ownerDigest !== publicationOwnerDigest(handle.owner)
-        || intent.reservationRevision > handle.reservation.revision) return unknown();
+      if (!samePublicationApproval(intent.candidate.approval, candidate.approval)) return unknown("the journaled intent approves a different candidate than this request");
+      if (intent.ownerDigest !== publicationOwnerDigest(handle.owner)) return unknown("the journaled intent belongs to a different reservation owner");
+      if (intent.reservationRevision > handle.reservation.revision) return unknown("the reservation revision is older than the journaled intent");
       if (handle.reservation.phase === "RESERVED") {
         const moved = config.repository.transition(config.workspace, handle.owner, handle.reservation.revision,
           { ...config.controller, phase: "PUBLISHING", baselineId: null, sessionId: null, pid: null });
-        if (!moved.ok) return unknown(); handle = moved.handle;
+        if (!moved.ok) return unknown(`transition to PUBLISHING refused: ${moved.code}`); handle = moved.handle;
       }
-      if (handle.reservation.phase !== "PUBLISHING") return unknown();
+      if (handle.reservation.phase !== "PUBLISHING") return unknown(`reservation phase ${handle.reservation.phase}, expected PUBLISHING`);
+      let transmission = "no push this pass (an intent was already journaled)";
       if (fresh) {
         // Any thrown/lost result is ambiguous. The durable intent forbids another transmission.
-        try { await config.git.push(candidate); } catch { /* reconcile below */ }
+        try {
+          const pushed = await config.git.push(candidate);
+          transmission = pushed.ok ? "push exited 0" : `push refused ${pushed.code}: ${pushed.detail}`;
+        } catch (error) { transmission = `push threw: ${said(error)}`; }
       }
       const observed = await config.git.observe(candidate);
-      if (!observed.ok || observed.sha !== candidate.approval.sha) return unknown();
+      if (!observed.ok) return unknown(`remote unreadable ${observed.code}: ${observed.detail}; ${transmission}`);
+      if (observed.sha !== candidate.approval.sha) {
+        return unknown(`remote ${candidate.approval.branch} is at ${short(observed.sha)}, expected ${short(candidate.approval.sha)}; ${transmission}`);
+      }
       const receipt = recordPublishReceipt(config.store, { branch: candidate.approval.branch,
         decidedAt: clock(), decisionId, goalId, projectId: config.projectId, refusal: null,
         remoteUrl: candidate.approval.remoteUrl, sha: candidate.approval.sha,
         url: publishLinkFor(candidate.approval.remoteUrl, candidate.approval.branch) });
-      if (!receipt.ok || receipt.receipt.outcome !== "PUSHED" || receipt.receipt.sha !== candidate.approval.sha
-        || receipt.receipt.branch !== candidate.approval.branch || receipt.receipt.remoteUrl !== candidate.approval.remoteUrl) return unknown();
+      if (!receipt.ok) return unknown(`remote holds the sha but the receipt was not recorded: ${receipt.code}`);
+      if (receipt.receipt.outcome !== "PUSHED" || receipt.receipt.sha !== candidate.approval.sha
+        || receipt.receipt.branch !== candidate.approval.branch || receipt.receipt.remoteUrl !== candidate.approval.remoteUrl) {
+        return unknown("remote holds the sha but the recorded receipt does not match the candidate");
+      }
       const released = config.repository.release(config.workspace, handle.owner, handle.reservation.revision, "PUBLISHED", config.controller.controllerId);
-      return released.ok ? report(goalId, "PUSHED", `${candidate.approval.sha.slice(0, 10)} ${candidate.approval.branch} -> ${candidate.approval.remoteUrl}`) : unknown();
-    } catch { return unknown(); }
+      return released.ok ? report(goalId, "PUSHED", `${candidate.approval.sha.slice(0, 10)} ${candidate.approval.branch} -> ${candidate.approval.remoteUrl}`)
+        : unknown(`pushed and receipted, but the reservation release was refused: ${released.code}`);
+    } catch (error) { return unknown(`threw: ${said(error)}`); }
   };
   const publishOnce = async (): Promise<readonly PublishReport[]> => {
     if (active) return [];

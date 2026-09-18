@@ -29,6 +29,29 @@ describe("immutable publication Git port", () => {
     expect(await fixture(`${candidate.approval.sha}\trefs/heads/other\n`).port.observe(candidate)).toMatchObject({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE" });
     expect(await fixture(`${candidate.approval.sha}\trefs/heads/approved\n${candidate.approval.sha}\trefs/heads/approved\n`).port.observe(candidate)).toMatchObject({ ok: false });
   });
+  it("carries git's own exit code and last words into a push or observe refusal, with any URL secret redacted", async () => {
+    // One code used to stand for a missing ssh key, a rejected non-fast-forward and a dead
+    // network alike; the publisher's log then said nothing an operator could act on.
+    const failing = (stderr: string, code: number | null = 128): GitRunner => async (_cwd, args) => args.includes("push") || args.includes("ls-remote")
+      ? { code, stderr, stdout: "" }
+      : { code: 0, stderr: "", stdout: args.includes("config") ? "" : args.includes("--git-path") ? "D:/approved/.git/objects\n" : "commit\n" };
+    const denied = createGitPublicationPort({ run: failing("git@github.com: Permission denied (publickey).\r\nfatal: Could not read from remote repository.\n"),
+      resolveIdentity: () => ({ ok: true, identity }) });
+    expect(await denied.push(candidate)).toEqual({ ok: false, code: "PUBLISH_PUSH_UNKNOWN",
+      detail: "git exited 128: git@github.com: Permission denied (publickey). fatal: Could not read from remote repository." });
+    expect(await denied.observe(candidate)).toMatchObject({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: expect.stringContaining("Permission denied") });
+    const leaking = createGitPublicationPort({ run: failing("fatal: unable to access 'https://alice:ghp_secret123@github.com/o/r.git/': 403", 128),
+      resolveIdentity: () => ({ ok: true, identity }) });
+    const refusal = await leaking.push(candidate);
+    expect(refusal).toMatchObject({ ok: false, detail: expect.stringContaining("https://***@github.com/o/r.git") });
+    expect(JSON.stringify(refusal)).not.toContain("ghp_secret123");
+    const silent = createGitPublicationPort({ run: failing("", null), resolveIdentity: () => ({ ok: true, identity }) });
+    expect(await silent.push(candidate)).toMatchObject({ ok: false, detail: "git exited without a code" });
+    // Bounded: a thousand-line remote tantrum does not become the log line.
+    const noisy = createGitPublicationPort({ run: failing("x".repeat(5000)), resolveIdentity: () => ({ ok: true, identity }) });
+    const long = await noisy.push(candidate);
+    expect(long.ok).toBe(false); if (!long.ok) expect(long.detail.length).toBeLessThan(450);
+  });
   it("refuses a substituted canonical repository before spawning Git", async () => {
     let calls = 0;
     const port = createGitPublicationPort({ run: async () => { calls += 1; throw new Error("must not run"); },

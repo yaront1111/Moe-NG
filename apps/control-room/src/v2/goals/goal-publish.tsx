@@ -49,7 +49,11 @@ export function boundRemoteUrl(remote: RepositoryRemoteOutcome | null): string |
 /** What the runs read says about the latest publish, in a person's words. */
 export function publishLine(publish: RunGoalPublishView | null): string {
   if (publish === null) return "Not published yet. Landed commits stay in the workspace's repository until you publish.";
-  if (publish.outcome === "PENDING") return `Publishing to ${publish.remoteUrl} ${MIDDOT} waiting for the wrapper to push`;
+  // PENDING can last a whole node: the wrapper pushes only while it holds the repository, and a
+  // coding seat may hold it first (UnAI 2026-09-18, a publish waited out a 20-minute seat).
+  if (publish.outcome === "PENDING") {
+    return `Publishing to ${publish.remoteUrl} ${MIDDOT} waiting for the wrapper to push (it waits while a coding seat holds the repository)`;
+  }
   if (publish.outcome === "UNKNOWN") return `Publication outcome unknown ${MIDDOT} Repository remains held while the daemon checks the approved remote branch.`;
   if (publish.outcome === "PUSHED") {
     return `Pushed ${(publish.sha ?? "").slice(0, 10)} on ${publish.branch ?? "?"} to ${publish.remoteUrl}`;
