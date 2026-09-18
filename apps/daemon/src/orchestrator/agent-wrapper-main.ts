@@ -36,7 +36,9 @@ import {
 import type { WrapperStopSignal } from "./process-runner-lifecycle.js";
 import { VerifierProcessCancelledError } from "./verifier-process-runner.js";
 import { createVerifierDatabaseRunner } from "./verifier-database.js";
-import { verifierDatabaseProvisioningFromEnvironment } from "./verifier-database-provisioning.js";
+import {
+  resolveVerifierDatabaseProvisioning, verifierDatabaseProvisioningFromEnvironment,
+} from "./verifier-database-provisioning.js";
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
 import { createSeatStartRecorder } from "./seat-start-recorder.js";
@@ -227,6 +229,13 @@ async function main(): Promise<void> {
     // The disposable database's image/variables/TLS are the OPERATOR's to declare (MOE_VERIFIER_DB_*):
     // a product needing pgvector or TLS could never verify against the hard-coded shape. Unset = byte-identical.
     const verifierDatabase = verifierDatabaseProvisioningFromEnvironment(process.env);
+    // Stated at startup so the FIRST lines of wrapper.log prove what the verifier will provision.
+    // Measured 2026-09-18: the knobs were set at the launcher and silently absent here, and the
+    // only evidence was a verifier refusal an hour later. Names only — never the delivered values.
+    const shape = resolveVerifierDatabaseProvisioning(verifierDatabase);
+    process.stdout.write(`[verifier] database: image=${shape.image} urlVariables=${shape.urlVariables.join(",")}`
+      + ` tls=${String(shape.tls)} caVariable=${shape.caPathVariable ?? "-"}`
+      + `${verifierDatabase === undefined ? " (defaults: no MOE_VERIFIER_DB_* reached this process)" : ""}\n`);
     verifierRunner = createVerifierDatabaseRunner({
       ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
       ...(verifierDatabase === undefined ? {} : { database: verifierDatabase }),

@@ -72,6 +72,15 @@ export const PROJECT_STACK_ENVIRONMENT_KEYS = Object.freeze([
   "MOE_RUNTIME_PIN_ROOT",
   "MOE_STORE_PATH",
   "MOE_VERIFICATION_CATALOG",
+  // The verifier's disposable database: image, delivered URL variable names, TLS and the CA
+  // variable (operator decision 2026-09-18). Read by the wrapper at startup via
+  // verifier-database-provisioning.ts. Measured off this roster on UnAI: start.ps1 set all four,
+  // the wrapper still provisioned plain postgres + DATABASE_URL, and every DB-backed node failed
+  // MIGRATION_DID_NOT_START — the MOE_NODE_TREES silent failure again.
+  "MOE_VERIFIER_DB_CA_VAR",
+  "MOE_VERIFIER_DB_IMAGE",
+  "MOE_VERIFIER_DB_TLS",
+  "MOE_VERIFIER_DB_URL_VARS",
   "MOE_WRAPPER_INTERVAL_MS",
   "MOE_WRAPPER_MAX_AGENTS",
   "MOE_WRAPPER_MAX_ITEM_ATTEMPTS",
