@@ -110,6 +110,7 @@ import { createRepositoryWorkflowWiring } from "./daemon-repository-workflow-wir
 import { createDurableSchedule } from "./orchestrator/durable-schedule.js";
 import type { ScheduleRefusal } from "./orchestrator/durable-schedule.js";
 import type { DurableSchedule, ScheduleConfig } from "./orchestrator/durable-schedule.js";
+import { scheduleFaultReporter } from "./orchestrator/schedule-fault-report.js";
 import { createEnvironmentHealthProbeJob, createHealthProbeJob, createHealthProbeRing } from "./monitoring/health-probe-ring.js";
 import type { HealthHttpPort } from "./monitoring/health-probe-ring.js";
 import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, healthProbeJobEnvironment, healthProbeJobId }
@@ -797,6 +798,8 @@ export function createStoreDependencies(
     projectRoot: repositoryWorkspace, store,
   });
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
+    // A job that dies on its tick used to be a code in a notice nobody grepped; the throw now lands.
+    ...(config.diagnostics === undefined ? {} : { onFault: scheduleFaultReporter(config.diagnostics) }),
     // Reserved probe IDs never fall through to an external resolver that could re-arm retirement.
     // `release/auto-decide` is RESERVED TO NULL here, never delegated: the constructor rebuild runs
     // BEFORE the registration below re-arms it, and naming it here would need the deps that do not
