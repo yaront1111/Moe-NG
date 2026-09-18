@@ -16,7 +16,9 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { readWorkClaimLedger, runWorkClaimCommand } from "../work/work-claim-services.js";
 import { SqliteEventStore } from "@moe/store";
-import { AGENT_SPAWNER_LAYER } from "./agent-spawn-contract.js";
+import {
+  AGENT_SPAWNER_LAYER, NODE_BRIEF_UNREADABLE, NodeBriefUnreadableError,
+} from "./agent-spawn-contract.js";
 import type { AgentSpawnStartResult, SpawnReport,
   SpawnStartRefusal } from "./agent-spawn-contract.js";
 import { SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
@@ -863,6 +865,65 @@ describe("createAgentWrapper", () => {
         .toMatchObject({ status: "RELEASED", version: 2 });
       expect(readSessionLedger(reader, projectId).sessions.get(failed.sessionId))
         .toMatchObject({ status: "CLOSED", version: 2 });
+    } finally {
+      reader.close();
+      harness.dispose();
+    }
+  });
+
+  it("retries an unreadable brief next pass instead of latching the wrapper", async () => {
+    // THE OTHER KIND OF MISSION FAILURE. The arm above proves an ordinary throw from the brief
+    // records a setup failure. Recorded failures are never cleared, so from that pass on the
+    // wrapper answers `spawned: []` until it is restarted. A brief the STORE could not serve --
+    // a SQLITE_BUSY during the compiled-graph read -- must not have that power over the fleet:
+    // it is reported by name, burns no attempt, and the NEXT pass consults the brief again.
+    const projectId = "proj-wrapper-node-brief-unreadable";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const nodeRef = "node-brief-unreadable";
+      const workItemId = `node.deliver@${nodeRef}`;
+      const nodePort: AffordancePort = {
+        boundProjectId: projectId,
+        readSurface: () => {
+          const live = harness.port.readSurface();
+          if (live.outcome !== "SURFACE") return live;
+          return {
+            ...live,
+            steps: [{
+              aggregateId: nodeRef, claim: null, claimAggregateVersion: 0, kind: "node.deliver",
+              missing: [], status: "READY", version: 1,
+            }, ...live.steps.filter((step) => step.kind === "session.close")],
+          };
+        },
+      };
+      let briefReads = 0;
+      const wrapper = createAgentWrapper({
+        affordances: nodePort, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1, maxItemAttempts: 1,
+        mintSecret: () => `unread-${"0".repeat(27)}`,
+        nodeMission: () => {
+          briefReads += 1;
+          throw new NodeBriefUnreadableError(`compiled graph ${nodeRef}`);
+        },
+        operatorCredential: OPERATOR,
+        spawnAgent: () => { throw new Error("an unreadable brief must never spawn"); },
+      });
+
+      const first = await wrapper.runOnce();
+      expect(first.spawned.map((report) => report.outcome)).toEqual([NODE_BRIEF_UNREADABLE]);
+      // Nothing durable was minted: the brief is resolved BEFORE any claim or session.
+      expect(readWorkClaimLedger(reader, projectId).claims.has(workItemId)).toBe(false);
+      expect(first.surfaceOutcome).toBe("SURFACE");
+
+      const second = await wrapper.runOnce();
+      // The discriminator. A latched wrapper answers `spawned: []` and its surface outcome is
+      // the recorded failure text; a retried one consults the brief again and reports again.
+      expect(briefReads).toBe(2);
+      expect(second.spawned.map((report) => report.outcome)).toEqual([NODE_BRIEF_UNREADABLE]);
+      expect(second.surfaceOutcome).toBe("SURFACE");
+      // And `maxItemAttempts: 1` did not exhaust it: a gate refusal burns no attempt.
+      expect(second.spawned[0]?.outcome).not.toBe("STAFFING_ATTEMPTS_EXHAUSTED");
     } finally {
       reader.close();
       harness.dispose();
