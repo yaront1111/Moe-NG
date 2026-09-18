@@ -62,14 +62,16 @@
     {
       "stepId": "step-4",
       "description": "GATES AND ADVERSARIAL REVIEW. Read each leg's OUTPUT, not its exit code — a leg with no `Test Files N passed` line ran nothing, and a wrong --filter prints 'No projects matched the filters' and exits 0. (A) `pnpm --filter @moe/contracts test`, count quoted. (B) `pnpm --filter @moe/control-room-client test`, count quoted. (C) `pnpm --filter @moe/control-room test`, count quoted — MANDATORY: three of the mirrors live under apps/control-room, which is in none of `pnpm test`, `pnpm typecheck` or the daemon leg, so a forgotten mirror ships hard-throwing tests behind every other green gate. (D) The full `pnpm --filter @moe/daemon test` and `pnpm typecheck`, both quoted; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (E) ADVERSARIAL REVIEW, in the completion record: Is the source tuple in sorted order, and would the new neighbour pin catch it if it were not? Does anything now DISPATCH `repository.publish_resolve` — nothing should; this row only advertises it, and it must not reach the daemon registry, a refusal map or an operator fence (rows 2 and 3)? Does gates-human-only-fence.test.ts red on an advertised-but-unclassified kind — if so, record it and hand it to row 3 rather than classifying the kind here. Quote the full mirror census at the delivered tree.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-18T19:37:54.238Z"
+      "note": "No new edits this step (gates + adversarial only). HEAD 4ff4dfb2; owned production bytes already in 50d7a0a9.\n\n(A) pnpm --filter @moe/contracts test: Test Files 18 passed (18) / Tests 540 passed (540)\n(B) pnpm --filter @moe/control-room-client test: Test Files 10 passed (10) / Tests 96 passed (96)\n(C) pnpm --filter @moe/control-room test: Test Files 1 failed | 194 passed (195) / Tests 2 failed | 2571 passed (2573). FOREIGN work-labels.test.ts:244 vs affordance-read.ts freeze shape; branch lacks origin/main afe5683f. Owned mirrors: Test Files 3 passed (3) / Tests 39 passed (39).\n(D) pnpm --filter @moe/daemon test: Test Files 55 failed | 690 passed (745) / Tests 102 failed | 11474 passed | 21 skipped (11597). FOREIGN; owned-path intersection empty. Focused roster-coherence+human-only-fence: Test Files 2 passed (2) / Tests 13 passed (13).\npnpm typecheck: 19 of 20 projects Done, exit 0.\n\nCENSUS new 10d93d2d9117b749658bff66f366cd2ecaa3f0fb6b30f0f59cd6734a636d4ce9: the five files listed in the step-4 comment. Old cbe06719…e5708: zero hits, exit 1.\n\nADVERSARIAL: tuple sorted; neighbour pin would catch a mis-slot. No daemon dispatch (grep apps/daemon = 0). human-only-fence green (BAND excludes repository.*); classification stays row 3 task-2c3f878b. Did not file a work-labels bug: already fixed on origin/main afe5683f.",
+      "startedAt": "2026-09-18T19:37:54.238Z",
+      "completedAt": "2026-09-18T20:27:03.834Z"
     }
   ],
-  "planRevision": 8,
-  "status": "WORKING",
-  "assignedWorkerId": "worker-07e6de2a",
+  "planRevision": 9,
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -78,15 +80,22 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1017.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-8beed00334ab4664baa1f275276a2c06",
+      "author": "worker-07e6de2a",
+      "content": "STEP-4 GATES + ADVERSARIAL (anchor: worktree HEAD 4ff4dfb2; production bytes live in 50d7a0a9 amend-sweep labelled Moe-Task task-8bc14883).\n\nCENSUS new digest 10d93d2d9117b749658bff66f366cd2ecaa3f0fb6b30f0f59cd6734a636d4ce9 (`git grep -ln` -- . ':!dist' ':!.moe' ':!node_modules', exit 0):\napps/control-room/src/v2/goals/approve-plan-reject.test.tsx\napps/control-room/src/v2/goals/approve-plan.test.tsx\napps/control-room/src/v2/goals/plan-run-resolution.test.tsx\npackages/control-room-client/src/generated-coverage.test.ts\npackages/control-room-client/src/generated/generated-client.ts\nOLD digest cbe06719726c8bb40ff2e6273a91666adc63921d1138d1864f85becc5a2e5708: empty, exit 1.\n\nGATES (read OUTPUT, not exit):\n(A) pnpm --filter @moe/contracts test → Test Files 18 passed (18) / Tests 540 passed (540)\n(B) pnpm --filter @moe/control-room-client test → Test Files 10 passed (10) / Tests 96 passed (96) (generated-coverage included)\n(C) pnpm --filter @moe/control-room test → Test Files 1 failed | 194 passed (195) / Tests 2 failed | 2571 passed (2573). FOREIGN: apps/control-room/src/v2/goals/work-labels.test.ts:244 Error: verification token block not found in affordance-read.ts (scanner wants `verificationMissing = Object.freeze([`; production is `Object.freeze(standing.readable ? [`). This branch lacks origin/main afe5683f. NOT owned. Re-run failing file alone: same 2 fails. Owned mirrors alone: Test Files 3 passed (3) / Tests 39 passed (39).\n(D) pnpm --filter @moe/daemon test → Test Files 55 failed | 690 passed (745) / Tests 102 failed | 11474 passed | 21 skipped (11597). FOREIGN (activation/work/git-publication/wrapper-knobs/review-submission-runtime/…). Owned-path intersection EMPTY. Focused `gates-roster-coherence.test.ts` + `gates-human-only-fence.test.ts`: Test Files 2 passed (2) / Tests 13 passed (13).\npnpm typecheck → Scope: 19 of 20 workspace projects, all Done, exit 0.\n\nADVERSARIAL: source tuple sorted (publish < publish_resolve < recover). Neighbour pin :189-192 would red if not (indexOf>-1, [i-1]=repository.publish, [i+1]=repository.recover). Dispatch: git grep publish_resolve apps/daemon = 0; not in PAYLOAD_KEYS / registry / OPERATOR_PRINCIPAL_KINDS / refusal map. Generated client has CommandBuilder only (advertisement, not daemon dispatch). gates-human-only-fence GREEN — BAND is /^(?:design|preview|release)\\./ so this kind is not classified here; that remains row 3 (task-2c3f878b).",
+      "timestamp": "2026-09-18T20:27:03.565Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:10:28.284Z",
-  "updatedAt": "2026-09-18T20:13:50.159Z",
+  "updatedAt": "2026-09-18T20:27:38.120Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T19:22:29.745Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -94,7 +103,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T19:27:19.671Z",
@@ -116,5 +126,56 @@
       "releasedBy": "governor-f32726f9",
       "reason": "Confirmed crash: worker-e0435164 silent since 20:03Z, fleet restarted (new seats ~20:08Z), human confirmed no task in flight. Downstream chain adeabf1f->2c3f878b->a47babf8 waits on this."
     }
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "4ff4dfb26ade9f0dee51e5fcd6cae28d9d792866",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-18T20:13:50Z",
+      "paths": [
+        ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-18T20:13:54.470Z",
+      "treeId": "7ae219556aa1b522930c5bd8637a91de6d27adea",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/control-room-client/src/generated/generated-client.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+    "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
+    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-07e6de2a@2026-09-18T20:13:50Z",
+    "at": "2026-09-18T20:13:54.470Z"
+  },
+  "declaredFiles": [
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "packages/control-room-client/src/generated/generated-client.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+    "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
+    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx"
+  ],
+  "reviewStartedAt": "2026-09-18T20:27:38.119Z",
+  "verification": {
+    "command": "pnpm --filter @moe/contracts test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/contracts/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n ✓ packages/contracts/src/distribution/distribution-manifest.test.ts (80 tests)\n ✓ packages/contracts/src/document-work/document-work-proposal.test.ts (19 tests)\n ✓ packages/contracts/src/configuration/project-configuration.test.ts (66 tests)\n ✓ packages/contracts/src/document-work/document-work-proposal-validation.test.ts (43 tests)\n ✓ packages/contracts/src/configuration/project-configuration-hostile.test.ts (107 tests)\n ✓ packages/contracts/src/runtime/runtime-envelope.test.ts (58 tests)\n ✓ packages/contracts/src/runtime/runtime-contract.test.ts (12 tests)\n ✓ packages/contracts/src/bounded-json-boundary.test.ts (8 tests)\n ✓ packages/contracts/src/goal-brief/goal-source-contract.test.ts (32 tests)\n ✓ packages/contracts/src/diagnostics/diagnostic-error.test.ts (11 tests)\n ✓ packages/contracts/src/session-authority-canonical.test.ts (26 tests)\n ✓ packages/contracts/src/diagnostics/diagnostic-codec.test.ts (10 tests)\n ✓ packages/contracts/src/bounded-json-hostile.test.ts (16 tests)\n ✓ packages/contracts/src/goal-brief/goal-brief-contract.test.ts (29 tests)\n ✓ packages/contracts/src/distribution-root-publication.test.ts (8 tests)\n ✓ packages/contracts/src/diagnostics/diagnostic-sink.test.ts (10 tests)\n ✓ packages/contracts/src/phase0-evidence-contract.test.ts (4 tests)\n ✓ packages/contracts/src/phase0-freeze-contract.test.ts (1 test)\n\n Test Files  18 passed (18)\n      Tests  540 passed (540)\n   Start at  23:16:24\n   Duration  1.31s",
+    "reportedAt": "2026-09-18T20:27:38.119Z",
+    "source": "agent-reported"
+  },
+  "completionSummary": "ROW 1 roster+mirrors: repository.publish_resolve joined RUNTIME_COMMAND_KINDS between repository.publish and repository.recover (vocab:116); neighbour pin :189-192; size pin 122. Client regenerated (not hand-edited). Digest cbe06719…e5708 → 10d93d2d9117b749658bff66f366cd2ecaa3f0fb6b30f0f59cd6734a636d4ce9.\n\nCENSUS (`git grep -ln` new digest, exit 0): approve-plan-reject.test.tsx, approve-plan.test.tsx, plan-run-resolution.test.tsx, generated-coverage.test.ts, generated-client.ts. Old digest: empty, exit 1.\n\nGATES: contracts Test Files 18 passed (18)/Tests 540 passed (540); control-room-client 10 passed (10)/96 passed (96); owned CR mirrors 3 passed (3)/39 passed (39); typecheck 19/20 projects Done exit 0; roster-coherence+human-only-fence 2 passed (2)/13 passed (13).\nFOREIGN disclosed: full @moe/control-room test 1 failed (work-labels.test.ts:244; branch lacks origin/main afe5683f); full @moe/daemon test Test Files 55 failed | 690 passed (745)/Tests 102 failed | 11474 passed. Owned-path intersection EMPTY. No daemon dispatch. human-only-fence green; classification is row 3 task-2c3f878b.\nBytes carrier: 50d7a0a9 (mislabelled sibling checkpoint) + this row’s declared 7 paths."
 }
