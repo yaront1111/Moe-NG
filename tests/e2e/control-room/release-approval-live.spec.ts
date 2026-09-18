@@ -8,19 +8,16 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { SqliteEventStore } from "@moe/store";
 
-import { publicationRepositoryId }
-  from "../../../apps/daemon/src/repository/publication-approval-contracts.js";
 import { readPublishLedger }
   from "../../../apps/daemon/src/repository/publish-ledger.js";
 import { publishAggregateId }
   from "../../../apps/daemon/src/repository/publish-receipt-contracts.js";
-import { resolveRepositoryExecutionIdentity }
-  from "../../../apps/daemon/src/repository/repository-execution-identity.js";
 import { killTree, running } from "./daemon-children.js";
 import { mintLaneOperatorSeat, readWireProtocolVersion, withDaemonBackedControlRoom }
   from "./daemon-ports.js";
 import { createLaneContractGoal } from "./lane-contract-goal.js";
 import { CARD_MS, assertStopped, pair } from "./lane-preview-arms.js";
+import { readPublicationApproval } from "./publication-approval-read.js";
 import { resolveLaneScratch, startWrapper, WRAPPER_INTERVAL_MS, wrapperEnv } from "./wrapper-lane.js";
 import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
 
@@ -51,16 +48,18 @@ import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
  * node landings then sit on top of that. The push therefore carries only this drive's own
  * commits.
  *
- * WHAT IS PUSHED, AND WHAT IS NOT. `git-publication-port.ts:66` pushes
+ * WHAT IS PUSHED, AND WHAT IS NOT. `git-publication-port.ts` pushes
  * `<sha>:refs/heads/<approval.branch>`, so `approval.branch` IS the ref written on the remote.
- * It is NOT an operator's free choice: `publish-services.ts:99` re-measures the candidate itself
- * and refuses PUBLISH_APPROVAL_STALE @ DAEMON_PREREQUISITE unless the submitted approval equals
- * it, and `publication-candidate.ts:21` reads the branch from the workspace's own
- * `symbolic-ref HEAD`. So the throwaway ref is created by CHECKING THE LANE WORKSPACE OUT ON IT,
- * and the daemon then measures the name this drive intends. Reusing the `branch: "main"` literal
- * the hermetic spec is safe with — its remote does not exist — would push at the owner's base
- * branch. The pull request BASE is a separate value and travels from the card's own input
- * through the `release.decide` payload.
+ * It is neither the operator's free choice nor this drive's: `publish-services.ts:99-101`
+ * re-measures the candidate and refuses PUBLISH_APPROVAL_STALE @ DAEMON_PREREQUISITE unless the
+ * submitted approval equals it, and the DAEMON picks the branch - the workspace's own branch, or
+ * `moe/release/<goalId>` when the remote's default is unknown or is that branch (task-04160615).
+ * So the approval is the daemon's own preview (`readPublicationApproval`, as the Publish card
+ * takes it) and every pushed-branch check reads `approval.branch`. The lane workspace is still
+ * checked out on a THROWAWAY name, so it is never on the remote's base, and an approval naming
+ * the base is refused before the publish. A hand-built approval naming `main` would push at the
+ * owner's base branch. The pull request BASE is a separate value and travels from the card's own
+ * input through the `release.decide` payload.
  */
 const LIVE = process.env["MOE_LIVE_RELEASE_PR"] === "1";
 const LIVE_REMOTE = process.env["MOE_LIVE_RELEASE_REMOTE"] ?? "";
@@ -109,10 +108,11 @@ function descendFromBase(workspace: string, repoRoot: string, sha: string, branc
   expect(local, `the local checkout must hold ${sha} — run \`git fetch origin\``).toBe("commit");
   git(workspace, ["fetch", "--no-tags", "--quiet", repoRoot.replaceAll("\\", "/"),
     `+${sha}:refs/heads/live-release-base`]);
-  // CHECKED OUT ON THE THROWAWAY NAME, because that is what the daemon will measure and push.
+  // CHECKED OUT ON THE THROWAWAY NAME, so the workspace is never on the remote's base. What is
+  // pushed is the daemon's call, read back from its approval.
   git(workspace, ["checkout", "--quiet", "-B", branch, "refs/heads/live-release-base"]);
   expect(git(workspace, ["symbolic-ref", "--quiet", "HEAD"]),
-    "the daemon reads the pushed ref from this workspace's HEAD").toBe(`refs/heads/${branch}`);
+    "the workspace must be on the throwaway name").toBe(`refs/heads/${branch}`);
   git(workspace, ["reset", "--hard", "--quiet", "refs/heads/live-release-base"]);
   writeFileSync(join(workspace, "product.txt"),
     "The lane's own workspace, committed for real.\n", "utf8");
@@ -249,11 +249,12 @@ test("gate 3 live: the operator approves in the browser and GitHub answers with 
       .toMatch(/^https:\/\/[^\s@]+$/u);
     let started: DaemonLane | undefined;
     wrapperPids.length = 0;
-    const branch = `moe-gate3-release-${Date.now().toString(36)}`;
+    const checkout = `moe-gate3-release-${Date.now().toString(36)}`;
     // THE ONE UNRECOVERABLE MISTAKE THIS SPEC COULD MAKE is pushing at the base branch, so it is
-    // refused here rather than left to the generator's good luck. A drive that leaves the branch
-    // behind on a failure is deliberate — it is the evidence — and is pruned by hand, not here.
-    expect(branch, "the drive may never push at the base branch").not.toBe(LIVE_BASE);
+    // refused here rather than left to the generator's good luck, and again on the approval's
+    // branch before the publish. A drive that leaves the branch behind on a failure is
+    // deliberate — it is the evidence — and is pruned by hand, not here.
+    expect(checkout, "the drive may never push at the base branch").not.toBe(LIVE_BASE);
     try {
       const result = await withDaemonBackedControlRoom({
         fakeDocker: "SUCCESS", liveCredentials: "ATTACHED", operatorChannel: true,
@@ -269,24 +270,23 @@ test("gate 3 live: the operator approves in the browser and GitHub answers with 
         expect(laneScratch, "the lane scratch must resolve before the spec is retired").not.toBeNull();
         if (laneScratch === null) throw new Error("unreachable: the assertion above fails first");
         const baseSha = remoteBaseSha(lane.repoRoot);
-        descendFromBase(lane.workspace, lane.repoRoot, baseSha, branch);
+        descendFromBase(lane.workspace, lane.repoRoot, baseSha, checkout);
 
         const contract = await createLaneContractGoal(lane);
         wrapperPids.push(...contract.wrapperPids);
         expect(contract.landedSha, "the lander commits a real sha git resolves").toMatch(SHA);
-        const identity = resolveRepositoryExecutionIdentity(lane.workspace);
-        expect(identity.ok, JSON.stringify(identity)).toBe(true);
-        if (!identity.ok) throw new Error("unreachable: the assertion above fails first");
         const goalId = contract.goalRef;
 
-        const approval = { branch, remoteUrl: LIVE_REMOTE,
-          repositoryId: publicationRepositoryId(identity.identity), sha: contract.landedSha };
+        const approval = await readPublicationApproval(lane, goalId, LIVE_REMOTE);
+        expect(approval, "the daemon's preview names the commit this drive just landed")
+          .toMatchObject({ remoteUrl: LIVE_REMOTE, sha: contract.landedSha });
+        expect(approval.branch, "the drive may never push at the base branch").not.toBe(LIVE_BASE);
         const published = await command(lane, "repository.publish", publishAggregateId(goalId),
           { approval, goalId, remoteUrl: LIVE_REMOTE }, mintLaneOperatorSeat(lane).credential);
         expect(published, `PUBLISH: ${JSON.stringify(published)}`)
           .toMatchObject({ outcome: "ACCEPTED" });
         await tickPublisher(lane, laneScratch, contract.scratch.workspace);
-        expect(await awaitPushed(lane, goalId), `the publisher must push ${branch} to the remote`)
+        expect(await awaitPushed(lane, goalId), `the publisher must push ${approval.branch} to the remote`)
           .toBe("PUSHED");
 
         const evidence = await readRelease(lane, goalId);
@@ -335,7 +335,7 @@ test("gate 3 live: the operator approves in the browser and GitHub answers with 
         // `test.skip` above quietly declined.
         // eslint-disable-next-line no-console
         console.log(`LIVE RELEASE DRIVE: ${JSON.stringify({
-          base: LIVE_BASE, branch, dossierSha256: decided["dossierSha256"], goalId,
+          base: LIVE_BASE, branch: approval.branch, dossierSha256: decided["dossierSha256"], goalId,
           landedSha: contract.landedSha, prUrl, receiptId: decided["receiptId"],
           remote: LIVE_REMOTE,
         })}`);

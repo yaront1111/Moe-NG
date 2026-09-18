@@ -27,17 +27,14 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { SqliteEventStore } from "@moe/store";
 
-import { publicationRepositoryId }
-  from "../../../apps/daemon/src/repository/publication-approval-contracts.js";
 import { readPublishLedger } from "../../../apps/daemon/src/repository/publish-ledger.js";
 import { publishAggregateId }
   from "../../../apps/daemon/src/repository/publish-receipt-contracts.js";
-import { resolveRepositoryExecutionIdentity }
-  from "../../../apps/daemon/src/repository/repository-execution-identity.js";
 import { killTree } from "./daemon-children.js";
 import { mintLaneOperatorSeat, readWireProtocolVersion } from "./daemon-ports.js";
 import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
 import { isRecord, record } from "./live-proof-arms.js";
+import { readPublicationApproval } from "./publication-approval-read.js";
 import { startWrapper, WRAPPER_INTERVAL_MS, wrapperEnv } from "./wrapper-lane.js";
 
 export const LIVE_RELEASE = process.env["MOE_LIVE_RELEASE_PR"] === "1";
@@ -163,17 +160,19 @@ export interface LiveReleaseOutcome {
 export async function releaseLiveProof(
   page: Page, lane: DaemonLane, scratch: LaneScratch, workspace: string, goalId: string,
 ): Promise<LiveReleaseOutcome> {
-  const branch = `moe-live-proof-${Date.now().toString(36)}`;
+  const checkout = `moe-live-proof-${Date.now().toString(36)}`;
   const { base, sha: baseSha } = seedRemoteBase(workspace);
-  expect(branch, "the drive may never push at the base branch").not.toBe(base);
-  // THE DAEMON READS THE PUSHED REF FROM THE WORKSPACE'S OWN HEAD (`publication-candidate.ts`),
-  // so the throwaway name is created by checking the product out on it -- naming it in the
-  // payload alone would be re-measured and refused PUBLISH_APPROVAL_STALE.
-  git(workspace, ["checkout", "--quiet", "-B", branch]);
+  expect(checkout, "the drive may never push at the base branch").not.toBe(base);
+  // THE PRODUCT IS CHECKED OUT ON A THROWAWAY NAME, so it is never on the base. The pushed ref is
+  // the DAEMON'S call, read back from its own preview exactly as the Publish card reads it: the
+  // workspace branch, or `moe/release/<goalId>` when the remote's default is unknown or is that
+  // branch (task-04160615). A hand-built approval would be refused PUBLISH_APPROVAL_STALE.
+  git(workspace, ["checkout", "--quiet", "-B", checkout]);
   const sha = git(workspace, ["rev-parse", "--verify", "HEAD"]);
-  const identity = resolveRepositoryExecutionIdentity(workspace);
-  expect(identity.ok, JSON.stringify(identity)).toBe(true);
-  if (!identity.ok) throw new Error("unreachable: the assertion above fails first");
+  const approval = await readPublicationApproval(lane, goalId, LIVE_REMOTE);
+  expect(approval, "the daemon's preview names the commit this drive checked out")
+    .toMatchObject({ remoteUrl: LIVE_REMOTE, sha });
+  expect(approval.branch, "the drive may never push at the base branch").not.toBe(base);
 
   const operator = mintLaneOperatorSeat(lane).credential;
   const aggregate = publishAggregateId(goalId);
@@ -183,22 +182,16 @@ export async function releaseLiveProof(
   const published = await post(lane, "/command", {
     commandId: "live-proof-publish", commandKind: "repository.publish",
     correlationId: "live-proof-release", expectedVersion,
-    payload: {
-      approval: {
-        branch, remoteUrl: LIVE_REMOTE,
-        repositoryId: publicationRepositoryId(identity.identity), sha,
-      },
-      goalId, remoteUrl: LIVE_REMOTE,
-    },
+    payload: { approval, goalId, remoteUrl: LIVE_REMOTE },
     requestDigest: "d".repeat(64), schemaVersion: "moe-runtime-command/1",
     sessionCredential: operator, targetAggregateId: aggregate,
   }, operator);
   record("publish-dispatch", isRecord(published) ? (published["refusal"] ?? published["outcome"]) : published);
   const publish = await tickPublisher(lane, scratch, workspace,
     () => publishOutcome(scratch, lane.projectId, goalId));
-  record("publish-receipt", { branch, outcome: publish, sha });
+  record("publish-receipt", { branch: approval.branch, outcome: publish, sha });
   if (publish !== "PUSHED") {
-    return { base, baseSha, branch, dossier: null, prUrl: null, publish, receipt: null };
+    return { base, baseSha, branch: approval.branch, dossier: null, prUrl: null, publish, receipt: null };
   }
 
   // ---- GATE 3, BY CLICK, on the release card. ----
@@ -224,5 +217,5 @@ export async function releaseLiveProof(
     else await delay(2_000);
   }
   const prUrl = receipt === null ? null : String(receipt["prUrl"] ?? "");
-  return { base, baseSha, branch, dossier: readDossier(prUrl), prUrl, publish, receipt };
+  return { base, baseSha, branch: approval.branch, dossier: readDossier(prUrl), prUrl, publish, receipt };
 }

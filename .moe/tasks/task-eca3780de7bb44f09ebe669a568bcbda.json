@@ -180,7 +180,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:03:48.372Z",
-  "updatedAt": "2026-09-18T22:26:55.443Z",
+  "updatedAt": "2026-09-18T22:27:11.416Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:06:50.602Z",
     "plannedStepCount": 6,
@@ -273,6 +273,35 @@
       "treeId": "4edc5737b53e7a72dff665e2909e2e292bc13c8d",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "96c3b2035b7464fc29be5dd1456389aa1f0f667d",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-18T22:02:28Z",
+      "paths": [
+        ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-spawner-quiet.test.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/seat-liveness.test.ts",
+        "apps/daemon/src/orchestrator/seat-liveness.ts",
+        "apps/daemon/src/orchestrator/seat-liveness-probe.ts",
+        "docs/agent-stack-runbook.md"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-18T22:27:11.416Z",
+      "treeId": "9cee6f17641cfec539c81c62b2f73f98702a849c",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-21be6e9055984413a651ce6ee331e2c8"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -284,14 +313,15 @@
     "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
     "apps/daemon/src/orchestrator/seat-liveness-probe.ts",
     "apps/daemon/CLAUDE.md",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-07e6de2a@2026-09-18T20:30:49Z",
-    "at": "2026-09-18T20:53:10.522Z"
+    "kind": "completion",
+    "sessionId": "worker-07e6de2a@2026-09-18T22:02:28Z",
+    "at": "2026-09-18T22:27:11.416Z"
   },
   "priorBlockedReason": "STEP-2 FLOOR UNDECIDABLE on this host: per-interval CPU cannot tell hung from working. Production probe, shell:true cmd.exe root, descendants=1 every sample. Full lists: comment-a96f4b63e32d4f948a223dbabb6dcd4d.\nHUNG deltaMs/60s (10): 156.25, 281.25, 125, 250, 234.375, 187.5, 546.875, 218.75, 468.75, 218.75; max=546.875 (retry POST at minute 6).\nWORKING deltaMs/60s (10, live generating -p, no tool child): 1218.75, 468.75, 328.125, 687.5, 468.75, 328.125, 515.625, 312.5, 218.75, 437.5; min=218.75 median=453.125.\nRule: 1.5*max(hung)=820.3. Branch1 (820.3<=min working)? NO. Branch2 (821 below working median 453)? NO. Overlap is real, not a short sample: a generating -p seat had minutes at 219-328 inside the hung band, with 0 stdout (buffered until finish). Prior figures (hung max 328, working min 766) did not reproduce. Deciding which failure to accept (kill working lulls vs spare hung retries) is not this row's call.",
   "blockedOnTaskIds": null,
