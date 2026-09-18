@@ -14,7 +14,6 @@ import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
 import { diagnosticRootFromConfigArgv } from "../diagnostics/diagnostic-project-root.js";
 import { teeDiagnosticLine } from "../diagnostics/diagnostic-line-tee.js";
 import { credentialValues } from "../orchestrator/credential-scrub.js";
-import { NODE_TRANSFORM_TYPES_FLAG } from "../orchestrator/moe-up-spawn.js";
 import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import {
   createNodeProjectStackConfigFs,
@@ -71,7 +70,7 @@ export function projectStackWrapperLaunch(
   sink?: number,
 ): WrapperLaunch {
   return Object.freeze({
-    argv: Object.freeze([NODE_TRANSFORM_TYPES_FLAG, wrapperEntry]),
+    argv: Object.freeze([wrapperEntry]),
     command: process.execPath,
     options: Object.freeze({
       cwd: bindings.projectRoot,

@@ -5,9 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { describeLaunchVariables, resolveLaunchEnv } from "./moe-up-env.js";
 import type { FileExists } from "./moe-up-env.js";
-import {
-  NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
-} from "./moe-up-spawn.js";
+import { controlRoomAssetRoot, createProcessSpawn, launchEntryPaths } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchEntryPaths, LaunchSpawn } from "./moe-up-spawn.js";
 import { WRAPPER_STDIN_STOP_TOKEN } from "./process-runner-lifecycle.js";
 import { consumePairingOperatorLines } from "../http/pairing-operator-channel.js";
@@ -241,7 +239,7 @@ function startDaemonChild(
   const child = options.spawn(
     process.execPath,
     [
-      NODE_TRANSFORM_TYPES_FLAG, paths.daemonEntry, `--dependencies=${paths.dependencies}`,
+      paths.daemonEntry, `--dependencies=${paths.dependencies}`,
       ...(assetRoot === null ? [] : [`--asset-root=${assetRoot}`]),
       ...(options.operatorInput === undefined ? [] : ["--operator-stdin"]),
     ],
@@ -363,9 +361,7 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
   announce(signals, assetRoot, options.log);
   let wrapper: LaunchChildProcess;
   try {
-    wrapper = options.spawn(process.execPath, [NODE_TRANSFORM_TYPES_FLAG, paths.wrapperEntry], {
-      cwd: options.repoRoot, env: childEnv,
-    });
+    wrapper = options.spawn(process.execPath, [paths.wrapperEntry], { cwd: options.repoRoot, env: childEnv });
   } catch (error) {
     // The daemon is ALREADY RUNNING at this point. Letting this throw would
     // leave it alive with nothing supervising it — the exact orphan the whole

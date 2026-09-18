@@ -93,7 +93,6 @@ const REQUEST_KEYS = Object.freeze([
 ] as const);
 const STACK_ENTRY_BASENAME = "project-stack-host-main.ts";
 const NODE_BASENAME = "node.exe";
-const TRANSFORM_TYPES = "--experimental-transform-types";
 const MAX_STORE_PATH_CHARS = 244;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
@@ -171,7 +170,7 @@ export function encodeProjectStackLaunchPayload(
     return refused("PROCESS_BOUNDARY_REQUEST_MALFORMED", "the project instance id is invalid");
   }
   const launch = encodeLaunchPayloadWithAllowedEnvironment({
-    argv: [TRANSFORM_TYPES, entryPath, `--config=${configPath}`, `--asset-root=${assetRoot}`],
+    argv: [entryPath, `--config=${configPath}`, `--asset-root=${assetRoot}`],
     cwd: snapshot["cwd"],
     environment: snapshot["environment"],
     executable: nodeExecutable,

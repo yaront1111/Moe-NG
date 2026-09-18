@@ -13,12 +13,12 @@
   "taskRails": [],
   "implementationPlan": [],
   "planRevision": 0,
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor backlog triage 2026-09-18, owner-directed. RE-MEASURED at origin/main: repository-execution-port.ts:16 allows PUBLISHING to go only to PUBLISHING or BLOCKED, and node-publisher.ts releases the reservation with \"PUBLISHED\" only on the success path (:124); an `unknown(...)` return at :98-101 leaves the reservation in PUBLISHING with no operator command that frees it. A hold nothing can clear blocks every later publish on that repository. Still live, still has no exit.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -26,5 +26,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:33:41.593Z",
-  "updatedAt": "2026-09-18T09:33:41.593Z"
+  "updatedAt": "2026-09-18T11:58:34.405Z"
 }

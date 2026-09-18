@@ -77,6 +77,32 @@ describe("the curated Windows project-stack request", () => {
     });
   });
 
+  it("launches the stack entry under plain node: the decoded argv, by value, carries no flag", () => {
+    // Plain strip-only node loads this entry (project-stack-host-main.test.ts proves it), so a
+    // transform flag regrown ahead of it would only mask what that arm guards.
+    const encoded = encodeProjectStackLaunchPayload(REQUEST);
+    if (!(encoded instanceof Uint8Array)) throw new Error(`launch refused: ${encoded.code}`);
+    const bytes: Uint8Array = encoded;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let offset = 0;
+    const count = (): number => { const value = view.getUint16(offset, true); offset += 2; return value; };
+    const text = (): string => {
+      const length = count();
+      const value = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(offset, offset + length));
+      offset += length;
+      return value;
+    };
+    expect(text()).toBe(REQUEST.storePath);
+    expect(text()).toBe(REQUEST.nodeExecutable);
+    expect(Array.from({ length: count() }, text)).toEqual([
+      REQUEST.entryPath, `--config=${REQUEST.configPath}`, `--asset-root=${REQUEST.assetRoot}`,
+    ]);
+    expect(text()).toBe(REQUEST.cwd);
+    for (let fields = count() * 2; fields > 0; fields -= 1) text();
+    // Every byte accounted for, so the argv above was read on the record's own boundaries.
+    expect(offset).toBe(bytes.length);
+  });
+
   it("does not convert a healthy long-lived project into a provider timeout", async () => {
     vi.useFakeTimers();
     try {

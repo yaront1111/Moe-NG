@@ -39,20 +39,15 @@ export interface LaunchEntryPaths {
 }
 
 /**
- * Passed to both children, and to the `moe start` wrapper by
- * `projects/project-stack-host-main.ts`, so the two launchers share one argv
- * shape. It is no longer load-bearing. The parameter property that once stopped
- * the wrapper entry under plain strip-only `node` (`AgentProcessFailureError` in
- * `agent-spawn-contract.ts`) is gone, and `erasableSyntaxOnly` in
- * `apps/daemon/tsconfig.json` now refuses non-erasable syntax at typecheck:
- * measured to fire on daemon sources and on the workspace package sources the
- * daemon program pulls in. `moe-up-main.test.ts` proves the entry loads with and
- * without it. Kept rather than dropped because removing it changes the live
- * `moe start` launch path; task-8bc14883 drops it from both launchers.
+ * Absolute, so a child's own cwd can never change which entry runs.
+ *
+ * Every entry runs under plain `node` with no transform flag, as do the `moe start`
+ * wrapper (`projects/project-stack-host-main.ts`) and the stack host the runner's Windows
+ * boundary starts. Strip-only mode refuses what it cannot erase, so the guard is a real
+ * spawn: `moe-up-main.test.ts` and `project-stack-host-main.test.ts` load each entry under
+ * plain node together with what it imports at runtime, which the daemon's
+ * `erasableSyntaxOnly` never sees (the control room's payload-hint table).
  */
-export const NODE_TRANSFORM_TYPES_FLAG = "--experimental-transform-types" as const;
-
-/** Absolute, so a child's own cwd can never change which entry runs. */
 export function launchEntryPaths(repoRoot: string): LaunchEntryPaths {
   const daemonSrc = join(repoRoot, "apps", "daemon", "src");
   return Object.freeze({
