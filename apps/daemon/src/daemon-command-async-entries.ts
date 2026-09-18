@@ -42,6 +42,8 @@ import { createNodeProjectCatalogRegistrar } from "./projects/project-catalog-re
 import { ENV_EXAMPLE_SYNC_COMMAND_KIND }
   from "./repository/env-example-sync-contracts.js";
 import { createEnvExampleSyncHandler } from "./repository/env-example-sync-command.js";
+import { createPublishResolveCommandEntry } from "./repository/publish-resolve-command.js";
+import { PUBLISH_RESOLVE_COMMAND_KIND } from "./repository/publish-resolve-contracts.js";
 import { createRepositoryBootstrapHandler } from "./repository/repository-bootstrap-command.js";
 import type { BootstrapCatalogPort } from "./repository/repository-bootstrap-command.js";
 import { REPOSITORY_BOOTSTRAP_COMMAND_KIND }
@@ -58,6 +60,8 @@ export type AsyncCommandKind =
   // Rollback replaces an image and polls health; a synchronous outcome would precede the effect.
   | "deployment.rollback"
   | typeof RELEASE_DECIDE_COMMAND_KIND
+  // The operator's resolve of an UNKNOWN publish: here because the registry is past its size cap.
+  | typeof PUBLISH_RESOLVE_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND
   | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
   // `repository.bootstrap` runs `git`, optionally the `gh` CLI and a filesystem tree write, so a
@@ -358,6 +362,9 @@ export function createAsyncCommandEntries(
       asyncHandler: releaseDecideCommand,
       handler: foundationSyncHandler, kind: RELEASE_DECIDE_COMMAND_KIND,
       payloadKeys: PAYLOAD_KEYS[RELEASE_DECIDE_COMMAND_KIND], requiredCapability: CAPABILITIES.GOAL,
+    }),
+    [PUBLISH_RESOLVE_COMMAND_KIND]: createPublishResolveCommandEntry({
+      operatorPrincipalId: options.operatorPrincipalId,
     }),
     [REPOSITORY_BOOTSTRAP_COMMAND_KIND]: Object.freeze({
       asyncHandler: bootstrapRepositoryCommand, handler: foundationSyncHandler,

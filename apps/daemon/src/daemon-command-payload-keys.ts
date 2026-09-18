@@ -58,6 +58,7 @@ import type { WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { AGENT_PROVIDER_COMMAND_KIND, AGENT_PROVIDER_PAYLOAD_KEYS }
   from "./orchestrator/agent-provider-command.js";
 import { REPOSITORY_RECOVERY_PAYLOAD_KEYS } from "./repository/repository-recovery-contracts.js";
+import { PUBLISH_RESOLVE_COMMAND_KIND } from "./repository/publish-resolve-contracts.js";
 import { ENV_EXAMPLE_SYNC_COMMAND_KIND } from "./repository/env-example-sync-contracts.js";
 import {
   DEPLOYMENT_DEPLOY_COMMAND_KIND, DEPLOYMENT_DEPLOY_PAYLOAD_KEYS,
@@ -225,6 +226,9 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // (`monitoring/environment-retirement-command-contracts.js`), one field wide, with
     // `projectId` ABSENT BY CONSTRUCTION like every kind above.
     [ENVIRONMENT_RETIREMENT_COMMAND_KIND]: [...ENVIRONMENT_RETIREMENT_PAYLOAD_KEYS],
+    // APPENDED for the same key-order reason (task-2c3f878b). The operator names ONE publish
+    // decision and how it ended (NOT_TRANSMITTED | ABANDON); `projectId` is ABSENT BY CONSTRUCTION.
+    [PUBLISH_RESOLVE_COMMAND_KIND]: ["decisionId", "resolution"],
   });
 
 export interface PayloadIntegerKey {

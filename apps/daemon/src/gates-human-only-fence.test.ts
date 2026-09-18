@@ -41,7 +41,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { PROJECT_ID, closeStores, driveThrough, openStore }
   from "./bootstrap/bootstrap-test-fixtures.js";
 import { createDaemonCommandPorts } from "./daemon-command-registry.js";
-import { OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS } from "./daemon-command-vocabulary.js";
+import { OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, agentCapabilitiesFor }
+  from "./daemon-command-vocabulary.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
@@ -49,6 +50,7 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import { wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
+import { PUBLISH_RESOLVE_COMMAND_KIND } from "./repository/publish-resolve-contracts.js";
 
 afterEach(closeStores);
 
@@ -228,5 +230,37 @@ describe("an agent-authenticated dispatch of a human gate is refused by name", (
     // and this reds -- which is what stops a "consistency" edit unstaffing the design step.
     expect((answer as { refusal?: { code?: unknown } }).refusal?.code)
       .not.toBe(OPERATOR_FENCE.code);
+  });
+});
+
+/**
+ * `repository.publish_resolve` (task-2c3f878b) IS A HUMAN GATE OUTSIDE THE BAND. Resolving an
+ * UNKNOWN publish is the operator asserting what their own remote holds, and `repository.*` is
+ * not a design/preview/release kind, so every sweep above is blind to it. Named here WITHOUT
+ * widening BAND.
+ *
+ * The wrapper axis is carried by the null agent capability, not by HUMAN_ONLY_STEPS: that set is
+ * hand-kept and this row does not grow it, and a null capability makes the wrapper answer
+ * UNWIRED_KIND before any session is minted (agent-wrapper.ts `staff`).
+ */
+describe("repository.publish_resolve is a human gate named outside the band", () => {
+  it("is served, operator-only, off the MCP roster and never staffable", () => {
+    expect(BAND.test(PUBLISH_RESOLVE_COMMAND_KIND)).toBe(false);
+    expect(ports().registry.has(PUBLISH_RESOLVE_COMMAND_KIND)).toBe(true);
+    const { mcpExcluded, operatorPrincipal } = axesOf(PUBLISH_RESOLVE_COMMAND_KIND);
+    expect({ mcpExcluded, operatorPrincipal }).toEqual({ mcpExcluded: true, operatorPrincipal: true });
+    expect(agentCapabilitiesFor(PUBLISH_RESOLVE_COMMAND_KIND)).toBeNull();
+  });
+
+  it("refuses an agent holding the entry's own capability on the operator fence", async () => {
+    const { deps, registry } = ports();
+    const entry = registry.get(PUBLISH_RESOLVE_COMMAND_KIND);
+    if (entry === undefined) throw new Error("repository.publish_resolve is not served");
+    const secret = agentSession(deps, "sess-publish-resolve", [entry.requiredCapability]);
+    const answer = await handleAsyncCommandRequest(deps, request(
+      "cmd-agent-publish-resolve", PUBLISH_RESOLVE_COMMAND_KIND,
+      { decisionId: "decision-fence", resolution: "ABANDON" }, secret,
+    ), "HTTP_LISTENER");
+    expect((answer as { refusal?: unknown }).refusal).toMatchObject(OPERATOR_FENCE);
   });
 });

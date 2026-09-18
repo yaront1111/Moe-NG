@@ -873,7 +873,9 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "project.activate", "project.bind_repository", "project.register",
         "project.set_agent_provider",
         "provider.probe", "qualification.replan", "recovery.complete",
-        "release.decide", "repository.bootstrap", "repository.publish", "repository.recover",
+        "release.decide", "repository.bootstrap", "repository.publish",
+        // The OPERATOR-ONLY resolve of an UNKNOWN publish (task-2c3f878b), async-served.
+        "repository.publish_resolve", "repository.recover",
         "resource.confirm_released", "resource.reconcile",
         "review.submit",
         "session.close", "session.open", "session.renew",

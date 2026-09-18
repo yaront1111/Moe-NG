@@ -284,6 +284,11 @@ const ROWS: readonly VocabularyRow[] = [
   // generation; and no `projectId`, which comes from the authenticated principal.
   { agent: null, capability: ADMIN, family: "MONITORING", kind: "monitoring.retire_environment",
     payloadKeys: ["environment"] },
+  // task-2c3f878b, appended because PAYLOAD_KEYS appends it. Family REPOSITORY_RECOVERY at ADMIN,
+  // like `repository.recover`: ADMIN fences REACH only, and `agent` is null because resolving an
+  // UNKNOWN publish is the operator's assertion about their own remote. OPERATOR_ONLY is the fence.
+  { agent: null, capability: ADMIN, family: "REPOSITORY_RECOVERY",
+    kind: "repository.publish_resolve", payloadKeys: ["decisionId", "resolution"] },
 ];
 
 /** Views over the production maps, so a value here is always the shipped value. */
@@ -351,14 +356,17 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // can only re-time the probe, this one STOPS it. An agent that could retire an environment
   // could silence the monitoring that would otherwise have paged a human about an outage in it.
   "monitoring.retire_environment",
+  // task-2c3f878b. Only the operator can say the remote does not hold a sha; an agent saying so
+  // could free a publish hold for a push that actually landed.
+  "repository.publish_resolve",
 ];
 
 describe("command vocabulary", () => {
   it("carries exactly the transcribed wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(65);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(65);
+    expect(ROWS).toHaveLength(66);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(66);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -402,7 +410,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(54);
+    expect(declared).toHaveLength(55);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -410,7 +418,7 @@ describe("command vocabulary", () => {
     }
     expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
     expect(FAMILY_MAPS.CRITERION.size).toBe(2);
-    expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(1);
+    expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(2);
     expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(18);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
     expect(FAMILY_MAPS.DESIGN.size).toBe(1);
@@ -461,8 +469,8 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(30);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(30);
+    expect(OPERATOR_ONLY).toHaveLength(31);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(31);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

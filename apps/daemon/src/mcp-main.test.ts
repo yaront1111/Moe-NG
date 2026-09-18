@@ -254,6 +254,9 @@ const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   // task-509f0437: retiring an environment ends its monitoring, so it is the operator's act on
   // the same standing. Hand-written here for the same independence reason as the kind above.
   "monitoring.retire_environment",
+  // task-2c3f878b: resolving an UNKNOWN publish is the operator's assertion about their own
+  // remote. Hand-written here for the same independence reason as the two kinds above.
+  "repository.publish_resolve",
 ]);
 const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
@@ -270,9 +273,10 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
     // 29 since `goal.cancel` landed (0b53ccc5): the set is DERIVED from the operator-only
     // kinds, so an operator act joins it automatically. Verified the 29th entry IS goal.cancel.
-    expect(EXCLUSION_CASES.length).toBe(29);
+    // 30 since `repository.publish_resolve` was wired (task-2c3f878b), by the same derivation.
+    expect(EXCLUSION_CASES.length).toBe(30);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(58);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(60);
     const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
     const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
     expect(production).toEqual(expected);

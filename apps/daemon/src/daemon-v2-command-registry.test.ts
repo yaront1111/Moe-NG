@@ -272,7 +272,8 @@ describe("daemon /2 command registry", () => {
       // shared PAYLOAD_KEYS and therefore reaches this plane too.
       // 62 -> 63 for `monitoring.retire_environment` (task-509f0437), on the same shared table.
       // 63 -> 64 for `goal.cancel` (0b53ccc5), on the same shared table.
-      expect(ports.registry.size).toBe(64);
+      // 64 -> 65 for `repository.publish_resolve` (task-2c3f878b), on the same shared table.
+      expect(ports.registry.size).toBe(65);
       expect(reads).toEqual({ clock: 1, operatorPrincipalId: 1, projectId: 1, store: 1 });
     } finally {
       closeStores();

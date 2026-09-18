@@ -1,0 +1,104 @@
+{
+  "id": "task-e0e3d704cebe45a7b458bef5841d3bc5",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "One hand-written MCP-exclusion census, every other pin derived: stop re-breaking N test files per operator kind",
+  "description": "FOLLOW-UP filed by architect-c7fb990e on 2026-09-18, on governor-f32726f9's instruction (comment-1204078f on parent task-2c3f878b).\n\nWHY. Adding one operator-only command kind (repository.publish_resolve, task-2c3f878b) moves hand-written whole-set lists and frozen counts in at least seven test files. Measured at HEAD 5d21c7c4:\n- mcp-tool-allowlist.test.ts :160, :230-251, :255, :280\n- mcp-main.test.ts :220-246, :268, :270\n- mcp-http/mcp-http-host.test.ts :694, :696, :725\n- daemon-command-registry-human-approver.test.ts :387-421\n- daemon-store-dependencies.test.ts :840\n- daemon-command-vocabulary.test.ts :318, :360-361, :413, :465\n- daemon-command-registry.test.ts :431, :1131, :1221, :2103\nEvery kind-publishing row re-breaks them. The worker on task-2c3f878b found four of them only mid-step, which forced a block and a re-plan. The epic's own rail 3 exists because two rows bump the same literals.\n\nWHAT TO KEEP. The hand-written list exists on purpose: it is the independent check that catches a production DERIVATION bug, for example OPERATOR_PRINCIPAL_KINDS silently dropping a kind. Deriving every site from production would delete that check. So keep exactly ONE hand-written census of the MCP-excluded / operator-only kinds, asserted by BIDIRECTIONAL set-equality against the production derivation (global roster rail). Every other site reads that census, or production, instead of carrying its own copy and its own frozen count.\n\nSCOPE. The pin sites listed above. Measure again at claim time: the set grows with every kind-publishing row, and some of these files may be mid-edit by that chain. dependsOn waits for task-2c3f878b and task-a47babf8, which edit several of these files.\n\nOUT OF SCOPE: any production behaviour change, and the per-family arms (deployment.*, monitoring.*) that do not enumerate the whole set.",
+  "definitionOfDone": [
+    "Exactly one hand-written list of the MCP-excluded kinds remains in the daemon tests, and it is asserted by set-equality in BOTH directions against the production derivation (MCP_EXCLUDED_COMMAND_KINDS / OPERATOR_PRINCIPAL_KINDS less session.open). Proven by a `git grep` census, quoted, that finds no second hand-written copy.",
+    "The other whole-set sites named in the description no longer carry a hand-typed copy of the list or a frozen whole-set count. Each derives from the census or from production. A drill that adds one fake operator kind in memory changes only the one census file's expectation, not N files.",
+    "The census still bites: removing one kind from the production derivation in memory makes the census arm RED, and that arm names the missing kind (quoted).",
+    "Gates quoted with their count lines: the full `pnpm --filter @moe/daemon test` and `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE AT CLAIM TIME. No writes in this step. This row runs only after task-2c3f878b and task-a47babf8 are DONE (dependsOn). Both edit most of these files, so every line number from planning is stale by design: plan by ANCHOR NAME and re-measure each one.\n(a) Confirm both prerequisites are DONE.\n(b) CENSUS every whole-set pin in the daemon tests:\n`git grep -nE \"toHaveLength\\([0-9]{2,}\\)|\\.size\\)\\.toBe\\([0-9]{2,}\\)|\\.length\\)\\.toBe\\([0-9]{2,}\\)|: [0-9]{2,}[,}] |[A-Z_]+ = Object\\.freeze\\(\\[\" -- ':(glob)apps/daemon/src/**/*.test.ts'`\nWithout `:(glob)`, `**` is not recursed and files are silently skipped.\nAt planning (HEAD 736291c4) the operator- and kind-roster pins were:\n- daemon-command-vocabulary.test.ts: ROWS toHaveLength and unique-count; `declared` toHaveLength; FAMILY_MAPS sizes; OPERATOR_ONLY toHaveLength; OPERATOR_PRINCIPAL_KINDS.size.\n- mcp-tool-allowlist.test.ts: hand-written `expectedExcluded`; its `.length` pin; the `{ excluded, queries, vocabulary, wired }` object; the partition `{ delegable, never }` object.\n- mcp-main.test.ts: hand-written EXPECTED_EXCLUDED_COMMAND_KINDS; EXCLUSION_CASES.length; the transport product.\n- mcp-http/mcp-http-host.test.ts: frozen EXCLUSION_CASES counts (three sites).\n- daemon-command-registry-human-approver.test.ts: hand-written `expectedExclusions`; length and sort pins.\n- daemon-command-registry.test.ts: OPERATOR_ONLY copy; ROWS, REGISTRATION_ORDER and registry.size pins (several sites).\n- daemon-v2-command-registry.test.ts: registry.size.\n- daemon-store-dependencies.test.ts: hand-written sorted `registryKinds`.\n(c) CLASSIFY every hit into exactly one class, and record it in the step note:\n- K (KEEP, the census): the ONE hand-written list of a fact. That is OPERATOR_ONLY for the operator-only set, ROWS for every wired kind with its attributes, and the registry test's ROWS for registry attributes.\n- R (REDUNDANT count): a frozen count in an arm that already asserts exact equality of the same set. Delete it.\n- D (DUPLICATE copy): a second hand-typed copy of a set that a K census pins. Derive it from the PRODUCTION constant instead.\n- C (count WITHOUT an equality): replace it with a bidirectional set-equality against the production seam, never with a smaller count.\nAny hit outside the 8 owned files is an UNNAMED CONSUMER. Stop and report it; never widen the row.\n(d) Run `git status --porcelain` on the 8 owned files, and record any peer dirt without sweeping it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE CENSUS HOME: apps/daemon/src/daemon-command-vocabulary.test.ts. The vocabulary module is 'the single place the human-only class is stated' (mcp-tool-allowlist.ts comment), so its test holds the ONE hand-written operator census.\n- KEEP `ROWS`, the all-kinds attribute census. It already asserts `Object.keys(PAYLOAD_KEYS)` toEqual `ROWS.map(kind)` in order, so its two frozen 65-counts are REDUNDANT: delete them. Keep one non-vacuity guard, `expect(ROWS.length).toBeGreaterThan(0)`. A swept table must prove it swept something (global rail).\n- KEEP `OPERATOR_ONLY` as THE hand-written operator census. Replace its two frozen counts (`OPERATOR_ONLY` length and `OPERATOR_PRINCIPAL_KINDS.size`) with ONE bidirectional set-equality: `expect([...OPERATOR_PRINCIPAL_KINDS].sort()).toEqual([...OPERATOR_ONLY].sort())`. That also catches an operator kind outside ROWS, which the per-row loop cannot see. Keep the per-row both-directions loop.\n- `declared` toHaveLength and the FAMILY_MAPS sizes: if ROWS carries each kind's family, derive every family's expected member set from ROWS and assert set-equality against the production map's keys. If it does not, assert the family maps' union equals the wired kinds with no overlap, which is partition-exact. Never write a count.\n- Give the census arm a failure message that NAMES the diff. toEqual on sorted arrays already prints it; check that it does.\nRun the file; it must be GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "The MCP-transport copies DERIVE from production. The census in step 2 pins membership, so nothing below loses detection.\n\n(1) apps/daemon/src/mcp-tool-allowlist.test.ts\n- Delete the hand-written `expectedExcluded` copy and the frozen `{ excluded, queries, vocabulary, wired }` object. Delete the frozen `{ delegable, never }` object in the partition arm.\n- KEEP every DERIVED arm:\n  - MCP_EXCLUDED == OPERATOR_PRINCIPAL_KINDS less session.open;\n  - served-operator == excluded;\n  - the wired-roster formula;\n  - the partition `classified == excluded` equality and its uniqueness check. MCP_DELEGABLE_OPERATOR_KINDS and MCP_NEVER_DELEGATED_KINDS are PRODUCTION lists, hand-kept on purpose (owner decision). The partition arm is their bidirectional check, and it stays.\n- Rewrite the 'ROSTER DENOMINATORS (epic rail 7)' comment. A size pin was needed only while no exact membership list existed. The vocabulary census now pins membership, so a silent shrink reds there and names the kind.\n\n(2) apps/daemon/src/mcp-main.test.ts\n- EXPECTED_EXCLUDED_COMMAND_KINDS becomes production's MCP_EXCLUDED_COMMAND_KINDS.\n- Delete the now-tautological production-equals-expected arm.\n- Replace the frozen length and transport-product pins with the relation the arm actually needs: every case is refused on every transport, and the refusal count equals `EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT`. Add a `> 0` non-vacuity guard.\n\n(3) apps/daemon/src/mcp-http/mcp-http-host.test.ts\n- EXCLUSION_CASES is already derived. Replace its frozen counts with the relative form above, plus `> 0`.\n- Do NOT add an `it(` block to this file: it counts its own `it(` blocks (`toHaveLength(16)`), and that self-count is a different fact that stays.\n\n(4) apps/daemon/src/daemon-command-registry-human-approver.test.ts\n- Derive `expectedExclusions` from production.\n- Keep each kind's REASON only if it adds something the production lists' comments do not; otherwise drop it.\n- Replace the length and sort pins with the relation the arm checks.\n\nRun the four files; they must be GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "The registry copies.\n\n(1) apps/daemon/src/daemon-command-registry.test.ts\n- Its OPERATOR_ONLY copy is class D. Derive it from OPERATOR_PRINCIPAL_KINDS. The per-kind operator-fence sweeps keep iterating it.\n- KEEP ROWS, the per-kind registry-attribute census.\n- Replace every ROWS and registry.size count with `expect([...registry.keys()].sort()).toEqual(ROWS.map(kind).sort())` (both directions), plus a `> 0` guard.\n- REGISTRATION_ORDER: if some arm asserts ORDER, as a contract with iteration order, keep the list and assert it equals the registry's actual key order. If no arm reads order, it is class D: derive it. Record which case it is.\n\n(2) apps/daemon/src/daemon-v2-command-registry.test.ts\n- Replace `registry.size` with set-equality against that test's own derived expectation. Measure what the v2 registry should hold at claim time.\n\n(3) apps/daemon/src/daemon-store-dependencies.test.ts\n- The hand-sorted `registryKinds` is class D. Assert `[...deps.registry.keys()].sort()` equals `Object.keys(PAYLOAD_KEYS).sort()`: two production seams compared bidirectionally, with the vocabulary census pinning their membership.\n- The deployment.* and monitoring.* family-scoped arms must NOT move.\n\nRun the three files; they must be GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "DRILLS, GATES AND ADVERSARIAL REVIEW. Read OUTPUT, not exit codes.\n\n(A) DoD 1 CENSUS, quoted:\n- `git grep -n '\"resource.confirm_released\"' -- ':(glob)apps/daemon/src/**/*.test.ts'` plus one more operator-only literal.\n- Classify every hit. It may only be: the vocabulary OPERATOR_ONLY census; a per-kind attribute ROWS table; or a single-kind behaviour arm.\n- A second whole-list copy is a miss.\n\n(B) DoD 2 DRILL, in memory, with no mutant on disk. Follow Serena memory qa-drill-via-temp-vitest-config-keyed-by-env-var: config outside src, named with the task id, anchors that THROW when absent, config deleted afterwards and proven gone.\n- M1, a correctly classified new operator kind: move ONE existing non-operator wired kind into OPERATOR_PRINCIPAL_KINDS (daemon-command-vocabulary.ts) AND into MCP_NEVER_DELEGATED_KINDS (mcp-tool-allowlist.ts).\n- Run the 8 owned files. The ONLY red must be daemon-command-vocabulary.test.ts (the census arm, plus any ROWS attribute that carries operator-ness). Quote the per-file result.\n- Optional, if cheap: the same drill on a scratch worktree at the row's merge-base, to quote the before-count of red files.\n\n(C) DoD 3 DRILL:\n- M2: drop ONE kind from OPERATOR_PRINCIPAL_KINDS in memory.\n- The census arm must go RED, and its diff must NAME that kind. Quote the line.\n\n(D) DoD 4: `pnpm typecheck`, projects counted. Then the full `pnpm --filter @moe/daemon test`, taken under the full-suite-gate lease after proving the holder is live; quote the count lines. Re-run any failing file alone before attributing it. Attribute failures under the path-attributed baseline rail.\n\n(E) ADVERSARIAL REVIEW, in the completion record:\n- For each deleted pin, name the remaining assertion that still catches what it caught.\n- Does any derived arm now compare production to itself and assert nothing? Such an arm is deleted, not kept as ceremony.\n- Is any set now pinned in only ONE direction? The roster rail requires set-equality.\n- What still breaks when a new operator kind lands? The answer should be: the vocabulary census, the production partition lists, and the registry ROWS attribute row. List anything else.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-2c3f878ba94940428d34f204dc74de95",
+    "task-a47babf8291943efb08258a0c1f6cc78"
+  ],
+  "priority": "MEDIUM",
+  "order": 1027.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T21:47:15.589Z",
+  "updatedAt": "2026-09-18T22:15:10.434Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-18T22:11:11.476Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T22:15:08.277Z",
+  "planningNotes": {
+    "approachesConsidered": "1. A shared test-support module exporting the census. Rejected, for two reasons. Importing from a .test.ts file re-registers its suites. A new non-test-named module under apps/daemon/src would be SHIPPED by the packer (the pack-artifact sweep polices test vocabulary). The census stays in daemon-command-vocabulary.test.ts, and the other files derive from PRODUCTION constants.\n2. Derive EVERYTHING from production. Rejected, because it deletes the independent check that catches a derivation bug. Exactly one hand-written list per fact stays: OPERATOR_ONLY for the operator set, ROWS for kinds and attributes, and the registry ROWS for registry attributes.\n3. Keep the frozen counts as 'denominators'. Rejected wherever an exact membership equality for the same set exists: equal sets imply equal sizes, so the count adds zero detection and a whole class of breakage. Where no equality exists, the count becomes a bidirectional set-equality (roster rail), never a smaller count.",
+    "codebaseInsights": "Measured 2026-09-18 by architect-c7fb990e at HEAD 736291c4. Line numbers WILL move: task-2c3f878b (WORKING, worker-952c612b) had uncommitted edits in 7 of these 8 files at planning, and task-a47babf8 edits registry.test.ts. This row dependsOn both.\n\n- daemon-command-vocabulary.test.ts already asserts `Object.keys(PAYLOAD_KEYS)` toEqual `ROWS.map(kind)`, EXACT and ORDERED, so its ROWS counts are redundant. Its operator arm has a both-directions loop over ROWS, but only a SIZE pin guards operator kinds outside ROWS; set-equality replaces it.\n- mcp-tool-allowlist.test.ts already carries the derived arms: MCP_EXCLUDED == OPERATOR_PRINCIPAL_KINDS less session.open (:162), served-operator == excluded (:170-178), the wired formula (:215, :262), and the partition equality (:295). Its hand list and count objects are duplicates.\n- The eighth file, daemon-v2-command-registry.test.ts (:275 registry.size), turned up at planning. It was also dirty in the working tree, apparently touched by 2c3f878b's in-flight worker.\n- An e2e-style self-count in mcp-http-host.test.ts (:624, it() blocks) is a different fact and stays.",
+    "risks": "1. This row deletes arms, which the census rule normally forbids ('never delete an arm'). It is allowed here only because the governor asked for it (comment-1204078f on task-2c3f878b), and only for pins that are provably redundant. Drills M1 and M2 are the proof. Record, for each deleted pin, the assertion that still catches what it caught.\n2. A derived arm can silently turn into production-equals-production. Delete tautologies; do not keep them as ceremony.\n3. REGISTRATION_ORDER may be a real order contract. Measure it before deriving it.\n4. The tree is in flux at planning. Step 1's re-census at claim time is authoritative, and a hit outside the 8 files is an unnamed consumer.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-vocabulary.test.ts",
+      "apps/daemon/src/mcp-tool-allowlist.test.ts",
+      "apps/daemon/src/mcp-main.test.ts",
+      "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+      "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/daemon-v2-command-registry.test.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/mcp-tool-allowlist.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-18T22:15:10.434Z"
+}

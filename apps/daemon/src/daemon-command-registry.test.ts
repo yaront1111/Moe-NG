@@ -16,10 +16,12 @@ import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-comman
 import type { DaemonCommandPortOptions } from "./daemon-command-registry.js";
 import { decisionOf } from "./daemon-command-dispatch.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
-import { MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds }
-  from "./mcp-tool-allowlist.js";
+import {
+  MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, operatorDelegateMcpToolKinds, wiredMcpToolKinds,
+} from "./mcp-tool-allowlist.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
+import { PUBLISH_RESOLVE_COMMAND_KIND } from "./repository/publish-resolve-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
@@ -368,6 +370,11 @@ const ROWS: readonly Row[] = [
   { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_INPUT_INVALID", kind: "repository.recover", asyncOnly: true,
     nonOperatorRefusal: { code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", layer: "REPOSITORY_RECOVERY" },
     layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason", "expectedReviewVersion", "expectedReviewDigest"] },
+  // task-2c3f878b. REGISTERED AND REFUSING until task-a47babf8 lands the resolve service: the
+  // operator gets past the entry's own fence and is refused under row 2's vocabulary, whatever
+  // the payload. ADMIN fences reach; OPERATOR_ONLY fences the act.
+  { agent: null, asyncOnly: true, capability: ADMIN, code: "PUBLISH_RESOLVE_DECISION_NOT_FOUND",
+    kind: "repository.publish_resolve", layer: PREREQ_LAYER, payloadKeys: ["decisionId", "resolution"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
@@ -420,6 +427,8 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "monitoring.set_probe_interval",
   // task-509f0437, appended after it for exactly the same reason.
   "monitoring.retire_environment",
+  // task-2c3f878b, appended after it for exactly the same reason.
+  "repository.publish_resolve",
 ];
 
 /**
@@ -478,6 +487,9 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // existing. ADMIN fences reach; this set fences the act, and the derived MCP exclusion keeps
   // the kind off a surface the operator bootstrap credential authenticates.
   "monitoring.retire_environment",
+  // task-2c3f878b. Resolving an UNKNOWN publish asserts what the operator's own remote holds.
+  // Async-served, so the entry applies this set's check itself (repository/publish-resolve-command.ts).
+  "repository.publish_resolve",
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -690,6 +702,69 @@ describe("release.decide operator-only async wiring", () => {
     expect(await sendAsync("cmd-release-smuggled", RELEASE_DECIDE_COMMAND_KIND,
       { ...payload, projectId: PROJECT }, CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
       error: { code: "INPUT_INVALID" }, httpStatus: 400, ok: false, stage: "PAYLOAD_SHAPE",
+    });
+    expect(snapshot()).toEqual(before);
+  });
+});
+
+/**
+ * task-2c3f878b. `repository.publish_resolve` is wired, fenced to the operator, and REFUSING until
+ * task-a47babf8 lands the resolve service. Two layers can refuse this dispatch, the entry's
+ * operator fence and then the stub, so every arm pins code AND layer: an outcome-only arm would
+ * stay green if the fence fell away and the stub answered first.
+ */
+describe("repository.publish_resolve operator-only async wiring", () => {
+  const payload = { decisionId: "decision-unknown-publish", resolution: "NOT_TRANSMITTED" };
+  const snapshot = () => {
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      return { decisions: decisionCount(reader), eventHorizon: reader.readEventHorizon() };
+    } finally {
+      reader.close();
+    }
+  };
+
+  it("serves an asynchronous ADMIN entry that REPOSITORY_RECOVERY_FAMILY classifies", () => {
+    const entry = deps.registry.get(PUBLISH_RESOLVE_COMMAND_KIND);
+    expect(entry).toMatchObject({ kind: "repository.publish_resolve", requiredCapability: ADMIN,
+      payloadKeys: ["decisionId", "resolution"] });
+    expect(entry?.asyncHandler).toBeTypeOf("function");
+    // No membership flag of its own: the family table answers, exactly as for repository.recover.
+    expect(commandFamilyFacts(PUBLISH_RESOLVE_COMMAND_KIND).requiredCapability).toBe(ADMIN);
+    expect(agentCapabilitiesFor(PUBLISH_RESOLVE_COMMAND_KIND)).toBeNull();
+  });
+
+  it("DoD 1: refuses an authenticated capable non-operator at the entry's operator fence", async () => {
+    const credential = openSession("cmd-publish-resolve-open-agent", "sess-publish-resolve-agent",
+      "publish-resolve-agent-secret", [ADMIN, WORK]);
+    const before = snapshot();
+    expect(await sendAsync("cmd-publish-resolve-agent", PUBLISH_RESOLVE_COMMAND_KIND, payload,
+      credential, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("DoD 2: is off every MCP roster through the derivation from OPERATOR_PRINCIPAL_KINDS", () => {
+    expect(deps.registry.has(PUBLISH_RESOLVE_COMMAND_KIND)).toBe(true);
+    // FIRST, so a kind dropped from the operator set reds HERE: the absence is derived, not typed.
+    expect(wiredMcpToolKinds()).not.toContain(PUBLISH_RESOLVE_COMMAND_KIND);
+    expect(OPERATOR_PRINCIPAL_KINDS.has(PUBLISH_RESOLVE_COMMAND_KIND)).toBe(true);
+    // The seats' exclusion IS the derivation, so no hand-typed entry can sit in it.
+    expect(MCP_EXCLUDED_COMMAND_KINDS)
+      .toEqual([...OPERATOR_PRINCIPAL_KINDS].filter((kind) => kind !== "session.open").sort());
+    // And the owner's --as-operator roster does not carry it: it is classified never-delegated.
+    expect(operatorDelegateMcpToolKinds()).not.toContain(PUBLISH_RESOLVE_COMMAND_KIND);
+  });
+
+  it("DoD 3: refuses the operator with the stub's stable code and no durable writes", async () => {
+    const before = snapshot();
+    expect(await sendAsync("cmd-publish-resolve-operator", PUBLISH_RESOLVE_COMMAND_KIND, payload,
+      CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+      refusal: { code: "PUBLISH_RESOLVE_DECISION_NOT_FOUND", layer: "DAEMON_PREREQUISITE",
+        detail: "no publish-resolve service is composed for this daemon: nothing was recorded" },
     });
     expect(snapshot()).toEqual(before);
   });
@@ -1128,8 +1203,8 @@ describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(65);
-    expect(deps.registry.size).toBe(65);
+    expect(ROWS).toHaveLength(66);
+    expect(deps.registry.size).toBe(66);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1218,7 +1293,7 @@ describe("registered command table", () => {
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(65);
+    expect(REGISTRATION_ORDER).toHaveLength(66);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1389,8 +1464,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(30);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(30);
+      expect(OPERATOR_ONLY).toHaveLength(31);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(31);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -2100,7 +2175,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(65);
+    expect(ports.registry.size).toBe(66);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -2122,7 +2197,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(65);
+    expect(supplied.registry.size).toBe(66);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -2154,7 +2229,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(65);
+    expect(snapshotPorts.registry.size).toBe(66);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

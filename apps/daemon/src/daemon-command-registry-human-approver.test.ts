@@ -415,9 +415,12 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
       // retiring an environment ends its monitoring, so it joined OPERATOR_PRINCIPAL_KINDS and
       // the exclusion followed by derivation with no edit to the production array.
       "monitoring.retire_environment",
+      // task-2c3f878b. Resolving an UNKNOWN publish is the operator's assertion about their own
+      // remote; it joined OPERATOR_PRINCIPAL_KINDS and the exclusion followed by derivation.
+      "repository.publish_resolve",
     ]);
-    expect(expectedExclusions).toHaveLength(29);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(29);
+    expect(expectedExclusions).toHaveLength(30);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(30);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

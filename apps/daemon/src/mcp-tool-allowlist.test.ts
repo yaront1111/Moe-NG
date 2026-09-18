@@ -248,13 +248,16 @@ describe("wiredMcpToolKinds command half", () => {
       "monitoring.set_probe_interval",
       "preview.decide", "preview.start", "product_contract.answer_clarification",
       "product_contract.sync_env_example", "project.set_agent_provider", "release.decide",
-      "repository.bootstrap", "repository.publish", "repository.recover", "resource.confirm_released",
+      // task-2c3f878b: resolving an UNKNOWN publish is the operator's assertion about their own
+      // remote. Excluded BY DERIVATION from OPERATOR_PRINCIPAL_KINDS, never hand-added there.
+      "repository.bootstrap", "repository.publish", "repository.publish_resolve",
+      "repository.recover", "resource.confirm_released",
     ]);
     expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(expectedExcluded);
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(29);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(30);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -279,7 +282,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 29, queries: 7, vocabulary: 65, wired: 43 });
+    }).toEqual({ excluded: 30, queries: 7, vocabulary: 66, wired: 43 });
   });
 
   it("is deterministic and frozen", () => {
@@ -295,7 +298,7 @@ describe("the owner's delegate roster (moe mcp --as-operator)", () => {
     expect(new Set(classified).size).toBe(classified.length);
     expect({
       delegable: MCP_DELEGABLE_OPERATOR_KINDS.length, never: MCP_NEVER_DELEGATED_KINDS.length,
-    }).toEqual({ delegable: 15, never: 14 });
+    }).toEqual({ delegable: 15, never: 15 });
     expect(Object.isFrozen(MCP_DELEGABLE_OPERATOR_KINDS)).toBe(true);
     expect(Object.isFrozen(MCP_NEVER_DELEGATED_KINDS)).toBe(true);
   });
