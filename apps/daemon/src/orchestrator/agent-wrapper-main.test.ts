@@ -392,7 +392,7 @@ describe("wrapper binary staffing wiring", () => {
   it.each([
     ["host plane reader", "      commandAuthorityPlane,\n", ""],
     ["host /2 deps", "      v2Deps,\n    });\n    const mcpStarted", "    });\n    const mcpStarted"],
-    ["wrapper deps", "      deps,\n      maxAgents: knobs.maxAgents,", "      deps: v1Deps,\n      maxAgents: knobs.maxAgents,"],
+    ["wrapper deps", "      clock: () => Date.now(),\n      deps,", "      clock: () => Date.now(),\n      deps: v1Deps,"],
     ["reclaim deps", "clock: () => Date.now(), deps, isProcessAlive", "clock: () => Date.now(), deps: v1Deps, isProcessAlive"],
     ["verifier deps", "        deps, mintId:", "        deps: v1Deps, mintId:"],
     ["plane-following construction", "createPlaneFollowingDeps({ commandAuthorityPlane, deps: v1Deps, v2Deps })", "v1Deps"],
