@@ -163,7 +163,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T08:30:07.144Z",
-  "updatedAt": "2026-09-18T13:01:59.752Z",
+  "updatedAt": "2026-09-18T13:03:51.701Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T08:49:30.557Z",
     "plannedStepCount": 6,
@@ -245,6 +245,27 @@
       "treeId": "32a2f68c90fcdc02db4a804f535de9490bd26aee",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "a353c62ae870c51c15a931ccf306904733b05159",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T12:43:01Z",
+      "paths": [
+        ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+        ".moe/tasks/task-8bc14883ca524cb99c0dfe667d1399cd.json",
+        ".moe/tasks/task-8f653d86bb4f445cb7ee358c5559f99a.json",
+        ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json",
+        ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+        ".moe/tasks/task-fc1a297f933c4f19bd978eed97094d47.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T13:03:51.701Z",
+      "treeId": "e04bb6502e5117a31789a290d770f36a3e1f2299",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -260,7 +281,11 @@
     ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
     ".moe/tasks/task-8bc14883ca524cb99c0dfe667d1399cd.json",
     ".moe/tasks/task-8f653d86bb4f445cb7ee358c5559f99a.json",
-    ".moe/tasks/task-fc1a297f933c4f19bd978eed97094d47.json"
+    ".moe/tasks/task-fc1a297f933c4f19bd978eed97094d47.json",
+    ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+    ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json",
+    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/moe-up-spawn.ts",
@@ -274,7 +299,6 @@
     "docs/agent-stack-runbook.md"
   ],
   "unattributedPaths": [
-    "apps/daemon/CLAUDE.md",
     "apps/daemon/src/daemon-main.ts",
     "apps/daemon/src/mcp-http/mcp-http-main.ts",
     "apps/daemon/src/mcp-main.ts",
@@ -282,9 +306,9 @@
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6433dce1@2026-09-18T12:02:55Z",
-    "at": "2026-09-18T12:43:11.047Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T12:43:01Z",
+    "at": "2026-09-18T13:03:51.701Z"
   },
   "priorBlockedReason": "UNNAMED CLASS-B CONSUMER OUTSIDE THE OWNED ROSTER, so under the shape rail a worker stops and the architect amends. apps/daemon/src/projects/project-compiled-node-mission.test.ts:44-49 (environmentFromControl) decodes the REAL broker CONTROL frame that windows-project-stack-boundary.ts:174 produces. It pins the argv BY VALUE with \"--experimental-transform-types\" at [0]. planningNotes filed :46 in class C (a harness) and put it out of scope, but it is a pin on production argv. With step 3 applied, all 3 of its tests fail with `expected [ …(3) ] to deeply equal [ …(4) ]` (run-observed). Dropping the flag from only the other two launchers would fork the argv shape, which the plan forbids, so step 3 cannot land without this path.\n\nThe rest of the shape census is clean (details in comment-162d340771ce460dbdfeaa590e2a3ed1). I asked in msg-071b9b95 and got no reply in about 10 minutes.\n\nState: steps 1-2 are COMPLETED, and the step-2 plain-node arms and negative control are in the tree. Evidence that they are green at HEAD:\n- moe-up-main + project-stack-host-main + project-compiled-node-mission: 3 files / 60 passed\n- daemon typecheck exits 0\n\nThe step-3 edits were REVERTED (`git apply -R` of my own patch; the 4 files are blob-equal to HEAD), so the wip checkpoint carries no red. Resume from the comment, which lists every hunk and the step-4 pins; the patch is saved at %TEMP%/moe-8bc14883-worker-6433dce1/step3.patch.",
   "blockedOnTaskIds": null,

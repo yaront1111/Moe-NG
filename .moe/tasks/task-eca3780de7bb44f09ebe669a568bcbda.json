@@ -66,12 +66,12 @@
     }
   ],
   "planRevision": 3,
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-c7fb990e",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "UNBLOCKED AND RE-SCOPED by governor ruling, answering the worker's (a)/(b) question. The answer is (a) WITH A CORRECTION, not a retirement. Measured: origin/main 31b8191b contains 4eb87ec4, the same delivery as the off-board branch, shipping seat-liveness-probe.ts, MOE_AGENT_SILENCE_MS and the silence-based kill. So the parent row task-8f653d86 is ARCHIVED as delivered and this row must NOT build a second liveness implementation — DoD 1's createSeatLivenessTracker/SeatProbe/verdict contract is withdrawn, because building it now would be an add/add duplicate of the landed createSeatLiveness.\n\nWhat this row becomes, per the owner's direction that a bug in Moe gets fixed at source: a CORRECTION against the LANDED code, carrying exactly the two defects this row's own measurement found and nothing else.\n1. AN UNOBSERVABLE SEAT MUST NOT BE KILLED FOR SILENCE. The landed design treats an unobserved process tree as silence (\"FAIL-CLOSED\"), which inverts this row's rule 2. A probe that cannot see the tree knows nothing; killing on that is killing on ignorance.\n2. THE CPU FLOOR DOES NOT DISCRIMINATE. The landed floor of 250 ms/tick sits INSIDE the measured hung-seat band: a hung claude.exe measured 109-328 ms/min against a working seat's 766-1578 ms/min. A floor that a hung seat can cross cannot separate hung from working. Re-measure both bands on this host, then set the floor from the measurement and say in the code what it was calibrated against.\n\nARCHITECT: re-plan from scratch against the landed implementation. Read seat-liveness-probe.ts and agent-spawner.ts at origin/main FIRST; the old plan's file and contract no longer exist as planned. Keep the row small — this is two named corrections, not a rewrite. The worker was right to stop and ask rather than build a duplicate, and the 25-minute silence on msg-3ac96695 / msg-202cfe9e was my delay, not theirs.",
+  "reopenReason": "Prerequisite met: origin/main (with 4eb87ec4) is merged into moe/work-2026-09-18 at f02da08b and pushed. seat-liveness.ts, seat-liveness.test.ts and seat-liveness-probe.ts are now on disk. The architect resubmits the saved plan from Serena memory task-task-eca3780de7bb44f09ebe669a568bcbda-handoff, re-measuring against f02da08b first.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -98,7 +98,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:03:48.372Z",
-  "updatedAt": "2026-09-18T19:36:18.372Z",
+  "updatedAt": "2026-09-18T20:20:08.437Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:06:50.602Z",
     "plannedStepCount": 6,
@@ -116,13 +116,14 @@
   "planApprovedAt": "2026-09-18T12:09:27.283Z",
   "contextFetchedBy": [
     "worker-e0435164",
-    "architect-aa92f84f"
+    "architect-aa92f84f",
+    "architect-c7fb990e"
   ],
   "workStartedAt": "2026-09-18T12:14:07.739Z",
-  "blockedReason": "PLAN READY, BUT THE SHARED CHECKOUT LACKS THE CODE IT CORRECTS. The ruling (msg-54bb4cb0) re-scoped this row into two corrections to the LANDED createSeatLiveness from 4eb87ec4. That commit is on origin/main only.\n\nMeasured 2026-09-18 ~19:30Z by architect-aa92f84f:\n1. HEAD is moe/work-2026-09-18 a353c62a. It is 33 commits behind origin/main 3d386d6b, and `git merge-base --is-ancestor 4eb87ec4 HEAD` says NO.\n2. apps/daemon/src/orchestrator/seat-liveness.ts, seat-liveness.test.ts and seat-liveness-probe.ts are ABSENT on disk. agent-spawner.ts is the 480-line version from before liveness.\n3. moe.submit_plan REFUSED the plan: \"[INVALID_INPUT] Plan cites affectedFiles that do not exist\".\n4. Listing those files under newFiles would tell a worker to CREATE them, which is the add/add duplicate the ruling forbids. A worker cannot sync main either, because a merge is a whole-tree commit.\n5. `git merge-tree --write-tree HEAD origin/main` exits 0 with tree 52c5fe17. The only working-tree dirt it would touch is a peer's in-flight apps/daemon/src/repository/git-publication-port.ts and its .test.ts.\n\nUNBLOCK: sync origin/main into the checkout's branch (or switch the checkout to main), then set this row back to PLANNING. The complete plan is saved VERBATIM as resubmittable JSON in Serena memory task-task-eca3780de7bb44f09ebe669a568bcbda-handoff: 7 steps, 9 files, with calibration re-measured through the production probe and in-memory drills. The next architect only has to call submit_plan with it. Sync request: msg-d0645d2b. DoD map for the withdrawn contract: comment-0c006e8a.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-18T19:36:18.372Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "b063a1c01f698e17512615dc8c2f8b42e79472c8",
@@ -223,6 +224,6 @@
     "sessionId": "worker-e0435164@2026-09-18T12:09:33Z",
     "at": "2026-09-18T12:39:34.343Z"
   },
-  "priorBlockedReason": "An OFF-BOARD DELIVERY already implements this row and its consumer task-8f653d86 at the SAME path. The full measured premise is in comment-1c99b88fe5f9442180bfe7745c3f4e43.\n\nThe branch is fix/seat-liveness-silence-kill in workflow worktree .claude/worktrees/wf_dc190362-779-1. Its first commit f1fd5f6d (12:10Z) was amended after review to c3ae1ffa (12:32Z). It is not yet on origin/main and not on moe/work-2026-09-18. It creates apps/daemon/src/orchestrator/seat-liveness.ts with a different contract (createSeatLiveness/tick/formatDuration), and its agent-spawner.ts imports that contract.\n\nDoD 1 creates the same file with createSeatLivenessTracker/SeatProbe/verdict. Landing both is an add/add conflict, and under the `-X ours` landing recipe one side's imports break silently. The delivered bytes would not work. Building under another name instead would ship a duplicate liveness implementation.\n\nThe designs also diverge. c3ae1ffa treats an unobserved tree as silence (\"FAIL-CLOSED\"), which contradicts this row's rule 2. Its 250 ms/tick CPU floor is crossed by a HUNG claude.exe, measured at 109-328 ms/min; a working seat measured 766-1578.\n\nRULING NEEDED:\n(a) The branch is the delivery. Retire this row and 8f653d86, or re-scope this row into a correction against the landed createSeatLiveness.\n(b) The branch does not land. Unblock and I build as planned.\n\nStep 1 is COMPLETED as measurement only. Nothing is written to the repo. Asked in #governors msg-3ac96695 and msg-202cfe9e; no reply after 25+ min.",
+  "priorBlockedReason": "PLAN READY, BUT THE SHARED CHECKOUT LACKS THE CODE IT CORRECTS. The ruling (msg-54bb4cb0) re-scoped this row into two corrections to the LANDED createSeatLiveness from 4eb87ec4. That commit is on origin/main only.\n\nMeasured 2026-09-18 ~19:30Z by architect-aa92f84f:\n1. HEAD is moe/work-2026-09-18 a353c62a. It is 33 commits behind origin/main 3d386d6b, and `git merge-base --is-ancestor 4eb87ec4 HEAD` says NO.\n2. apps/daemon/src/orchestrator/seat-liveness.ts, seat-liveness.test.ts and seat-liveness-probe.ts are ABSENT on disk. agent-spawner.ts is the 480-line version from before liveness.\n3. moe.submit_plan REFUSED the plan: \"[INVALID_INPUT] Plan cites affectedFiles that do not exist\".\n4. Listing those files under newFiles would tell a worker to CREATE them, which is the add/add duplicate the ruling forbids. A worker cannot sync main either, because a merge is a whole-tree commit.\n5. `git merge-tree --write-tree HEAD origin/main` exits 0 with tree 52c5fe17. The only working-tree dirt it would touch is a peer's in-flight apps/daemon/src/repository/git-publication-port.ts and its .test.ts.\n\nUNBLOCK: sync origin/main into the checkout's branch (or switch the checkout to main), then set this row back to PLANNING. The complete plan is saved VERBATIM as resubmittable JSON in Serena memory task-task-eca3780de7bb44f09ebe669a568bcbda-handoff: 7 steps, 9 files, with calibration re-measured through the production probe and in-memory drills. The next architect only has to call submit_plan with it. Sync request: msg-d0645d2b. DoD map for the withdrawn contract: comment-0c006e8a.",
   "blockedOnTaskIds": null
 }
