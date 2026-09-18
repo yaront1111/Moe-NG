@@ -904,11 +904,14 @@ describe("moe up entrypoint wiring", () => {
 });
 
 /**
- * Why the launcher passes `--experimental-transform-types`, proven from BOTH
- * sides against the real wrapper entry rather than asserted in a comment. The
- * negative control is the point: if a peer removes the parameter property from
- * `agent-spawn-contract.ts`, the first test reddens and tells the next worker
- * the flag can be dropped, instead of it living on forever unexamined.
+ * The wrapper entry must load under PLAIN strip-only node, and under the
+ * launcher's flag, against the real entry rather than asserted in a comment.
+ * This first arm used to assert the opposite (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX)
+ * as the tripwire for a parameter property in `agent-spawn-contract.ts`; that
+ * syntax is gone (task-4444d180) and `erasableSyntaxOnly` in the daemon's
+ * tsconfig now refuses it at typecheck. This arm is the runtime side of that
+ * fence: a construct that slips past typecheck reddens it here, not in a user's
+ * `moe up`. The flag itself is kept; `moe-up-spawn.ts` says why.
  */
 describe("moe up transform-types flag", () => {
   const loadWrapperEntry = (argv: readonly string[]): { code: number | null; text: string } => {
@@ -918,17 +921,24 @@ describe("moe up transform-types flag", () => {
     return { code: probe.status, text: `${probe.stdout ?? ""}${probe.stderr ?? ""}` };
   };
   const entry = launchEntryPaths(REPO_ROOT).wrapperEntry;
-  // `import()` loads the graph without running main (import.meta.main is false).
-  const importOnly = `import(${JSON.stringify(pathToFileURL(entry).href)}).then(() => {})`;
+  // `import()` loads the graph without running main (import.meta.main is false);
+  // the marker proves the import RESOLVED, not merely that one error was absent.
+  const loaded = "WRAPPER_ENTRY_LOADED";
+  const importOnly = `import(${JSON.stringify(pathToFileURL(entry).href)})`
+    + `.then(() => console.log(${JSON.stringify(loaded)}))`;
 
-  it("cannot load the wrapper entry under plain strip-only node", () => {
-    const { text } = loadWrapperEntry(["-e", importOnly]);
-    expect(text).toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+  it("loads the wrapper entry under plain strip-only node", () => {
+    const { code, text } = loadWrapperEntry(["-e", importOnly]);
+    expect(text).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+    expect(text).toContain(loaded);
+    expect(code).toBe(0);
   }, 60_000);
 
   it("loads the same entry once the launcher's flag is passed", () => {
-    const { text } = loadWrapperEntry([NODE_TRANSFORM_TYPES_FLAG, "-e", importOnly]);
+    const { code, text } = loadWrapperEntry([NODE_TRANSFORM_TYPES_FLAG, "-e", importOnly]);
     expect(text).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+    expect(text).toContain(loaded);
+    expect(code).toBe(0);
   }, 60_000);
 });
 
