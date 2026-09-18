@@ -26,6 +26,7 @@ import {
   GOAL_ID, PROJECT_ID, RUN_ID, approvalPayload, closeStores, driveThrough, envelope,
   finalizeChain, openStore, sealedPlanningChain, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { planningAuthorityAggregateId } from "../planning/planning-authority-persistence.js";
 import { readPlanningRun } from "./planning-run-read.js";
 import type { PlanningRunView } from "./planning-run-read.js";
 
@@ -109,6 +110,37 @@ describe("POST /planning/run/read reviewability against a durable approval (task
     expect(frame.runId).toBe(RUN_ID);
     // The run is genuinely sealed, or the arm would be asserting reviewability over an empty plan.
     expect(frame.plan).not.toBeNull();
+  });
+
+  it("REFUSES, rather than serving an unsealed run, when the authority aggregate cannot be read", () => {
+    // A store fault on the authority read used to come back as a 200 RUN frame with `plan:null`
+    // and `authority:null` — the exact shape of a run that has not sealed — and the control room
+    // rendered "The plan is not sealed yet; nothing to review". The run here IS sealed; only the
+    // read fails. Same fail-closed rule the approval state already applies to a decision the
+    // daemon cannot read: not a fact it may present as absent.
+    const store = sealedRunAwaitingApproval();
+    expect(runFrame(store, RUN_ID).plan).not.toBeNull();
+    const authorityRef = planningAuthorityAggregateId(RUN_ID);
+    const faulting = new Proxy(store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "readEvents") return value.bind(base);
+        return (aggregateId: string): unknown => {
+          if (aggregateId === authorityRef) {
+            throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+          }
+          return base.readEvents(aggregateId);
+        };
+      },
+    });
+
+    const answer = readPlanningRun(faulting, PROJECT_ID, RUN_ID);
+
+    expect(answer).toEqual({
+      code: "PLANNING_RUN_READ_AUTHORITY_UNREADABLE", layer: "PLANNING_RUN_READ",
+      outcome: "REFUSED",
+    });
   });
 
   it("answers reviewable FALSE once approval.decide is durable, with the lifecycle unchanged", () => {
