@@ -134,7 +134,13 @@ function agreeingAttempt(
 ): AttemptFacts | JournalAppendRefused {
   const mismatch = journalRefusal("JOURNAL_BINDING_MISMATCH");
   let events: readonly StoredEvent[];
-  try { events = store.readEvents(request.attemptAggregateId); } catch { return mismatch; }
+  // A stream that could not be read is not evidence about a different attempt. The three
+  // equalities below are the only things that may answer MISMATCH.
+  try {
+    events = store.readEvents(request.attemptAggregateId);
+  } catch {
+    return journalRefusal("JOURNAL_BINDING_UNREADABLE");
+  }
   const history = readFoundationActivationHistory(
     request.attemptAggregateId, events, request.projectId);
   if (!history.ok) return mismatch;

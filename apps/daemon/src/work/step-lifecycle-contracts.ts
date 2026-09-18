@@ -70,7 +70,10 @@ export const DAEMON_STEP_LIFECYCLE = "DAEMON_STEP_LIFECYCLE" as const;
  * latest row that stopped decoding and the other is a broken row SEQUENCE.
  */
 export const STEP_LIFECYCLE_CODES = Object.freeze([
-  "STEP_REQUEST_MALFORMED", "STEP_BINDING_MISMATCH", "STEP_RECORD_ABSENT",
+  "STEP_REQUEST_MALFORMED", "STEP_BINDING_MISMATCH",
+  // The attempt's activation stream could not be READ. Kept apart from BINDING_MISMATCH, which
+  // states the durable record is evidence about a DIFFERENT attempt.
+  "STEP_BINDING_UNREADABLE", "STEP_RECORD_ABSENT",
   "STEP_RECORD_UNREADABLE", "STEP_RECORD_MALFORMED", "STEP_RECORD_AMBIGUOUS",
   "STEP_RECORD_DRIFT", "STEP_RECORD_HORIZON_MOVED", "STEP_PROJECT_MISMATCH",
   "STEP_NOT_STARTED", "STEP_ALREADY_FINISHED", "STEP_CHECKPOINT_TARGET_UNKNOWN",

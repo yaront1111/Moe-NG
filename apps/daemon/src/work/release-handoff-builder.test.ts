@@ -836,3 +836,78 @@ describe("task-e7b802bc: the sealed artifact reaches the release handoff", () =>
     expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(0);
   });
 });
+
+describe("the attempt binding reads inside the journal and step writers", () => {
+  /**
+   * Both write commands locate the attempt by reading its activation stream and then AUTHORISE by
+   * three equalities against the caller's binding. A throw from that read answered the same
+   * refusal as a failed equality — BINDING_MISMATCH, whose documented meaning is "this record is
+   * evidence about a DIFFERENT attempt". The repairs are opposites: fix the disk, or name the
+   * right attempt. Both readers now answer BINDING_UNREADABLE for the throw.
+   *
+   * Driven through the harness's own seeders, which run the production commands, and against a
+   * store that refuses the activation stream on exactly the read the writer makes. That read is
+   * the LAST read of the activation aggregate a clean seed makes — the fixture's own
+   * `decidedAt` derivation and the foundation binding both read it first, and each already
+   * answers its own code when it throws — so the occurrence is counted on a clean seed rather
+   * than pinned.
+   */
+  function countingReads(store: SqliteEventStore, aggregateId: string, seen: { n: number }): SqliteEventStore {
+    return new Proxy(store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "readEvents") return value.bind(base);
+        return (id: string): unknown => {
+          if (id === aggregateId) seen.n += 1;
+          return base.readEvents(id);
+        };
+      },
+    });
+  }
+  function refusingRead(store: SqliteEventStore, aggregateId: string, occurrence: number): SqliteEventStore {
+    let seen = 0;
+    return new Proxy(store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "readEvents") return value.bind(base);
+        return (id: string): unknown => {
+          if (id === aggregateId && (seen += 1) === occurrence) {
+            throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+          }
+          return base.readEvents(id);
+        };
+      },
+    });
+  }
+
+  it("journal.append refuses BINDING_UNREADABLE, not BINDING_MISMATCH, when the stream cannot be read", () => {
+    const clean = activatedWorld("journal-binding-calibrate");
+    const seen = { n: 0 };
+    seedJournal(countingReads(clean.store, seedIdentityOf(clean).attemptAggregateId, seen), seedIdentityOf(clean));
+    expect(seen.n).toBeGreaterThan(1);
+
+    const world = activatedWorld("journal-binding-unreadable");
+    const identity = seedIdentityOf(world);
+    expect(() => seedJournal(refusingRead(world.store, identity.attemptAggregateId, seen.n), identity))
+      .toThrow(/JOURNAL_BINDING_UNREADABLE@/u);
+    // The old answer, asserted absent by name: this arm is about the DIAGNOSIS.
+    expect(() => seedJournal(refusingRead(world.store, identity.attemptAggregateId, seen.n), identity))
+      .not.toThrow(/JOURNAL_BINDING_MISMATCH/u);
+  });
+
+  it("step lifecycle refuses BINDING_UNREADABLE, not BINDING_MISMATCH, when the stream cannot be read", () => {
+    // `seedStepRecord` runs four step commands; the last activation read a clean seed makes is
+    // the fourth command's binding read, so the first three land and the fourth is refused.
+    const clean = activatedWorld("step-binding-calibrate");
+    const seen = { n: 0 };
+    seedStepRecord(countingReads(clean.store, seedIdentityOf(clean).attemptAggregateId, seen), seedIdentityOf(clean));
+    expect(seen.n).toBeGreaterThan(1);
+
+    const world = activatedWorld("step-binding-unreadable");
+    const identity = seedIdentityOf(world);
+    expect(() => seedStepRecord(refusingRead(world.store, identity.attemptAggregateId, seen.n), identity))
+      .toThrow(/STEP_BINDING_UNREADABLE@/u);
+  });
+});
