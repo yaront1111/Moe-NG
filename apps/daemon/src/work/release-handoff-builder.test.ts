@@ -16,7 +16,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { SqliteEventStore } from "@moe/store";
+import type { SqliteEventStore, StoredEvent } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -775,5 +775,64 @@ describe("task-e7b802bc: the sealed artifact reaches the release handoff", () =>
     // in the BODY alone, so the pair proves the guard discriminates on bytes, not on attempts.
     expect(replayed.ok).toBe(true);
     expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(1);
+  });
+
+  it("ARM D — a first seal whose commit AND read-back fail is UNREADABLE, not a CONFLICT", () => {
+    // CONFLICT means, per the ledger's own header, "a re-seal offering DIFFERENT bytes": one
+    // attempt asserting two rosters. The write path answered it for a pair of STORE FAULTS —
+    // a commit that threw and a read-back that then threw too — because `alreadySealed`
+    // answered `false` for a throw, the same false as "read fine, found other bytes". Two
+    // store faults are not two rosters, and this ledger already has the honest code for a
+    // read it cannot make; this arm pins that the read-back uses it.
+    const world = activatedWorld("artifact-unreadable");
+    terminaliseResources(world.store, "artifact-unreadable");
+    const identity = seedIdentityOf(world);
+    // Every source EXCEPT the artifact seed, so this is the attempt's FIRST seal — the only
+    // shape that reaches the read-back at all (a second seal is decided as REPLAY or IMMUTABLE
+    // before any commit is attempted).
+    seedStepRecord(world.store, identity);
+    seedJournal(world.store, identity);
+    const inputSha = seedCaptureContext(world.store, identity);
+    seedContextManifest(world.store, identity, inputSha);
+    expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(0);
+
+    // Armed BY the failed commit: the immutability read and the expected-version read before it
+    // land normally, and only the read-back after the commit threw is refused.
+    let armed = false;
+    const faulting = new Proxy(world.store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key === "commitExpectedVersionDecision") {
+          return (): never => {
+            armed = true;
+            throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+          };
+        }
+        if (key === "readEvents") {
+          return (aggregateId: string): readonly StoredEvent[] => {
+            if (armed && aggregateId === ARTIFACT_AGGREGATE) {
+              throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+            }
+            return base.readEvents(aggregateId);
+          };
+        }
+        return value.bind(base);
+      },
+    });
+    const sealed = sealFoundationArtifactRoster(faulting, {
+      attemptAggregateId: DISPATCH_AGGREGATE, attemptRef: identity.attemptRef,
+      commandId: "cmd-artifact-unreadable", correlationId: "corr-artifact-unreadable",
+      declaredArtifactRefs: [], inputManifestSha256: inputSha, principalId: PRINCIPAL_ID,
+      projectId: PROJECT_ID, resultManifestSha256: "f".repeat(64),
+    });
+
+    expect(armed).toBe(true);
+    expect(sealed.ok).toBe(false);
+    if (sealed.ok) throw new Error("a seal whose commit threw reported success");
+    expect(sealed.code).toBe("FOUNDATION_ARTIFACT_LEDGER_UNREADABLE");
+    expect(sealed.layer).toBe(LEDGER_LAYER);
+    // And nothing landed: the commit really did throw.
+    expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(0);
   });
 });
