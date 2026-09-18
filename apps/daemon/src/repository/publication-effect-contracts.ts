@@ -12,6 +12,12 @@ export interface PublicationGitPort {
    * on the remote) is a fast-forward.
    */
   contains(candidate: PublicationCandidate, remoteSha: string | null): Promise<Readonly<{ ok: true; contains: boolean; known: boolean }> | PublicationRefusal>;
+  /**
+   * The remote's default branch as the remote itself reports it (HEAD's symref), or null when it
+   * advertises none. OPTIONAL on purpose: a port without it measures nothing, so the default stays
+   * unknown, and every existing fake stays a valid port.
+   */
+  measureDefaultBranch?(candidate: PublicationCandidate): Promise<Readonly<{ ok: true; defaultBranch: string | null }> | PublicationRefusal>;
 }
 
 export interface PublicationEffectIntent {

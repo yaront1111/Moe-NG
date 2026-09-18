@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { landingEnvironment, nodeGitRunner } from "./git-landing-port.js";
 import type { GitRunner } from "./git-landing-port.js";
-import { decodePublicationCandidate, publicationRefused, publicationRepositoryId, validPublicationSha } from "./publication-approval-contracts.js";
+import { decodePublicationCandidate, publicationRefused, publicationRepositoryId, validPublicationBranch, validPublicationSha } from "./publication-approval-contracts.js";
 import type { PublicationCandidate, PublicationRefusal } from "./publication-approval-contracts.js";
 import type { PublicationGitPort } from "./publication-effect-contracts.js";
 import { resolveRepositoryExecutionIdentity } from "./repository-execution-identity.js";
@@ -44,7 +44,28 @@ export function gitFailureWords(code: number | null, stderr: string): string {
 const refusedWith = (code: string, detail: string) => Object.freeze({ ok: false as const, code, detail });
 const said = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
-export function createGitPublicationPort(options: GitPublicationOptions = {}): PublicationGitPort {
+/**
+ * HEAD's own symref line from `ls-remote --symref -- <url> HEAD`: `ref: refs/heads/<name>\tHEAD`.
+ * The pattern also tail-matches refs such as refs/remotes/origin/HEAD, whose lines never count. No
+ * line for HEAD itself is an answer (the remote advertises no default); anything unreadable is refused.
+ */
+function defaultBranchOf(stdout: string): Readonly<{ ok: true; defaultBranch: string | null }> | PublicationRefusal {
+  const heads: string[] = [];
+  for (const line of stdout.split(/\r?\n/u)) {
+    if (!line.startsWith("ref:")) continue;
+    const symref = /^ref: (\S+)\t(\S+)$/u.exec(line);
+    if (symref === null) return refusedWith("PUBLISH_REMOTE_UNREADABLE", "ls-remote --symref answered an unreadable symref line");
+    if (symref[2] === "HEAD") heads.push(symref[1] as string);
+  }
+  if (heads.length > 1) return refusedWith("PUBLISH_REMOTE_UNREADABLE", "ls-remote --symref answered more than one symref for HEAD");
+  const target = heads[0];
+  if (target === undefined) return { ok: true, defaultBranch: null };
+  const branch = target.startsWith("refs/heads/") ? target.slice("refs/heads/".length) : null;
+  return validPublicationBranch(branch) ? { ok: true, defaultBranch: branch }
+    : refusedWith("PUBLISH_REMOTE_UNREADABLE", "remote HEAD is a symref to something other than a branch");
+}
+
+export function createGitPublicationPort(options: GitPublicationOptions = {}): Required<PublicationGitPort> {
   const run = options.run ?? publicationGitRunner;
   const identityOf = options.resolveIdentity ?? resolveRepositoryExecutionIdentity;
   const configRunner = options.readConfig ?? options.run ?? nodeGitRunner;
@@ -130,6 +151,18 @@ export function createGitPublicationPort(options: GitPublicationOptions = {}): P
           return rows.length === 1 && pair?.length === 2 && validPublicationSha(pair[0]) && pair[1] === ref
             ? { ok: true as const, sha: pair[0] }
             : refusedWith("PUBLISH_REMOTE_UNREADABLE", `ls-remote answered ${String(rows.length)} row(s) for ${ref}, expected exactly one`);
+        });
+      } catch (error) { return refusedWith("PUBLISH_REMOTE_UNREADABLE", `ls-remote threw: ${said(error)}`); }
+    },
+    async measureDefaultBranch(raw: PublicationCandidate) {
+      const candidate = admit(raw);
+      if (candidate === null) return publicationRefused("PUBLISH_REPOSITORY_CHANGED");
+      try {
+        return await isolated(candidate, async (directory) => {
+          const authentication = await publicationCredentialArguments(configRunner, candidate);
+          // Never `--refs`: it drops every symref, and every remote would then read as having no default.
+          const result = await run(directory, [`--git-dir=${directory}`, ...authentication, "ls-remote", "--symref", "--", candidate.approval.remoteUrl, "HEAD"]);
+          return result.code === 0 ? defaultBranchOf(result.stdout) : refusedWith("PUBLISH_REMOTE_UNREADABLE", gitFailureWords(result.code, result.stderr));
         });
       } catch (error) { return refusedWith("PUBLISH_REMOTE_UNREADABLE", `ls-remote threw: ${said(error)}`); }
     },
