@@ -110,6 +110,21 @@ its own: a caller that injects no dependency provider is refused, never served a
   any kill. `CPU_ACTIVITY_FLOOR_MS` is unmeasured against a no-tool-child model turn; its
   comment holds the calibration recipe. Any new `MOE_*` knob the wrapper reads must also join
   `PROJECT_STACK_ENVIRONMENT_KEYS` in `packages/runner` or the Windows broker drops it silently.
+  `MOE_WRAPPER_INTERVAL_MS` / `MOE_WRAPPER_MAX_AGENTS` / `MOE_AGENT_TIMEOUT_MS` with
+  `WRAPPER_ENV_INVALID`, because `setTimeout(fn, NaN)` becomes a tight loop against SQLite and
+  `active < NaN` staffs nothing while the log says idle. `sessionTtlMs` is *derived*
+  (`max(claimTtl, agentTimeout) + 60 s`) so the bearer outlives the child's own release.
+  `MOE_NODE_TREES=1` and `MOE_WRAPPER_ONCE=1` are the two `=== "1"` flags.
+- **The lease follows liveness.** `claimTtlMs` (30 min, not a knob) is the reap horizon for a
+  DEAD child only: while the child lives, `orchestrator/agent-claim-renewal.ts` renews the claim
+  under the seat's own bearer every `claimTtlMs / 3`, started by `agent-wrapper-staffing.ts` the
+  instant an admitted child exists and stopped before the exit-path release. The timer is a
+  wake-up; the wrapper's `clock` decides what is due (a frozen test clock renews nothing). A
+  refused or skipped renewal is one `[wrapper] <item> claim renew refused|skipped <code>: <detail>`
+  line per code per seat on `AgentWrapperConfig.log` (default stderr) and never touches the seat;
+  a renew can never create a claim, so racing the seat's own release is a named no-op. Every
+  `WORK_CLAIM_*` refusal now carries the authority's own `detail` (`work/work-claim-refusal-detail.ts`:
+  the missing or malformed key and its shape, or the holder) on the unchanged four-key frame.
 - **`moe up` supervises, it does not modify.** It reads one canonical line,
   `listening on http://127.0.0.1:<port>`, suppresses any daemon line matching its
   `SENSITIVE_DAEMON_LINE` pattern, and on Windows relies on Ctrl-C or a child exit because an

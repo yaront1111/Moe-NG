@@ -1481,7 +1481,7 @@ describe("server-injected request fields", () => {
     expect(Object.keys(error.details)).toHaveLength(0);
     expect(() => decisionOf(Object.freeze({
       advisoryOnly: true as const, authority: "NONE" as const, code: "CAPABILITY_DENIED",
-      error, kind: "work.claim" as const, ok: false as const,
+      detail: null, error, kind: "work.claim" as const, ok: false as const,
       refusedBy: "DAEMON_INGRESS" as const,
     }))).toThrow(expect.objectContaining({
       code: "CAPABILITY_DENIED", detail: "CAPABILITY_DENIED", layer: "DAEMON_INGRESS",
@@ -1524,13 +1524,42 @@ describe("server-injected request fields", () => {
     expect(Object.keys(refusal).sort()).toEqual(["code", "detail", "httpStatus", "layer"]);
   });
 
-  /** A refusal with no error still renders the bare code — the renderer is generic, not a
-   *  conflict special case, and must not start appending anything to every other refusal. */
-  it("leaves a refusal that carries no runtime error at its bare code", () => {
-    const answered = send("cmd-http-bare-detail", "work.claim", { workItemId: "no-expiry" });
+  /** A refusal with no error AND no detail of its own still renders the bare code — the
+   *  renderer is generic, not a conflict special case, and must not start appending anything
+   *  to every other refusal. A reused command id is such a refusal. */
+  it("leaves a refusal that carries neither runtime error nor detail at its bare code", () => {
+    const item = "node.deliver@registry-bare-detail";
+    expect(send("cmd-http-bare-detail", "work.claim", {
+      expiresAt: "2026-08-09T13:00:00.000Z", workItemId: item,
+    })).toMatchObject({ ok: true, outcome: "ACCEPTED" });
+    const answered = send("cmd-http-bare-detail", "work.release", { workItemId: item }, CREDENTIAL, 1);
+    if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    expect(answered.refusal.code).toBe("WORK_CLAIM_COMMAND_ID_REUSED");
+    expect(answered.refusal.detail).toBe("WORK_CLAIM_COMMAND_ID_REUSED");
+  });
+
+  /**
+   * THE LIVE SHAPE (UnAI 2026-09-18, seat 87c543be): the seat outlived its claim, tried
+   * `work.renew {workItemId}` and read `{"code":"WORK_CLAIM_PAYLOAD_INVALID","detail":
+   * "WORK_CLAIM_PAYLOAD_INVALID"}` — nothing named the key it had left out. The authority's own
+   * detail now rides the SAME four-key refusal frame, so every decoder that pins the roster
+   * (eleven in the control room, plus the generated client) keeps reading it.
+   */
+  it("names the missing key and its shape when a work.* payload is refused", () => {
+    const answered = send("cmd-http-renew-no-expiry", "work.renew", { workItemId: "renew-item" });
     if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
     expect(answered.refusal.code).toBe("WORK_CLAIM_PAYLOAD_INVALID");
-    expect(answered.refusal.detail).toBe("WORK_CLAIM_PAYLOAD_INVALID");
+    expect(answered.refusal.layer).toBe("DAEMON_INGRESS");
+    expect(answered.refusal.detail).toBe(
+      "work.renew takes exactly {expiresAt, workItemId}; expiresAt must be an ISO-8601 UTC "
+      + "instant with millisecond precision, like 2026-09-18T12:00:00.000Z, later than now (missing)",
+    );
+    expect(Object.keys(answered.refusal).sort()).toEqual(["code", "detail", "httpStatus", "layer"]);
+
+    const released = send("cmd-http-release-unclaimed", "work.release", { workItemId: "never-claimed" });
+    if (released.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    expect(released.refusal.code).toBe("WORK_CLAIM_NOT_FOUND");
+    expect(released.refusal.detail).toBe('work.release: "never-claimed" has never been claimed');
   });
 
   it("replays the identical command and replays again on a fresh store handle", () => {

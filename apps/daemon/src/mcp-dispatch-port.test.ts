@@ -138,6 +138,39 @@ describe("createMcpDispatchPort", () => {
     });
   });
 
+  /**
+   * A seat reaches `work.renew` over THIS port, so the authority's own detail has to survive
+   * the MCP frame: the live seat (UnAI 2026-09-18) read only the code here and could correct
+   * nothing. Same four-key refusal frame the HTTP listener serves; only the text is richer.
+   */
+  it("keeps the work-claim authority's own detail on a refused work.renew", async () => {
+    const payload = { workItemId: "review.submit@node-mcp-renew" };
+    const envelope = {
+      commandId: "cmd-mcp-renew-no-expiry",
+      commandKind: "work.renew",
+      correlationId: "corr-mcp-renew",
+      expectedVersion: 0,
+      payload,
+      requestDigest: createHash("sha256")
+        .update(encoder.encode(JSON.stringify(payload))).digest("hex"),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: "work/review.submit@node-mcp-renew",
+    };
+    const answer = decode(await port.dispatchCommandBytes(encoder.encode(JSON.stringify(envelope))));
+    expect(answer).toMatchObject({
+      httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
+      refusal: {
+        code: "WORK_CLAIM_PAYLOAD_INVALID",
+        detail: "work.renew takes exactly {expiresAt, workItemId}; expiresAt must be an ISO-8601 UTC "
+          + "instant with millisecond precision, like 2026-09-18T12:00:00.000Z, later than now (missing)",
+        layer: "DAEMON_INGRESS",
+      },
+      stage: "DISPATCH",
+    });
+    expect(Object.keys(answer["refusal"] as object).sort()).toEqual(["code", "detail", "httpStatus", "layer"]);
+  });
+
   it("dispatches the real async foundation service over MCP and records its evidence", async () => {
     const harness = seamHarness("mcp-valid");
     try {

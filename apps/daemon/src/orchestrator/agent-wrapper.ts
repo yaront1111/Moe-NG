@@ -10,6 +10,7 @@ import { handleCommandRequest } from "../http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
+import { createClaimRenewal } from "./agent-claim-renewal.js";
 import { DESIGN_STEP_KIND, byStaffingRank } from "./agent-staffing-order.js";
 import { codeMission, compilerMission, designGoalRef, designMission, mission } from "./agent-mission-text.js";
 import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
@@ -92,10 +93,11 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   // One lifecycle owns both the process-local active map and durable gate.
   const staffing = createAgentWrapperStaffing(config.staffingFence);
 
+  const log = config.log ?? ((line: string): void => { console.error(line); });
   const dispatch = (
     credential: string, kind: string, payload: JsonObject,
     target: string, expectedVersion: number, commandId?: string,
-  ): { code: string; ok: boolean } => {
+  ): { code: string; detail?: string | undefined; ok: boolean } => {
     const envelope = {
       commandId: commandId ?? `wrap-${config.mintSecret().slice(0, 18)}`,
       commandKind: kind,
@@ -112,10 +114,13 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       credential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
     }, "AGENT_WRAPPER") as { ok: boolean; outcome: string;
-      decision?: { resultCode: string }; refusal?: { code: string }; error?: { code: string }; };
+      decision?: { resultCode: string }; refusal?: { code: string; detail?: string };
+      error?: { code: string }; };
     return result.ok
       ? { code: (result.decision?.resultCode ?? "ACCEPTED"), ok: true }
-      : { code: result.refusal?.code ?? result.error?.code ?? result.outcome, ok: false };
+      : { code: result.refusal?.code ?? result.error?.code ?? result.outcome,
+        // The refusing authority's own words, for the one log line a refused renew earns.
+        detail: result.refusal?.detail, ok: false };
   };
 
   /** Every report but the admitted one: the start earned no producer code. */
@@ -265,6 +270,13 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     return staffing.start({
       claimAggregateVersion: step.claimAggregateVersion,
       cleanupAuthority,
+      // THE LEASE FOLLOWS LIVENESS: renewed under the seat's own secret every claimTtlMs / 3
+      // while the child lives, stopped by staffing the instant it exits (UnAI 2026-09-18: a
+      // 35-minute seat outlived its 30-minute claim and could not submit).
+      keepalive: createClaimRenewal({
+        affordances: config.affordances, claimTtlMs: config.claimTtlMs, clock: config.clock,
+        dispatch, log, secret, sessionId, workItemId,
+      }),
       kind: step.kind,
       // The attempt is charged when the seat spawns. A PROVIDER_LIMIT exit hands it
       // back, so the item's count on the next pass equals its pre-spawn count: the
