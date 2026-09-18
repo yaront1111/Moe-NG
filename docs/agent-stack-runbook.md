@@ -654,28 +654,42 @@ This `pnpm start` path is the single development-store launcher, not the project
 manager. For multiple durable project directories use the artifact's `moe projects`
 flow above, or invoke the source CLI's `projects` command while developing it.
 
-The launcher runs both children with `node --experimental-transform-types`, and
-that flag is currently load-bearing rather than cosmetic. Measured on Windows at
-`b773de7`, the wrapper entry cannot start under plain `node` at all:
+The launcher runs both children under plain `node` with no extra flag, and
+`moe start` does the same for its stack host and wrapper. Node 24 runs
+TypeScript by stripping the types only: syntax that needs a transform (a
+parameter property, an `enum`, a `namespace`) is refused with
+`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` before anything runs. Every launcher entry
+loads that way, measured from the repo root with Node v24.16.0:
 
 ```
-node apps/daemon/src/orchestrator/agent-wrapper-main.ts
-SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]:
-  TypeScript parameter property is not supported in strip-only mode
-  at apps/daemon/src/orchestrator/agent-spawn-contract.ts:53
+node --input-type=module -e "import('./apps/daemon/src/daemon-main.ts').then(() => console.log('LOADS'))"
+LOADS
+node --input-type=module -e "import('./apps/daemon/src/orchestrator/agent-wrapper-main.ts').then(() => console.log('LOADS'))"
+LOADS
+node --input-type=module -e "import('./apps/daemon/src/projects/project-stack-host-main.ts').then(() => console.log('LOADS'))"
+LOADS
 ```
 
-Node 24 strips types but does not transform them, and
-`agent-spawn-contract.ts:53` declares `constructor(readonly reason: ...)`. vitest
-transpiles that fine, which is why the test suite never saw it. **So the manual
-wrapper recipe below is broken as written — add
-`--experimental-transform-types` to it, or use `pnpm start`.** The daemon recipe
-is unaffected. Removing the parameter property is a separate fix; the launcher
-does not repair it, and `moe-up-main.test.ts` carries a negative-control test
-that reddens once it is gone, so the flag can be dropped deliberately.
+So the manual recipes below work as written, wrapper included. Run from
+`apps/daemon` with no environment set, each gets as far as its own named
+refusal, which it only reaches once every import has resolved:
 
-Apart from that, the manual three-terminal recipe is what to reach for when you
-need a fixed port, a `--csrf-token`, or one component without the other.
+```
+node src/orchestrator/agent-wrapper-main.ts
+STORE_DEPENDENCIES_ENV_MISSING: MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL
+node src/daemon-main.ts --dependencies=src/daemon-store-dependencies.ts --port=39123 --csrf-token=<dev-token>
+DAEMON_ENTRY_PROVIDER_THREW DAEMON_ENTRY
+```
+
+vitest transpiles what Node refuses, and `erasableSyntaxOnly` in
+`apps/daemon/tsconfig.json` covers only the daemon's own program, so the guard
+is a real spawn. `moe-up-main.test.ts` and `project-stack-host-main.test.ts`
+load every launcher entry under plain `node`, together with the modules each
+one imports at runtime. A negative control in the first proves that the same
+`node` refuses a parameter property.
+
+The manual three-terminal recipe is what to reach for when you need a fixed
+port, a `--csrf-token`, or one component without the other.
 
 ## Environment (shared by every entry)
 

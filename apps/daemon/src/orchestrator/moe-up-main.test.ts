@@ -13,8 +13,7 @@ import {
   runMoeUp,
 } from "./moe-up-main.js";
 import {
-  CONTROL_ROOM_BUNDLE_CANDIDATES, NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot,
-  createProcessSpawn, launchEntryPaths,
+  CONTROL_ROOM_BUNDLE_CANDIDATES, controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchSpawn } from "./moe-up-spawn.js";
 import type { CancellablePairingOperatorInput } from "../http/pairing-operator-channel.js";
@@ -273,15 +272,18 @@ describe("runMoeUp refuses before it spawns", () => {
 });
 
 describe("runMoeUp daemon argv", () => {
-  it("runs the daemon entry through node with an explicit dependency provider", async () => {
-    const harness = start(GOOD_ENV);
+  it("runs the daemon entry through plain node with an explicit dependency provider", async () => {
+    const root = bareRoot();
+    const harness = start(GOOD_ENV, { repoRoot: root });
     await settle();
     const daemon = harness.calls[0];
+    const src = join(root, "apps", "daemon", "src");
     expect(daemon?.command).toBe(process.execPath);
-    expect(daemon?.argv[0]).toBe(NODE_TRANSFORM_TYPES_FLAG);
-    expect(daemon?.argv[1]?.replaceAll("\\", "/")).toContain("apps/daemon/src/daemon-main.ts");
-    expect(daemon?.argv[2]?.replaceAll("\\", "/"))
-      .toMatch(/^--dependencies=.*apps\/daemon\/src\/daemon-store-dependencies\.ts$/u);
+    // The whole argv by value: a flag slipped back in ahead of the entry reds here instead
+    // of shifting the entry along unnoticed.
+    expect(daemon?.argv).toEqual([
+      join(src, "daemon-main.ts"), `--dependencies=${join(src, "daemon-store-dependencies.ts")}`,
+    ]);
     harness.calls[0]?.child.exit(0);
     // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
     // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
@@ -295,7 +297,7 @@ describe("runMoeUp daemon argv", () => {
     const harness = start(GOOD_ENV, { repoRoot: bareRoot() });
     await settle();
     expect(harness.calls[0]?.argv.filter((entry) => entry.startsWith("--port"))).toEqual([]);
-    expect(harness.calls[0]?.argv).toHaveLength(3);
+    expect(harness.calls[0]?.argv).toHaveLength(2);
     harness.calls[0]?.child.exit(0);
     // The wrapper too: `moe up` asks it to stop over stdin and terminates it only after
     // WRAPPER_STOP_GRACE_MS (10 s), so an arm leaving this fake child alive waits out the
@@ -311,8 +313,8 @@ describe("runMoeUp daemon argv", () => {
     await settle();
     // The daemon's own flag, the bundle directory itself, and nothing else new:
     // the daemon still proves the root before it binds.
-    expect(hosted.calls[0]?.argv).toHaveLength(4);
-    expect(hosted.calls[0]?.argv[3]).toBe(`--asset-root=${bundle}`);
+    expect(hosted.calls[0]?.argv).toHaveLength(3);
+    expect(hosted.calls[0]?.argv[2]).toBe(`--asset-root=${bundle}`);
     hosted.calls[0]?.child.exit(0);
     await hosted.result;
 
@@ -342,7 +344,8 @@ describe("runMoeUp daemon argv", () => {
 
 describe("runMoeUp origin handshake", () => {
   it("prints the bound origin and the two-process recipe when nothing is hosted, then starts the wrapper", async () => {
-    const harness = start(GOOD_ENV, { repoRoot: bareRoot() });
+    const root = bareRoot();
+    const harness = start(GOOD_ENV, { repoRoot: root });
     await settle();
     expect(harness.calls).toHaveLength(1);
 
@@ -351,10 +354,10 @@ describe("runMoeUp origin handshake", () => {
 
     expect(harness.calls).toHaveLength(2);
     expect(harness.calls[1]?.command).toBe(process.execPath);
-    expect(harness.calls[1]?.argv[0]).toBe(NODE_TRANSFORM_TYPES_FLAG);
-    expect(harness.calls[1]?.argv[1]?.replaceAll("\\", "/"))
-      .toContain("apps/daemon/src/orchestrator/agent-wrapper-main.ts");
-    expect(harness.calls[1]?.argv).toHaveLength(2);
+    // Plain node, the entry alone, by value.
+    expect(harness.calls[1]?.argv).toEqual([
+      join(root, "apps", "daemon", "src", "orchestrator", "agent-wrapper-main.ts"),
+    ]);
 
     const printed = harness.lines.join("\n");
     // The line the packaged smoke reads, verbatim.
@@ -954,10 +957,14 @@ describe("moe up children load under plain strip-only node", () => {
     expect(code).toBe(1);
   }, 60_000);
 
-  it("loads the same entry once the launcher's flag is passed", () => {
-    const { code, text } = plainNode([NODE_TRANSFORM_TYPES_FLAG, "-e", importOnly(wrapperEntry)]);
+  it("runs that probe once the parameter property is an erasable field, so the refusal is that construct's", () => {
+    // The other side of the control: same helper, same input type, only the construct changed.
+    const twin = "class Probe { readonly value: number; constructor(value: number) { this.value = value; } }"
+      + " console.log(['PROBE', new Probe(7).value].join('_'))";
+    const { code, text } = plainNode(["--input-type=module-typescript", "-e", twin]);
     expect(text).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
-    expect(text).toContain(loaded);
+    // Computed at run time, so an echoed source line can never contain it.
+    expect(text).toContain("PROBE_7");
     expect(code).toBe(0);
   }, 60_000);
 });

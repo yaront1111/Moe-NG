@@ -43,7 +43,6 @@ function environmentFromControl(control: Uint8Array): Readonly<Record<string, st
   expect(text()).toBe("C:\\Program Files\\nodejs\\node.exe");
   const argv = Array.from({ length: count() }, text);
   expect(argv).toEqual([
-    "--experimental-transform-types",
     "C:\\Moe\\apps\\daemon\\src\\projects\\project-stack-host-main.ts",
     `--config=${ENTRY.configPath}`, "--asset-root=C:\\Moe\\control-room",
   ]);

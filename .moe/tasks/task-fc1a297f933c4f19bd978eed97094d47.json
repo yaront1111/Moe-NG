@@ -1,0 +1,30 @@
+{
+  "id": "task-fc1a297f933c4f19bd978eed97094d47",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Informational MINOR findings must not count as unsuccessful rounds against the review escalation limit",
+  "description": "MEASURED LIVE (UnAI, 2026-09-18, node 257b0697): after the review reached REVIEW_ESCALATION_ROUND_LIMIT (3 unsuccessful rounds), the operator answered the escalation card with \"Allow one more attempt\" TWICE, and both funded attempts (rounds 11 and 13) routed ESCALATE again — the verifier never ran, though the code was correct (325/325 under the verifier's own shape). Rounds 5 and 8 had routed ACCEPT.\n\nMECHANISM (packages/review/src/review-findings.ts:213-221):\n  const clean = own.length === 0;\n  const unsuccessfulRounds = lineage.unsuccessfulRounds + (clean ? 0 : 1);\n  const escalated = unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT && !(clean && continuation !== undefined);\n  route = escalated ? \"ESCALATE\" : clean ? \"ACCEPT\" : ...\nThe operator continuation rescues ONLY a clean round. Both rounds 11 and 13 carried exactly one own MINOR, informational finding — round 11 `suite-requires-freshly-provisioned-database`, round 13 `applied-migration-digest-changed` — recorded by a conscientious worker as a note, not a defect. Each one made the round \"unsuccessful\", so the continuation could not rescue it, the kernel routed ESCALATE, the verifier (which only runs after ACCEPT) never fired, and the governor (bound spent) handed it back to the human. Net effect: an honest MINOR note is indistinguishable from a real defect at the escalation gate, and the more careful the worker, the more certain the deadlock. The operator escaped only by instructing the worker to submit with an empty findings list — i.e. to suppress true information.\n\nDIRECTION: a finding that fails no criterion and no required check (the shape the escalation card itself prints: \"No assigned criterion and no required check fails because of this\") must not count as an unsuccessful round for the purpose of the escalation limit / the continuation rescue. Concretely, `clean` for the escalation and continuation decision should mean \"no own finding that blocks acceptance\" (no MAJOR / criterion-failing / required-check-failing finding), while informational MINOR findings remain RECORDED in the lineage and visible to reviewers. Keep the anti-tamper digest semantics: `unsuccessfulRounds` stays digest-bound; only its increment rule changes. Do not let this widen into accepting a round that carries a MAJOR finding.\n\nRE-MEASURE BEFORE PLANNING: how severity is carried on ReviewFinding (MAJOR/MINOR, blocking?), whether MINOR already has a \"does not block acceptance\" semantic elsewhere (review-contract.ts), and every consumer of `unsuccessfulRounds`/`clean` (review-stall.ts, review-services.ts, the escalation card copy in the control room).",
+  "definitionOfDone": [
+    "A round whose only own findings are non-blocking (MINOR, failing no criterion/required check) is treated as clean for the escalation decision: past the limit WITH an operator continuation it routes ACCEPT; the findings are still recorded in the lineage. Kernel test asserts the exact route and reason codes for: clean, MINOR-only, MAJOR, and MINOR-only WITHOUT continuation (still ESCALATE past the limit).",
+    "A round carrying a MAJOR / criterion-failing finding still routes REJECT_*/ESCALATE exactly as today; a mutation drill deleting the severity distinction reds.",
+    "unsuccessfulRounds remains part of the lineage digest; a hand-reset counter is still refused (existing anti-tamper arm stays green).",
+    "Reproduced against the UnAI shape: a submission with one informational MINOR after 3 unsuccessful rounds + a continuation reaches ACCEPT and the verifier runs (record the command and result in planningNotes).",
+    "Escalation card copy (control room) states the rule: what a continuation rescues, and that informational findings no longer block it."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "DELIVERED ELSEWHERE — archived on the owner's instruction after governor verification 2026-09-18. Measured at origin/main (packages/review/src/review-findings.ts): `const blocking = own.filter((record) => record.finding.severity !== \"MINOR\")` at :216 and `const clean = blocking.length === 0` at :221, with the rule stated at :209-212 — only a CRITICAL or MAJOR own finding blocks a round; a MINOR one is recorded and informational. That is exactly this row's subject. It landed as cb503a58 and reached main in landing 8a14f3b1. Nothing left to implement.",
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 213,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T07:02:46.899Z",
+  "updatedAt": "2026-09-18T11:59:54.604Z"
+}

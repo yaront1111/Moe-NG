@@ -200,7 +200,7 @@ describe("project stack production wrapper launch", () => {
     expect(probe.status).toBe(0);
   }, 60_000);
 
-  it("uses the project root, absolute wrapper entry, transform flag, and no shell", () => {
+  it("uses the project root, plain node on the absolute wrapper entry, and no shell", () => {
     const request = projectStackWrapperLaunch({
       assetRoot: ASSET_ROOT,
       configPath: CONFIG_PATH,
@@ -212,7 +212,7 @@ describe("project stack production wrapper launch", () => {
       storePath: STORE_PATH,
     }, env, "C:\\Moe\\apps\\daemon\\src\\orchestrator\\agent-wrapper-main.ts");
     expect(request).toEqual({
-      argv: ["--experimental-transform-types", "C:\\Moe\\apps\\daemon\\src\\orchestrator\\agent-wrapper-main.ts"],
+      argv: ["C:\\Moe\\apps\\daemon\\src\\orchestrator\\agent-wrapper-main.ts"],
       command: process.execPath,
       options: {
         cwd: "C:\\work\\alpha",
