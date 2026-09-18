@@ -110,8 +110,8 @@
     }
   ],
   "planRevision": 14,
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-84420029",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -153,16 +153,24 @@
       "author": "worker-6433dce1",
       "content": "STEP-6 (F) ADVERSARIAL REVIEW (worker-6433dce1):\n1. Can a launcher child reach a non-erasable module the arms miss? I censused dynamic `import(` across production apps/daemon/src and packages. The TS targets are:\n   - daemon-main.ts:44, the --dependencies provider. The daemon arm imports it.\n   - wrapper-payload-hints.ts:46, the control-room hint table. The wrapper arm imports it.\n   - genesis-first-boot-worker.mjs:128, which loads daemon-store-dependencies. The daemon arm covers that.\n   - moe-cli-main's lazy subcommands. These belong to the `moe` process, not a launcher child. All 7 LOADS under plain node (follow-up G3).\n   Everything else is npm packages. The static graphs are covered by the arms, and the step-2 in-memory drills red the right arm per module.\n2. Is the negative control genuinely refusing? It uses an `-e` source, so there is no file to be missing. It asserts the CODE ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX plus exit 1, with no sentinel. Its erasable twin uses the same helper and input type with only the construct changed; it exits 0 and prints a marker COMPUTED at run time (\"PROBE_7\"), which an echoed source line cannot contain. So the refusal belongs to the construct, not the harness.\n3. Would a flag regrown at argv[0] go red? Drilled in memory for all 4 launchers: the daemon, wrapper and host by-value arms, the new Windows arm and the real CONTROL-frame pin all go red. `--no-warnings` in place of the flag also turns the Windows arm red, so by-value catches ANY regrown flag.\n4. project-review-drain-native.ts:71 is untouched (`git diff --quiet HEAD` is clean). It verifies `moe-cli-main.ts start|recover-review|recover-replan <workspace>` processes and accepts argv with or without the flag. None of the launchers changed here start moe-cli-main.\n5. Packaged artifact. The `moe` shim is plain `node \"%~dp0apps\\daemon\\src\\cli\\moe-cli-main.ts\"` (tools/packaging/pack-docs.ts:142) and never carried the flag. An artifact packed BEFORE this row still passes the flag to the stack host and its wrapper. That is harmless: transform mode loads erasable code, and :71 tolerates it. Once re-packed, no launcher passes it.\n6. Who reads argv by position? Only project-stack-host-main.ts:289 `process.argv.slice(2)`, and it never sees node's own flags, so the result is the same either way. The broker's decode_launch (native/broker/src/control.rs) does not inspect argv contents; launch.rs only quotes it into lpCommandLine.\nRESIDUALS, all recorded as follow-ups: the class-C harness sweep (G1); the reach of the typecheck guard, with the premise corrected (G2); no plain-node load arm yet for the `moe` CLI's lazy modules (G3); and a stale comment at tests/e2e/foundation/j1-loop-harness.ts:33 (\"The wrapper entry REQUIRES this flag on Windows\"), which the G1 sweep should remove.",
       "timestamp": "2026-09-18T12:34:52.625Z"
+    },
+    {
+      "id": "comment-4b6bf0ecb3b64b34b103631a92a17422",
+      "author": "qa-84420029",
+      "content": "QA EVIDENCE (qa-84420029). Every leg below was re-run by QA at the DELIVERED TREE.\n\nWHAT WAS REVIEWED\n- The completion commit a0e0fd3f and the checkpoint c4b975d8, on moe/work-2026-09-18. Both are pushed. The row's diff is measured as a0fa0b49..a0e0fd3f over apps/, packages/ and docs/.\n- The 9 owned paths are clean on disk.\n- HEAD moved to peer commit 0cf56be3 during the review. It touches only control-room goal-release files.\n\nHOW THE RUNS WERE PINNED\n- All scaffolding is in %TEMP%/moe-8bc14883-qa-84420029. Nothing was written to the repo.\n- The snapshot is `git archive a0e0fd3f` over apps, packages, tests, adapters and tools: 5265 files, equal to the tracked count.\n- Vitest's own graph goes through a vite `load` plugin. Spawned children go through a NODE_OPTIONS module.register load hook.\n- Every tracked path is served from the snapshot, owned paths included. The 72 dirty peer paths are never served.\n\nDoD 1: PLAIN NODE LOADS EVERY LAUNCHER ENTRY\nMeasured with Node v24.16.0: `node --input-type=module -e \"import('./<m>')...\"`, no flag. All of these LOADS, exit 0, with the hook ACTIVE in 5 processes and 0 NOT-SERVED:\n- daemon-main\n- daemon-store-dependencies\n- agent-wrapper-main\n- control-room live-dispatch-payloads\n- project-stack-host-main\n\n`moe start`'s wrapper is the same agent-wrapper-main.ts (project-stack-host-main.ts:288). The only production spawns of an entry are the 4 launchers. No Worker or fork inherits execArgv.\n\nMUTATION DRILLS (in memory; the hit logs prove each mutant was served)\nA parameter property appended to one module, served to the spawned children:\n- agent-spawn-contract.ts: the wrapper, daemon and host arms go red (3 failed | 2 passed).\n- daemon-store-dependencies.ts: the same 3 arms go red.\n- live-dispatch-payloads.ts: ONLY the wrapper arm goes red.\n- project-stack-host-main.ts: ONLY the host arm goes red.\n\nThe `plainNode` helper forced to pass the flag: ONLY the negative control goes red (1 failed | 40 passed). NODE_OPTIONS itself refuses the flag with \"--experimental-transform-types is not allowed in NODE_OPTIONS\".\n\nA flag put back at argv[0]:\n- daemon: 3 red (the by-value arm, the no-port length pin, the asset-root pin)\n- wrapper: 1 red\n- host: 1 red\n- boundary: project-compiled-node-mission 3/3 red, and the runner arm red with both `--experimental-transform-types` and `--no-warnings`\n\nDoD 2: THE CONSTANT IS GONE AND THE PINS ARE RE-AIMED BY VALUE\n- `git grep NODE_TRANSFORM_TYPES_FLAG a0e0fd3f` finds 0 lines.\n- The only production hit for the literal is project-review-drain-native.ts:71, which is untouched and tolerant of both argv shapes.\n- Arm counts, base to delivered: moe-up-main 39 to 41, stack-host 14 to 14, mission 1 to 1, runner 12 to 13. No skip, only or todo was added.\n- The matchers are strictly tighter: toContain and toMatch became a whole-argv toEqual.\n- The two-sided proof holds: plain node refuses a parameter property (the error code plus exit 1), and the erasable twin prints the run-time value PROBE_7 with exit 0.\n\nDoD 3: THE RUNBOOK'S QUOTED RECIPES ARE TRUE\nBoth quoted recipes were re-run from apps/daemon with MOE_* unset. The output matches the runbook verbatim, and both exit 1:\n- The wrapper gives `STORE_DEPENDENCIES_ENV_MISSING: MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL`.\n- The daemon gives `DAEMON_ENTRY_PROVIDER_THREW DAEMON_ENTRY`.\n\nThe runbook no longer names the flag. The manual wrapper recipe at :863 is plain node.\n\nDoD 4: THE GATES\n- `pnpm typecheck`: \"Scope: 19 of 20 workspace projects\", 19 Done, exit 0. This ran on disk at HEAD 0cf56be3, peer dirt included.\n- The daemon suite, pinned, using the package script's argv with the 11 untracked peer tests excluded:\n  - \"Test Files 745 passed (745) / Tests 12339 passed | 21 skipped (12360)\", exit 0, in 392.56s\n  - pin {\"head\":3657,\"disk\":0}, hook ACTIVE in 75 processes, 0 NOT-SERVED\n- `pnpm test:e2e`:\n  - The tsc leg exits 0.\n  - Pinned: \"Test Files 33 passed | 1 skipped (34) / Tests 262 passed | 7 skipped (269)\", exit 0, hook ACTIVE in 78 processes.\n  - As-named and unpinned: the same counts, exit 0.\n- @moe/runner, pinned: \"Test Files 81 passed (81) / Tests 2797 passed | 1 skipped (2798)\", exit 0.\n- Nothing is red, so the path-attributed delta is empty.\n\nPER-FILE CAP\nmoe-up-main.ts is 399 lines, project-stack-host-main.ts 317, windows-project-stack-boundary.ts 232 and moe-up-spawn.ts 105. All are under 400, and each shrank.\n\nNOTES\n- amend-1's whole-tree literal clause (\"returns only :71\") cannot hold while class C and E stay out of scope. The planningNotes and step 5 put them there, and 39 harness, comment and doc lines remain. The production reading holds, and the worker disclosed it.\n- The follow-ups stay as comments 23403f45 and 308fa6b3. timing.test.ts:46 still says the wrapper runs under the flag; that is stale and belongs to the G1 sweep.\n- The unattributedPaths list (daemon-main, agent-wrapper-main, mcp-main, mcp-http-main, apps/daemon/CLAUDE.md) is the peer's diagnostics change set. None of it is this row's work.",
+      "timestamp": "2026-09-18T13:01:48.799Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T08:30:07.144Z",
-  "updatedAt": "2026-09-18T12:43:00.906Z",
+  "updatedAt": "2026-09-18T13:01:59.752Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T08:49:30.557Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-18T13:01:59.752Z",
+    "wallClockMs": 15149195
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -210,6 +218,33 @@
       "treeId": "3f39363321aa32514ff382ecd86d48661c731f01",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "a0e0fd3f0c917455c375c38a778f3f80ee69d983",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-6433dce1@2026-09-18T12:02:55Z",
+      "paths": [
+        ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+        ".moe/tasks/task-8bc14883ca524cb99c0dfe667d1399cd.json",
+        ".moe/tasks/task-8f653d86bb4f445cb7ee358c5559f99a.json",
+        ".moe/tasks/task-fc1a297f933c4f19bd978eed97094d47.json",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+        "apps/daemon/src/projects/project-compiled-node-mission.test.ts",
+        "apps/daemon/src/projects/project-stack-host-main.test.ts",
+        "apps/daemon/src/projects/project-stack-host-main.ts",
+        "docs/agent-stack-runbook.md",
+        "packages/runner/src/platform/windows/windows-project-stack-boundary.test.ts",
+        "packages/runner/src/platform/windows/windows-project-stack-boundary.ts"
+      ],
+      "recordedBy": "worker-6433dce1",
+      "recordedAt": "2026-09-18T12:43:11.047Z",
+      "treeId": "32a2f68c90fcdc02db4a804f535de9490bd26aee",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -221,7 +256,11 @@
     "packages/runner/src/platform/windows/windows-project-stack-boundary.ts",
     "apps/daemon/src/projects/project-compiled-node-mission.test.ts",
     "packages/runner/src/platform/windows/windows-project-stack-boundary.test.ts",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+    ".moe/tasks/task-8bc14883ca524cb99c0dfe667d1399cd.json",
+    ".moe/tasks/task-8f653d86bb4f445cb7ee358c5559f99a.json",
+    ".moe/tasks/task-fc1a297f933c4f19bd978eed97094d47.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/moe-up-spawn.ts",
@@ -229,14 +268,23 @@
     "apps/daemon/src/orchestrator/moe-up-main.test.ts",
     "apps/daemon/src/orchestrator/moe-up-main.ts",
     "packages/runner/src/platform/windows/windows-project-stack-boundary.ts",
-    "apps/daemon/src/projects/project-stack-host-main.ts"
+    "apps/daemon/src/projects/project-stack-host-main.ts",
+    "packages/runner/src/platform/windows/windows-project-stack-boundary.test.ts",
+    "apps/daemon/src/projects/project-compiled-node-mission.test.ts",
+    "docs/agent-stack-runbook.md"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/CLAUDE.md",
+    "apps/daemon/src/daemon-main.ts",
+    "apps/daemon/src/mcp-http/mcp-http-main.ts",
+    "apps/daemon/src/mcp-main.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-6433dce1@2026-09-18T09:17:12Z",
-    "at": "2026-09-18T09:43:12.551Z"
+    "kind": "completion",
+    "sessionId": "worker-6433dce1@2026-09-18T12:02:55Z",
+    "at": "2026-09-18T12:43:11.047Z"
   },
   "priorBlockedReason": "UNNAMED CLASS-B CONSUMER OUTSIDE THE OWNED ROSTER, so under the shape rail a worker stops and the architect amends. apps/daemon/src/projects/project-compiled-node-mission.test.ts:44-49 (environmentFromControl) decodes the REAL broker CONTROL frame that windows-project-stack-boundary.ts:174 produces. It pins the argv BY VALUE with \"--experimental-transform-types\" at [0]. planningNotes filed :46 in class C (a harness) and put it out of scope, but it is a pin on production argv. With step 3 applied, all 3 of its tests fail with `expected [ …(3) ] to deeply equal [ …(4) ]` (run-observed). Dropping the flag from only the other two launchers would fork the argv shape, which the plan forbids, so step 3 cannot land without this path.\n\nThe rest of the shape census is clean (details in comment-162d340771ce460dbdfeaa590e2a3ed1). I asked in msg-071b9b95 and got no reply in about 10 minutes.\n\nState: steps 1-2 are COMPLETED, and the step-2 plain-node arms and negative control are in the tree. Evidence that they are green at HEAD:\n- moe-up-main + project-stack-host-main + project-compiled-node-mission: 3 files / 60 passed\n- daemon typecheck exits 0\n\nThe step-3 edits were REVERTED (`git apply -R` of my own patch; the 4 files are blob-equal to HEAD), so the wip checkpoint carries no red. Resume from the comment, which lists every hunk and the step-4 pins; the patch is saved at %TEMP%/moe-8bc14883-worker-6433dce1/step3.patch.",
   "blockedOnTaskIds": null,
@@ -259,5 +307,8 @@
     "reportedAt": "2026-09-18T12:42:52.744Z",
     "source": "agent-reported"
   },
-  "completionSummary": "DELIVERED\n- The flag is dropped from every launcher in one change:\n  - `moe up` daemon and wrapper argv (moe-up-main.ts, 403 -> 399 lines)\n  - the `moe start` wrapper argv (project-stack-host-main.ts)\n  - the Windows stack-host argv (windows-project-stack-boundary.ts, local TRANSFORM_TYPES deleted)\n- NODE_TRANSFORM_TYPES_FLAG is deleted (moe-up-spawn.ts doc = measured truth). `git grep NODE_TRANSFORM_TYPES_FLAG` finds 0 lines. The production-only literal grep finds only project-review-drain-native.ts:71, which is untouched and tolerates both argv shapes.\n- Pins are re-aimed BY VALUE, with no arm deleted and no matcher widened:\n  - daemon and wrapper argv use toEqual against a bareRoot\n  - host argv is `[entry]`\n  - the real CONTROL-frame argv in project-compiled-node-mission.test.ts (amend-1) has 3 elements\n  - NEW runner arm: decodes the launch payload field by field, argv by value, offset===length\n- The with-flag arm is re-aimed to the negative control's erasable twin: same helper, readonly field, run-time-computed marker, exit 0. So the refusal belongs to the construct.\n- Runbook :657-676 is replaced with quoted plain-node probe results (all 3 entries LOADS, Node v24.16.0) and each manual recipe's own refusal line. The flag is no longer named there.\n\nEVIDENCE\n- Drills, in memory: putting a flag back at argv[0] turns every by-value arm red for all 4 launchers. `--no-warnings` does the same to the Windows arm.\n- Plain-node load arms are green, and step-2 drills turn the right arm red per module.\n- typecheck: 19/19. Runner: 81 passed (81). Daemon suite pinned: 745 passed (745), 12339 passed. e2e pinned: 33 passed | 1 skipped (34).\n\nFOREIGN RED, disclosed\n- Unpinned daemon: 2 failed. node-spec-loader.test.ts is an untracked peer file deleted mid-run; daemon-entry.test.ts's 2 failing tests exist only in a peer's copy, and the file alone at HEAD gives 12/12.\n- Unpinned e2e: 11 failed, all from the wrapper dying with ERR_MODULE_NOT_FOUND on the peer's untracked mcp-disp"
+  "completionSummary": "DELIVERED\n- The flag is dropped from every launcher in one change:\n  - `moe up` daemon and wrapper argv (moe-up-main.ts, 403 -> 399 lines)\n  - the `moe start` wrapper argv (project-stack-host-main.ts)\n  - the Windows stack-host argv (windows-project-stack-boundary.ts, local TRANSFORM_TYPES deleted)\n- NODE_TRANSFORM_TYPES_FLAG is deleted (moe-up-spawn.ts doc = measured truth). `git grep NODE_TRANSFORM_TYPES_FLAG` finds 0 lines. The production-only literal grep finds only project-review-drain-native.ts:71, which is untouched and tolerates both argv shapes.\n- Pins are re-aimed BY VALUE, with no arm deleted and no matcher widened:\n  - daemon and wrapper argv use toEqual against a bareRoot\n  - host argv is `[entry]`\n  - the real CONTROL-frame argv in project-compiled-node-mission.test.ts (amend-1) has 3 elements\n  - NEW runner arm: decodes the launch payload field by field, argv by value, offset===length\n- The with-flag arm is re-aimed to the negative control's erasable twin: same helper, readonly field, run-time-computed marker, exit 0. So the refusal belongs to the construct.\n- Runbook :657-676 is replaced with quoted plain-node probe results (all 3 entries LOADS, Node v24.16.0) and each manual recipe's own refusal line. The flag is no longer named there.\n\nEVIDENCE\n- Drills, in memory: putting a flag back at argv[0] turns every by-value arm red for all 4 launchers. `--no-warnings` does the same to the Windows arm.\n- Plain-node load arms are green, and step-2 drills turn the right arm red per module.\n- typecheck: 19/19. Runner: 81 passed (81). Daemon suite pinned: 745 passed (745), 12339 passed. e2e pinned: 33 passed | 1 skipped (34).\n\nFOREIGN RED, disclosed\n- Unpinned daemon: 2 failed. node-spec-loader.test.ts is an untracked peer file deleted mid-run; daemon-entry.test.ts's 2 failing tests exist only in a peer's copy, and the file alone at HEAD gives 12/12.\n- Unpinned e2e: 11 failed, all from the wrapper dying with ERR_MODULE_NOT_FOUND on the peer's untracked mcp-disp",
+  "completedAt": "2026-09-18T13:01:59.752Z",
+  "reviewCompletedAt": "2026-09-18T13:01:59.752Z",
+  "reviewSummary": "APPROVED by qa-84420029. Full evidence in comment-4b6bf0ec.\n\nReviewed completion a0e0fd3f and checkpoint c4b975d8, both pushed; the 9 owned paths are clean on disk. Every gate was re-run pinned to a `git archive a0e0fd3f` snapshot (a vite load plugin plus a NODE_OPTIONS load hook), so none of the 72 dirty peer paths was served.\n\nDoD1. Plain `node -e import()`: daemon-main, daemon-store-dependencies, agent-wrapper-main, live-dispatch-payloads and project-stack-host-main all LOADS, exit 0. `moe start`'s wrapper is the same entry (host:288). Owned arms: 3 daemon files 60/60, runner file 22/22.\nIn-memory drills (served-hit proof):\n- A parameter property per module reds exactly the arm that reaches it.\n- A transforming helper reds only the negative control.\n- A flag at argv[0] reds the daemon (3), wrapper (1), host (1) and mission (3/3) arms, and the runner arm with both flags.\n\nDoD2. `git grep NODE_TRANSFORM_TYPES_FLAG` finds 0 lines. The only production literal left is drain-native.ts:71, untouched. Arm counts 39->41, 14->14, 1->1, 12->13; no skip or only; toEqual by value. The two-sided proof holds (refusal code + exit 1; twin prints PROBE_7, exit 0).\n\nDoD3. Both runbook recipes re-run with MOE_* unset print the quoted refusals verbatim, exit 1.\n\nDoD4.\n- pnpm typecheck: 19/19 Done, exit 0.\n- Daemon suite: \"745 passed (745) / 12339 passed | 21 skipped\", exit 0 (head 3657, disk 0; hook in 75 children).\n- test:e2e: tsc exit 0; pinned \"33 passed | 1 skipped (34) / 262 passed | 7 skipped\", exit 0; the unpinned as-named run gives the same.\n- Runner: 81 passed (81), 2797 passed.\nNothing red, so the attributed delta is empty.\n\nPer-file: largest is 399 lines (moe-up-main.ts); all under 400 and smaller than at base.\n\nNoted:\n- amend-1's whole-tree literal clause cannot hold while class C/E stay out of scope. Its production reading holds, and the worker disclosed it.\n- Follow-ups G1-G3 are comments 23403f45 and 308fa6b3; the stale timing.test.ts:46 comment belongs to G1."
 }

@@ -1,7 +1,8 @@
 import type { SqliteEventStore } from "@moe/store";
 import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import { decodePublicationCandidate, samePublicationApproval } from "./publication-approval-contracts.js";
+import { exact, isObject } from "../json-record-shape.js";
+import { decodePublicationCandidate, samePublicationApproval, validPublicationSha } from "./publication-approval-contracts.js";
 import type { PublicationEffectIntent } from "./publication-effect-contracts.js";
 import type { RepositoryExecutionOwner } from "./repository-execution-contracts.js";
 import { NODE_PUBLISHER_PRINCIPAL_ID, publishAggregateId } from "./publish-receipt-contracts.js";
@@ -61,4 +62,58 @@ export function recordPublicationIntent(store: SqliteEventStore, input: Publicat
   if (intent === null) throw new Error("PUBLISH_INTENT_INVALID");
   if (!sameIntent(intent, input)) throw new Error("PUBLISH_INTENT_CONFLICT");
   return { intent, replayed: written.disposition === "REPLAYED" };
+}
+
+const TRANSMISSION_KIND = "internal.repository.publication_transmission";
+const TRANSMISSION_VERSION = "moe-publication-transmission/1";
+const TRANSMISSION_KEYS = ["decisionId", "goalId", "outcome", "projectId", "tipBefore", "transmittedAt", "version"];
+const OUTCOMES = ["ACCEPTED", "REJECTED", "INDETERMINATE"] as const;
+/** The remote tip could not be read before the push: a marker no observed tip can ever equal. */
+export const PUBLICATION_TIP_UNREADABLE = "UNREADABLE";
+export type PublicationPushOutcome = typeof OUTCOMES[number];
+/**
+ * The evidence of the ONE push under an intent, written once right after git answered: the remote
+ * branch tip read before the push (a sha, null when the branch was absent, or UNREADABLE) and how
+ * the push ended. It is its own event beside the intent, never new keys on moe-publication-intent/1,
+ * so an intent recorded before this evidence existed still decodes, and simply has none.
+ */
+export interface PublicationTransmission {
+  readonly projectId: string;
+  readonly goalId: string;
+  readonly decisionId: string;
+  readonly tipBefore: string | null;
+  readonly outcome: PublicationPushOutcome;
+  readonly transmittedAt: string;
+}
+const transmissionId = (projectId: string, goalId: string, decisionId: string) => hash([TRANSMISSION_VERSION, projectId, goalId, decisionId]);
+const knownOutcome = (value: unknown): value is PublicationPushOutcome => OUTCOMES.some((outcome) => outcome === value);
+
+/** Absent, or malformed in any way, answers null: bad evidence must read exactly like no evidence. */
+export function readPublicationTransmission(store: SqliteEventStore, projectId: string, goalId: string, decisionId: string): PublicationTransmission | null {
+  const record = store.getCommandDecision({ projectId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, commandId: transmissionId(projectId, goalId, decisionId) });
+  if (record === null || record.commandKind !== TRANSMISSION_KIND || record.effectDisposition !== "EFFECTS_COMMITTED"
+    || record.targetAggregateId !== publishAggregateId(goalId)) return null;
+  const decoded = decodeBoundedJsonBytes(record.resultBytes);
+  if (!decoded.ok || !isObject(decoded.value) || !exact(decoded.value, TRANSMISSION_KEYS)) return null;
+  const value = decoded.value; const tipBefore = value["tipBefore"]; const outcome = value["outcome"];
+  if (value["version"] !== TRANSMISSION_VERSION || value["projectId"] !== projectId || value["goalId"] !== goalId
+    || value["decisionId"] !== decisionId || value["transmittedAt"] !== record.decidedAt || !knownOutcome(outcome)
+    || !(tipBefore === null || tipBefore === PUBLICATION_TIP_UNREADABLE || validPublicationSha(tipBefore))) return null;
+  return Object.freeze({ projectId, goalId, decisionId, tipBefore, outcome, transmittedAt: record.decidedAt });
+}
+
+/** Written once per decision: the key is deterministic, so a second, different record throws. */
+export function recordPublicationTransmission(store: SqliteEventStore, input: PublicationTransmission): void {
+  const commandId = transmissionId(input.projectId, input.goalId, input.decisionId);
+  const bytes = encoder.encode(JSON.stringify({ version: TRANSMISSION_VERSION, projectId: input.projectId, goalId: input.goalId,
+    decisionId: input.decisionId, tipBefore: input.tipBefore, outcome: input.outcome, transmittedAt: input.transmittedAt }));
+  const aggregateId = publishAggregateId(input.goalId);
+  const written = store.commitExpectedVersionDecision({ commandKind: TRANSMISSION_KIND, committedResultBytes: bytes,
+    correlationId: "publication-transmission", decidedAt: input.transmittedAt,
+    events: [{ eventId: `${commandId}-transmitted`, eventType: "RepositoryPublicationTransmitted",
+      payload: encoder.encode(JSON.stringify({ decisionId: input.decisionId, outcome: input.outcome })) }],
+    expectedVersion: store.getAggregateVersion(aggregateId),
+    key: { commandId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId: input.projectId },
+    requestBytes: bytes, targetAggregateId: aggregateId });
+  if (written.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("PUBLISH_TRANSMISSION_CONFLICT");
 }

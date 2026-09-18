@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import type { RepositoryExecutionHandle, RepositoryExecutionPort, RepositoryExecutionState } from "./repository-execution-contracts.js";
+import { REPOSITORY_EXECUTION_PHASES } from "./repository-execution-contracts.js";
+import type { RepositoryExecutionHandle, RepositoryExecutionPhase, RepositoryExecutionPort, RepositoryExecutionReleaseReason,
+  RepositoryExecutionState } from "./repository-execution-contracts.js";
 import { createRepositoryExecutionPort } from "./repository-execution-port.js";
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -239,3 +241,44 @@ it("yields a reservation only from RESERVED, whatever it executed before (addend
     .toEqual({ ok: true, released: true });
   expect(port.acquire(root, { ...owner, nodeRef: "next-node" }, controller)).toMatchObject({ ok: true });
 });
+
+/** A legal route from a fresh reservation into each phase, and its own legal way out. Typed total: a new phase breaks tsc. */
+type Route = { readonly into: readonly Partial<RepositoryExecutionState>[]; readonly out: readonly Partial<RepositoryExecutionState>[];
+  readonly reason: RepositoryExecutionReleaseReason };
+const RAN = { phase: "EXECUTING", baselineId: "baseline-original", sessionId: "session-a" } as const;
+const BACK = { phase: "RESERVED", sessionId: null, pid: null } as const;
+const ROUTES: Readonly<Record<RepositoryExecutionPhase, Route>> = {
+  RESERVED: { into: [], out: [], reason: "YIELDED" }, EXECUTING: { into: [RAN], out: [BACK], reason: "YIELDED" },
+  VERIFYING: { into: [RAN, { phase: "VERIFYING" }], out: [BACK], reason: "YIELDED" },
+  AWAITING_LANDING: { into: [RAN, { phase: "VERIFYING" }, { phase: "AWAITING_LANDING" }], out: [{ phase: "LANDING" }], reason: "LANDED" },
+  LANDING: { into: [RAN, { phase: "VERIFYING" }, { phase: "AWAITING_LANDING" }, { phase: "LANDING" }], out: [], reason: "LANDED" },
+  BLOCKED: { into: [{ phase: "BLOCKED" }], out: [BACK], reason: "YIELDED" },
+  PUBLISHING: { into: [{ phase: "PUBLISHING" }], out: [], reason: "PUBLISH_NOT_TRANSMITTED" },
+  CRITERION_VERIFYING: { into: [{ phase: "CRITERION_VERIFYING", baselineId: "baseline-original", sessionId: "session-a" }], out: [], reason: "CRITERIA_COMPLETED" },
+};
+it("releases PUBLISH_NOT_TRANSMITTED only from PUBLISHING, and refuses it from every other phase by the transition guard", () => {
+  const refused = { ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID", detail: "REPOSITORY_EXECUTION_TRANSITION_INVALID" };
+  // One repository for every phase: each spawn of git costs seconds on a loaded host, so each phase leaves by its own release.
+  const root = repository(); const port = createRepositoryExecutionPort(); let visited = 0;
+  const walk = (from: RepositoryExecutionHandle, steps: Route["into"]) => steps.reduce((handle, step) => {
+    const moved = change(port, root, handle, step); if (!moved.ok) throw new Error(moved.code); return moved.handle;
+  }, from);
+  const release = (handle: RepositoryExecutionHandle, reason: RepositoryExecutionReleaseReason) =>
+    port.release(root, owner, handle.reservation.revision, reason, controller.controllerId);
+  for (const phase of REPOSITORY_EXECUTION_PHASES) {
+    const handle = walk(held(port, root), ROUTES[phase].into);
+    expect(handle.reservation.phase).toBe(phase);
+    // An unlisted reason still falls through the whole chain to a refusal: the guard fails closed.
+    expect(release(handle, "NOT_A_REASON" as unknown as RepositoryExecutionReleaseReason)).toEqual(refused);
+    if (phase === "PUBLISHING") {
+      expect(release(handle, "PUBLISH_NOT_TRANSMITTED")).toEqual({ ok: true, released: true });
+      expect(port.inspect(root)).toEqual({ ok: true, reservation: null });
+    } else {
+      expect(release(handle, "PUBLISH_NOT_TRANSMITTED")).toEqual(refused);
+      expect(port.inspect(root)).toMatchObject({ ok: true, reservation: { phase, revision: handle.reservation.revision } });
+      expect(release(walk(handle, ROUTES[phase].out), ROUTES[phase].reason)).toEqual({ ok: true, released: true });
+    }
+    visited += 1;
+  }
+  expect(visited).toBe(REPOSITORY_EXECUTION_PHASES.length); expect(visited).toBeGreaterThan(1);
+}, 60_000);

@@ -1,0 +1,33 @@
+{
+  "id": "task-0416061566de49939e91bbd6351be79e",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "Publish to moe/release/<goalId> when the workspace branch is the remote's default branch, or when that default is unknown",
+  "description": "ROW 2 of 3 for task-4ba1e00a3aa64a83a1b883566377e3ab, filed by architect-73d103f8 on 2026-09-18 under the owner's choice of OPTION A. Depends on task-baefab32f1264daf8f173efc0c1fe2c0, which measures and records a remote's default branch and exports `readRemoteDefaultBranch(store, projectId, remoteUrl): string | null`. task-4ba1e00a (the release guard, the card, the live test and docs) depends on this row.\n\nTHE DEFECT THIS ROW CLOSES (measured live on UnAI 2026-09-18). The lander commits every accepted node onto the workspace branch; the publish candidate is that workspace's `symbolic-ref HEAD` (apps/daemon/src/repository/publication-candidate.ts:21); and the push is `${sha}:refs/heads/${candidate.approval.branch}` (git-publication-port.ts:66). On UnAI the workspace branch IS the remote's default (`master`), so publish pushes straight onto the operator's default branch, and Release can then never open a PR - head equals base, and the code is already there.\n\nTHE ONE SEAM. The whole publish pipeline is keyed on `candidate.approval.branch`: `push` targets it, `observe` ls-remotes it (:77), node-publisher.ts:68-73 records the PUSHED receipt with it and CHECKS the receipt matches, release-decide-service.ts `pushedBranchOf` (:85-108) reads that receipt's branch as its PR head, and apps/daemon/src/http/repository-remote-read.ts:105 shows `approval` to the operator, who approves exactly that object. So set the target ONCE, in the candidate: when the recorded remote default is UNKNOWN (null) or EQUALS the workspace branch, `approval.branch` becomes `moe/release/<goalId>`; otherwise it stays the workspace branch, exactly as today. Push, observe, receipt, release head and the operator's approval screen then all follow with no change of their own - and the operator APPROVES THE REAL TARGET, rather than approving `master` while Moe pushes something else.\n\nWHY UNKNOWN MAPS TO THE RELEASE BRANCH (epic rail 4). Pushing onto an existing branch that might be the operator's default is the risky act; an unmeasured default is not evidence that it is safe, so it gains no authority to do it. The cost is deliberate and bounded: a project whose default has not yet been measured publishes its first goal to `moe/release/<goalId>` even if its workspace is on a feature branch.\n\nTHE READER SIGNATURE CHANGES, and that is a shape change with named consumers. `PublicationCandidateReader` is `(remoteUrl) => ...` today (declared in publication-approval-contracts.ts) and knows no goalId. It must also receive the goalId and the recorded default, so preview, command and push all compute the SAME target from the SAME recorded inputs - the operator's approval must equal a fresh candidate read at preview (repository-remote-read.ts:100), at command (`samePublicationApproval`, publish-services.ts:95-100) and at push (node-publisher.ts:33, :53). Known implementers and callers: publication-candidate.ts, publish-services.ts, repository-remote-read.ts, node-publisher.ts, and the fixture at apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts:214. Census the whole tree before planning; if the callers exceed the path cap, split.\n\n`moe/release/<goalId>` must be a valid ref for every goalId the store can hold - validate with `git check-ref-format --branch` semantics and refuse by name rather than push a ref git would reject.\n\nOUT OF SCOPE: measuring the default (task-baefab32), the RELEASE_HEAD_IS_BASE guard, the Release card and docs (task-4ba1e00a). Deleting accumulated `moe/release/*` branches from remotes after merge is a follow-up.",
+  "definitionOfDone": [
+    "With the recorded default EQUAL to the workspace branch, the candidate's `approval.branch` is exactly `moe/release/<goalId>`; with the default UNKNOWN (null) it is also `moe/release/<goalId>`; with a DIFFERENT known default it is the workspace branch unchanged - one arm per case, asserting the branch by value against the production candidate reader.",
+    "Preview, command and push agree: an arm drives the same goal through repository-remote-read, the publish command and node-publisher with the same recorded default and asserts all three produce an identical approval, and that the command accepts the preview's approval (no PUBLISH_CANDIDATE_CHANGED). A second arm changes the recorded default between preview and command and asserts the exact refusal PUBLISH_CANDIDATE_CHANGED with its layer.",
+    "A goalId that cannot form a valid ref is refused by name before any push, never pushed.",
+    "Every implementer and caller of PublicationCandidateReader is updated and named in the completion record with a whole-tree census; no fixture is left implementing the old signature.",
+    "Gates quoted with `Test Files N passed` count lines: daemon tests for src/repository/**, src/http/repository-remote-read*, src/orchestrator/node-publisher*, and `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1015.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T12:57:31.970Z",
+  "updatedAt": "2026-09-18T12:57:36.759Z",
+  "dependsOn": [
+    "task-baefab32f1264daf8f173efc0c1fe2c0"
+  ]
+}

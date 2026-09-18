@@ -21,6 +21,8 @@ export const publicationGitRunner: GitRunner = (cwd, args) => new Promise((done)
       code: error === null ? 0 : typeof error.code === "number" ? error.code : null, stdout, stderr,
     }));
 });
+/** Git ran the push and exited non-zero: the one push failure that is an answer, not a silence. */
+export const PUBLISH_PUSH_REJECTED = "PUBLISH_PUSH_REJECTED";
 export interface GitPublicationOptions {
   readonly run?: GitRunner;
   readonly readConfig?: GitRunner;
@@ -65,7 +67,8 @@ export function createGitPublicationPort(options: GitPublicationOptions = {}): P
           const authentication = await publicationCredentialArguments(configRunner, candidate);
           const pushed = await run(directory, [`--git-dir=${directory}`, ...authentication, "push", "--no-verify", "--", candidate.approval.remoteUrl,
             `${candidate.approval.sha}:refs/heads/${candidate.approval.branch}`]);
-          return pushed.code === 0 ? { ok: true as const } : publicationRefused("PUBLISH_PUSH_UNKNOWN");
+          // A number is git's own exit (it ran and refused); null is a timeout, kill or spawn failure that never answered. Only a refusal may help prove no landing.
+          return pushed.code === 0 ? { ok: true as const } : publicationRefused(pushed.code === null ? "PUBLISH_PUSH_UNKNOWN" : PUBLISH_PUSH_REJECTED);
         });
       } catch { return publicationRefused("PUBLISH_PUSH_UNKNOWN"); }
     },
