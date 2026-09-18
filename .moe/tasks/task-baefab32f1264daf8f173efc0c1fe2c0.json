@@ -91,7 +91,7 @@
     }
   ],
   "planRevision": 11,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -117,7 +117,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:57:08.262Z",
-  "updatedAt": "2026-09-18T21:19:33.728Z",
+  "updatedAt": "2026-09-18T21:27:59.123Z",
   "dependsOn": [
     "task-78dea88bfd1f491b9a0b0c3f9c0519fe"
   ],
@@ -125,7 +125,9 @@
     "firstClaimAt": "2026-09-18T19:17:58.900Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-18T21:27:59.123Z",
+    "wallClockMs": 7800223
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -144,7 +146,8 @@
   },
   "planApprovedAt": "2026-09-18T19:20:24.838Z",
   "contextFetchedBy": [
-    "worker-69773bc1"
+    "worker-69773bc1",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-18T20:52:38.179Z",
   "reviewStartedAt": "2026-09-18T21:19:33.726Z",
@@ -163,7 +166,72 @@
     "apps/daemon/src/repository/remote-default-branch.js",
     "apps/daemon/src/repository/remote-default-branch.test.ts",
     "apps/daemon/src/orchestrator/node-publisher.ts",
-    "apps/daemon/src/orchestrator/node-publisher.test.ts"
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+    ".moe/tasks/task-90cbe66d7e3f4cfea3a4c778bb6bab2b.json",
+    ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json"
   ],
-  "completionSummary": "The remote's default branch is measured on every FRESH publish and recorded as a NEW additive event. RepositoryRemoteBound, REMOTE_BOUND_KEYS, publish-ledger.ts and publish-receipt-contracts.ts are unchanged (0 diff lines since 6e7d910f).\n- PORT: optional `PublicationGitPort.measureDefaultBranch?`. The real port runs `ls-remote --symref -- <url> HEAD` (never --refs) on the same admit/isolated/credential path as observe. Only the `ref:` line naming HEAD itself counts; real git tail-matches refs/remotes/origin/HEAD. A missing symref gives null; anything unreadable, non-branch, non-zero/null exit or thrown gives a named PUBLISH_REMOTE_UNREADABLE.\n- RECORD: remote-default-branch.ts(+.js). `RepositoryRemoteDefaultMeasured {defaultBranch, measuredAt, remoteUrl}` on remote:<projectId>: own exact key set, fenced like bindingLeg, deduped against the latest, fenced version in the key. `readRemoteDefaultBranch` answers null when unmeasured, no default, malformed, or when the latest measurement names another remote (rebind-back pinned).\n- PUBLISHER: `measureRemoteDefaultBranch` runs after recordPublicationTransmission in `transmit`. It records only ok answers and swallows all failures. Replays never measure. node-publisher.ts is 249 lines.\n- DoD 4: greps and a committed construction arm show neither publish-services.ts nor http/repository-remote-read.ts can reach the port.\nGATES:\n- scoped: 58/58 files, 628 passed | 15 skipped;\n- typecheck: 19/19;\n- full daemon suite: 765/765 files, 12560 passed;\n- test:security: 12/12 files, 1009 passed;\n- 14 in-memory drills, all red at their intended arms.\nAdversarial review fixed unbounded aggregate growth, key replay, and a fence arm that could not catch a retry. See comment-7283f6a8.\nBYTES: peer QA checkpoint 46e4c059 (task-8bc14883) swept all 8 paths; review with `git diff 6e7d910f 46e4c059`. Bug task-90cbe66d; drills and gates in comment-0f5974cd.\nConsumer edge: task-04160615 dependsOn this row."
+  "completionSummary": "The remote's default branch is measured on every FRESH publish and recorded as a NEW additive event. RepositoryRemoteBound, REMOTE_BOUND_KEYS, publish-ledger.ts and publish-receipt-contracts.ts are unchanged (0 diff lines since 6e7d910f).\n- PORT: optional `PublicationGitPort.measureDefaultBranch?`. The real port runs `ls-remote --symref -- <url> HEAD` (never --refs) on the same admit/isolated/credential path as observe. Only the `ref:` line naming HEAD itself counts; real git tail-matches refs/remotes/origin/HEAD. A missing symref gives null; anything unreadable, non-branch, non-zero/null exit or thrown gives a named PUBLISH_REMOTE_UNREADABLE.\n- RECORD: remote-default-branch.ts(+.js). `RepositoryRemoteDefaultMeasured {defaultBranch, measuredAt, remoteUrl}` on remote:<projectId>: own exact key set, fenced like bindingLeg, deduped against the latest, fenced version in the key. `readRemoteDefaultBranch` answers null when unmeasured, no default, malformed, or when the latest measurement names another remote (rebind-back pinned).\n- PUBLISHER: `measureRemoteDefaultBranch` runs after recordPublicationTransmission in `transmit`. It records only ok answers and swallows all failures. Replays never measure. node-publisher.ts is 249 lines.\n- DoD 4: greps and a committed construction arm show neither publish-services.ts nor http/repository-remote-read.ts can reach the port.\nGATES:\n- scoped: 58/58 files, 628 passed | 15 skipped;\n- typecheck: 19/19;\n- full daemon suite: 765/765 files, 12560 passed;\n- test:security: 12/12 files, 1009 passed;\n- 14 in-memory drills, all red at their intended arms.\nAdversarial review fixed unbounded aggregate growth, key replay, and a fence arm that could not catch a retry. See comment-7283f6a8.\nBYTES: peer QA checkpoint 46e4c059 (task-8bc14883) swept all 8 paths; review with `git diff 6e7d910f 46e4c059`. Bug task-90cbe66d; drills and gates in comment-0f5974cd.\nConsumer edge: task-04160615 dependsOn this row.",
+  "commits": [
+    {
+      "sha": "f2ac7d908d5ddaeafdca275f27475e4139d9ebf2",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-18T20:52:24Z",
+      "paths": [
+        ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+        ".moe/tasks/task-90cbe66d7e3f4cfea3a4c778bb6bab2b.json",
+        ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-18T21:19:46.466Z",
+      "treeId": "8bcce2d60950d35e00c5b009e127d1737505f607",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "46e4c05906d1fc88d7df16d28e40063eee963004",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T21:10:00Z",
+      "paths": [
+        "apps/daemon/src/repository/git-publication-port.ts",
+        "apps/daemon/src/repository/git-publication-port.test.ts",
+        "apps/daemon/src/repository/publication-effect-contracts.ts",
+        "apps/daemon/src/repository/remote-default-branch.ts",
+        "apps/daemon/src/repository/remote-default-branch.js",
+        "apps/daemon/src/repository/remote-default-branch.test.ts",
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T21:27:48.102Z",
+      "treeId": "b61466420c126bc811c6ed4eecc2982c5d1f19f3",
+      "pushed": true,
+      "message": "Recorded by QA qa-09357cdf: peer QA checkpoint 46e4c059 (trailer Moe-Task: task-8bc14883) carries exactly this row's 8 product paths and nothing else; the row's own completion commit f2ac7d90 carries only .moe task JSONs. HEAD f2ac7d90 == 46e4c059 on all 8 paths. Sweep tracked as bug task-90cbe66d."
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/node-publisher.ts",
+    "apps/daemon/src/repository/git-publication-port.test.ts",
+    "apps/daemon/src/repository/remote-default-branch.ts",
+    "apps/daemon/drill-baefab32-worker-69773bc1.config.ts",
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/src/repository/publication-effect-contracts.ts",
+    "apps/daemon/src/repository/git-publication-port.ts",
+    "apps/daemon/src/repository/remote-default-branch.test.ts",
+    "apps/daemon/src/repository/remote-default-branch.js"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-18T21:10:00Z",
+    "at": "2026-09-18T21:27:48.102Z"
+  },
+  "completedAt": "2026-09-18T21:27:59.123Z",
+  "reviewCompletedAt": "2026-09-18T21:27:59.123Z",
+  "reviewSummary": "APPROVED. BYTES: completion f2ac7d90 carries only .moe JSONs; the 8 product paths landed in peer checkpoint 46e4c059 (only those 8 files; on origin/moe/work-2026-09-18). HEAD f2ac7d90 == 46e4c059 on all 8 paths, worktree clean. QA recorded 46e4c059 in task.commits as a checkpoint (bug task-90cbe66d).\nDoD1: `git diff 6e7d910f HEAD -- publish-ledger.ts publish-receipt-contracts.ts` is empty. The hazard arm asserts readProjectRemote === today's 3-key binding.\nDoD2/3: every arm asserts by exact value/code+detail. Sweeps pin their lengths.\nDoD4: `git grep -nE \"measureDefaultBranch|measureRemoteDefaultBranch|PublicationGitPort|git-publication-port|node-publisher\" -- publish-services.ts http/repository-remote-read.ts` exits 1. The only production call is transmit, gated on `fresh`.\nDoD5, all re-run by QA:\n- the recorded scoped command: Test Files 58 passed (58), Tests 628 passed | 15 skipped;\n- pnpm typecheck: 19/19 Done, exit 0;\n- blast radius (src/release, repository-delivery*, daemon-command-async-entries, repository-remote-read, goal-publish-remote, activity-read): 22/22 files (288 tests) + 4/4 files (62 tests);\n- pnpm test:security: 12/12, 1009 passed.\nDRILLS: 12 in-memory mutants via a %TEMP% vitest transform. NONE control 28/28 green; each mutant's applied-log proves it was generated. All red at the intended line:\n- --symref->--refs (:122), count non-HEAD symrefs (:128), parse stdout on exit 128 (:147);\n- reader ignores url (rebind arm), refusal records null (publisher :244), no dedupe, key without version (A/B/A arm), expectedVersion=0;\n- call removed (3 arms + LIVE), replay measures (:191), readProjectRemote folds the new type (hazard :40), DoD4 source injected (:109).\nFiles ≤299 lines (node-publisher.ts 249); .js bridge present; consumers task-04160615 and task-4ba1e00a declare dependsOn.\nNOT re-run: full daemon suite (worker: 765/765), control-room (internal kind; literal appears in no roster), browser e2e."
 }
