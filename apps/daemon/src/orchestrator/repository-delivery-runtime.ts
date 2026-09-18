@@ -23,7 +23,7 @@ import { createNodeLander } from "./node-lander.js";
 import { landingVerificationClass } from "./node-lander-verification.js";
 import { createNodeIntegration } from "./node-integration.js";
 import { landedNodeBranches } from "./node-landed-branches.js";
-import { createNodePublisher } from "./node-publisher.js";
+import { createNodePublisher, pendingPublication } from "./node-publisher.js";
 import type { ReleasePublisher } from "../release/release-decide-service.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { NodeVerifierConfig } from "./node-verifier.js";
@@ -124,6 +124,9 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   };
   const coordinator = createRepositoryDeliveryCoordinator({
     closed: () => closed,
+    // Deliveries leave a free repository to an approved publish that has not held it yet; the
+    // publisher (below) runs after the delivery pass and would otherwise lose every race.
+    publishWaiting: () => config.compiledWorkspace === null ? null : pendingPublication(store, projectId),
     containment: createRepositoryContainmentLedger(store, config.runtimeBrokerPid ?? null),
     // A probe that throws reads as "not clean": any throw inside advance blocks the reservation.
     clean: async (root) => {

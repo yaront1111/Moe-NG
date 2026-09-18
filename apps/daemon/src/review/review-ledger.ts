@@ -55,6 +55,12 @@ export interface ReviewRefused {
   readonly advisoryOnly: true;
   readonly authority: "NONE";
   readonly code: string;
+  /**
+   * The refusing layer's own words when it has any — which field, which JSON type, what
+   * arrived — or null when the code is the whole answer. `decisionOf` puts it on the wire
+   * verbatim, so a seat refused `REVIEW_PAYLOAD_INVALID` reads WHY instead of bisecting.
+   */
+  readonly detail: string | null;
   readonly error: RuntimeError | null;
   readonly kernelLayer: ReviewDecisionLayer | null;
   readonly kind: ReviewCommandKind | null;
@@ -119,12 +125,23 @@ export function refuse(
     advisoryOnly: true as const,
     authority: "NONE" as const,
     code,
+    detail: null,
     error,
     kernelLayer,
     kind,
     ok: false as const,
     refusedBy,
   });
+}
+
+/**
+ * The ingress shape gate's refusal WITH its reason. Three UnAI seats (2026-09-18) each sent
+ * `round` as the string "2", read a bare `REVIEW_PAYLOAD_INVALID`, and wasted a call finding
+ * out by trial that the number was wanted. The code and the layer stay exactly what `refuse`
+ * produces; only the words are added, and `daemon-command-dispatch.ts` carries them out.
+ */
+export function refuseInvalidPayload(kind: ReviewCommandKind | null, detail: string): ReviewRefused {
+  return Object.freeze({ ...refuse(kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS"), detail });
 }
 
 /** A `@moe/review` validator refused: its code and its layer are surfaced unchanged. */

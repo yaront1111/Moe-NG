@@ -46,15 +46,33 @@ export function boundRemoteUrl(remote: RepositoryRemoteOutcome | null): string |
   return remote !== null && remote.status === "REMOTE" ? remote.remoteUrl : null;
 }
 
+/**
+ * The operator's instruction for a refusal the daemon decided by name. The default arm still
+ * says "decide again", which is exactly wrong for a diverged remote: deciding again refuses
+ * again until the foreign commits are merged into the workspace branch (UnAI 2026-09-18).
+ * The runs read carries only the code, not the two shas, so the copy says where they are:
+ * the wrapper log's `[publisher]` line names the remote and approved commits.
+ */
+const REFUSAL_INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({
+  PUBLISH_REMOTE_DIVERGED: "the remote branch has commits the approved commit does not contain "
+    + "(someone merged or pushed there behind Moe); the wrapper log names the remote and approved commits. "
+    + "Fetch and merge (or rebase) the remote branch into the workspace branch, then decide again",
+});
+
 /** What the runs read says about the latest publish, in a person's words. */
 export function publishLine(publish: RunGoalPublishView | null): string {
   if (publish === null) return "Not published yet. Landed commits stay in the workspace's repository until you publish.";
-  if (publish.outcome === "PENDING") return `Publishing to ${publish.remoteUrl} ${MIDDOT} waiting for the wrapper to push`;
+  // PENDING can last a whole node: the wrapper pushes only while it holds the repository, and a
+  // coding seat may hold it first (UnAI 2026-09-18, a publish waited out a 20-minute seat).
+  if (publish.outcome === "PENDING") {
+    return `Publishing to ${publish.remoteUrl} ${MIDDOT} waiting for the wrapper to push (it waits while a coding seat holds the repository)`;
+  }
   if (publish.outcome === "UNKNOWN") return `Publication outcome unknown ${MIDDOT} Repository remains held while the daemon checks the approved remote branch.`;
   if (publish.outcome === "PUSHED") {
     return `Pushed ${(publish.sha ?? "").slice(0, 10)} on ${publish.branch ?? "?"} to ${publish.remoteUrl}`;
   }
-  return `Publish refused ${MIDDOT} ${publish.code ?? "REFUSED"} ${MIDDOT} decide again to retry`;
+  const code = publish.code ?? "REFUSED";
+  return `Publish refused ${MIDDOT} ${code} ${MIDDOT} ${REFUSAL_INSTRUCTIONS[code] ?? "decide again to retry"}`;
 }
 
 interface LandedCommit { readonly nodeKey: string; readonly sha: string }

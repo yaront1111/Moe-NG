@@ -84,3 +84,24 @@ it("reaches the push for an scp-style ssh remote instead of refusing at the cred
     expect(git(`--git-dir=${remote}`, "rev-parse", "refs/heads/approved")).toBe(candidate.approval.sha);
   } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
 }, 90_000);
+
+it("tells a contained tip, a diverged tip and a never-fetched tip apart in a real repository, with real git exit codes", async () => {
+  const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-contains-"));
+  try {
+    const { candidate: first, git } = publishableFixture(root, "https://github.com/fixture/approved.git");
+    writeFileSync(join(root, "product.txt"), "second\n"); git("add", "product.txt");
+    git("-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "second");
+    const captured = createPublicationCandidateReader(root)("https://github.com/fixture/approved.git");
+    if (!captured.ok) throw new Error(captured.code);
+    // An operator's own commit on an unrelated line: present locally, yet nothing the approved sha contains.
+    git("checkout", "--quiet", "--orphan", "operator"); writeFileSync(join(root, "product.txt"), "operator\n"); git("add", "product.txt");
+    git("-c", "user.name=Op", "-c", "user.email=op@moe.local", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "operator");
+    const foreign = git("rev-parse", "HEAD");
+    const port = createGitPublicationPort({ readConfig: nodeGitRunner, run: publicationGitRunner });
+    expect(await port.contains(captured.candidate, first.approval.sha)).toEqual({ ok: true, contains: true, known: true });
+    expect(await port.contains(captured.candidate, captured.candidate.approval.sha)).toEqual({ ok: true, contains: true, known: true });
+    expect(await port.contains(captured.candidate, foreign)).toEqual({ ok: true, contains: false, known: true });
+    expect(await port.contains(captured.candidate, "e".repeat(40))).toEqual({ ok: true, contains: false, known: false });
+    expect(await port.contains(captured.candidate, null)).toEqual({ ok: true, contains: true, known: true });
+  } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
+}, 90_000);

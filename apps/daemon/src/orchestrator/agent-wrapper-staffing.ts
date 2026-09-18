@@ -1,4 +1,5 @@
 import type { AgentAuthorityCleanup } from "./agent-authority-cleanup.js";
+import type { ClaimKeepalive } from "./agent-claim-renewal.js";
 import type { AgentSessionFence, AgentStaffingRefusal } from "./agent-session-fence.js";
 import { createStaffingGate } from "./agent-staffing-gate.js";
 import type { StaffingGate } from "./agent-staffing-gate.js";
@@ -15,6 +16,12 @@ import type { SpawnRequest } from "./agent-wrapper.js";
 export interface AgentWrapperStaffingStart {
   readonly claimAggregateVersion: number;
   readonly cleanupAuthority: AgentAuthorityCleanup;
+  /**
+   * The seat's claim keepalive (agent-claim-renewal.ts). Started the instant an admitted child
+   * exists and stopped the instant its lifetime settles, BEFORE `cleanupAuthority` releases the
+   * claim: a renewal after that would tend a dead seat's claim. Absent = no renewal.
+   */
+  readonly keepalive?: ClaimKeepalive | undefined;
   readonly kind: string;
   /**
    * Reads this seat's exit for attempt reporting and provider pause bookkeeping.
@@ -123,10 +130,14 @@ class AgentWrapperStaffingState implements AgentWrapperStaffing {
   ): void {
     const tracked = exit.then(
       (report) => {
+        // The lease followed liveness; the child is gone, so the renewal stops FIRST and the
+        // release below is the last word on the claim.
+        input.keepalive?.stop();
         const { failures } = this.observe(input, report ?? CLEAN_EXIT);
         this.recordFailures(...failures, ...input.cleanupAuthority(true), ...retire());
       },
       (error: unknown) => {
+        input.keepalive?.stop();
         const { failures } = this.observe(input, factsOf(error));
         // A typed process failure is a completed attempt; the wrapper's existing
         // attempt bound controls retry. Unknown errors and containment failures
@@ -176,6 +187,10 @@ class AgentWrapperStaffingState implements AgentWrapperStaffing {
       sessionId: input.sessionId,
       workItemId: input.workItemId,
     }));
+    // `started.ok` is the first instant a child exists, so this is the first instant a claim
+    // has a liveness to follow. Armed before the lifetime handlers can run: an instant exit
+    // then stops it in order, and a start after that stop is a no-op by construction.
+    input.keepalive?.start();
     this.trackLifetime(input, started.exit, retire);
     return uncoded(input, "SPAWNED");
   };

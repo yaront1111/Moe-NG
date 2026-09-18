@@ -3,14 +3,16 @@ import { createAncestryFactory, createProductionReleaseSeams } from "./release/r
 import { RELEASE_AUTO_DECIDE_JOB_ID, RELEASE_BASE_ENV_KEY, registerReleaseAutoDecide }
   from "./release/release-auto-decide.js";
 import type { ReleasePublisher } from "./release/release-decide-service.js";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { DiagnosticEmitter } from "@moe/contracts";
 import { DurableStoreError } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import {
   acknowledge, reseatToSnapshot,
 } from "@moe/store/subscriptions/subscription-writes.js";
+import { commandStoreFaultReporter } from "./command-store-fault-report.js";
+import { nodeSpecLoader } from "./node-spec-loader.js";
+import { foundationCaptureFaultReporter } from "./work/foundation-capture-fault-report.js";
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DeploymentDeploySeams } from "./daemon-command-async-entries.js";
 import type { ReleasePrPort } from "./release/release-pr-port.js";
@@ -28,8 +30,6 @@ import {
 } from "./identity/session-handshake.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
-import { COMPILED_EXECUTION_REF_PREFIX } from "./orchestrator/compiled-execution-ref.js";
-import { isRepositoryWorkflowRef } from "./repository/repository-workflow-ref.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -110,6 +110,7 @@ import { createRepositoryWorkflowWiring } from "./daemon-repository-workflow-wir
 import { createDurableSchedule } from "./orchestrator/durable-schedule.js";
 import type { ScheduleRefusal } from "./orchestrator/durable-schedule.js";
 import type { DurableSchedule, ScheduleConfig } from "./orchestrator/durable-schedule.js";
+import { scheduleFaultReporter } from "./orchestrator/schedule-fault-report.js";
 import { createEnvironmentHealthProbeJob, createHealthProbeJob, createHealthProbeRing } from "./monitoring/health-probe-ring.js";
 import type { HealthHttpPort } from "./monitoring/health-probe-ring.js";
 import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, healthProbeJobEnvironment, healthProbeJobId }
@@ -145,6 +146,12 @@ export interface StoreDependencyConfig {
   readonly affordanceMintId?: ((kind: string) => string) | undefined;
   readonly clock?: () => string;
   readonly credential: string;
+  /**
+   * The diagnostics plane this composition reports on: a commit that failed on the durable
+   * store lands as COMMAND_STORE_FAULT beside the 503 frame the caller receives. Absent means
+   * the fault stays in the frame alone, as it always did.
+   */
+  readonly diagnostics?: DiagnosticEmitter;
   /** OPTIONAL. Where `cutover.activate` reads the live-quiesce evidence; absent means the
    *  kind refuses CUTOVER_ACTIVATE_UNCONFIGURED (see daemon-store-cutover-wiring.ts). */
   readonly cutoverEvidenceRoot?: string | undefined;
@@ -159,35 +166,6 @@ export interface StoreDependencyConfig {
   /** OPTIONAL. Absent is a valid state: Foundation preparation then refuses at
    *  dispatch time and the daemon still boots and serves every other kind. */
   readonly workspaceCatalogPath?: string | undefined;
-}
-
-function nodeSpecLoader(directory: string): () => readonly NodeSpec[] {
-  return () => {
-    let entries: string[];
-    try {
-      entries = readdirSync(directory).filter((name) => name.endsWith(".json"));
-    } catch {
-      return [];
-    }
-    const specs: NodeSpec[] = [];
-    for (const name of entries.sort()) {
-      try {
-        const parsed = JSON.parse(readFileSync(join(directory, name), "utf8")) as {
-          nodeRef?: unknown; title?: unknown;
-        };
-        if (typeof parsed.nodeRef === "string" && parsed.nodeRef.length > 0
-          && !parsed.nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX)
-          && !isRepositoryWorkflowRef(parsed.nodeRef)
-          && typeof parsed.title === "string") {
-          // A file-authored spec carries no sealed build order — this format has
-          // no dependency field to read — so it declares none rather than
-          // inventing one. Only compiled-graph nodes can gate on dependencies.
-          specs.push({ dependsOn: [], nodeRef: parsed.nodeRef, title: parsed.title });
-        }
-      } catch { /* skipped, never invented */ }
-    }
-    return specs;
-  };
 }
 
 export type StoreDependencyProvider = DaemonDependencyProvider & {
@@ -276,6 +254,10 @@ export function createStoreDependencies(
     projectId: config.projectId, store,
   });
   const { decisions, registry } = createDaemonCommandPorts({
+    ...(config.diagnostics === undefined ? {} : {
+      onCaptureFault: foundationCaptureFaultReporter(config.diagnostics),
+      onStoreFault: commandStoreFaultReporter(config.diagnostics),
+    }),
     ...(repositoryWorkspace === null || repositoryWorkspace === "" ? {} : {
       // Deferred until dispatch; the shared authenticator is constructed below before ports
       // are exposed. Capture rechecks the same durable identity after its asynchronous work.
@@ -421,9 +403,13 @@ export function createStoreDependencies(
     testCommand: null,
     workspace: null,
   });
+  // An unreadable directory or a malformed spec is still answered as absence, and now said.
+  const diagnostics = config.diagnostics;
   const specNodes = config.nodeSpecsDir === undefined
     ? (): readonly NodeSpec[] => []
-    : nodeSpecLoader(config.nodeSpecsDir);
+    : nodeSpecLoader(config.nodeSpecsDir, diagnostics === undefined
+      ? undefined
+      : (line) => { diagnostics.warn("NODE_SPECS", { fields: { line } }); });
   const mergedNodes = (): readonly NodeSpec[] => {
     const specs = specNodes();
     const listed = new Set(specs.map((spec) => spec.nodeRef));
@@ -812,6 +798,8 @@ export function createStoreDependencies(
     projectRoot: repositoryWorkspace, store,
   });
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
+    // A job that dies on its tick used to be a code in a notice nobody grepped; the throw now lands.
+    ...(config.diagnostics === undefined ? {} : { onFault: scheduleFaultReporter(config.diagnostics) }),
     // Reserved probe IDs never fall through to an external resolver that could re-arm retirement.
     // `release/auto-decide` is RESERVED TO NULL here, never delegated: the constructor rebuild runs
     // BEFORE the registration below re-arms it, and naming it here would need the deps that do not

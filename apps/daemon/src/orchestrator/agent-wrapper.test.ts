@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { DESIGN_SECTION_KEYS } from "../design/design-contracts.js";
 import type { AffordancePort, ChainStep } from "../http/affordance-contract.js";
@@ -14,7 +15,7 @@ import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
-import { readWorkClaimLedger, runWorkClaimCommand } from "../work/work-claim-services.js";
+import { aggregateIdFor, readWorkClaimLedger, runWorkClaimCommand } from "../work/work-claim-services.js";
 import { SqliteEventStore } from "@moe/store";
 import {
   AGENT_SPAWNER_LAYER, NODE_BRIEF_UNREADABLE, NodeBriefUnreadableError,
@@ -2204,6 +2205,171 @@ describe("createAgentWrapper - bearer and claim horizons", () => {
     } finally {
       reader.close();
       harness.dispose();
+    }
+  });
+});
+
+/** A handler that refuses with the authority's own detail, as the real work service now does. */
+function withRenewRefusal(deps: CommandAdapterDeps, refusal: DomainRefusal): CommandAdapterDeps {
+  const renew = deps.registry.get("work.renew");
+  if (renew === undefined) throw new Error("work.renew is not registered");
+  const registry = new Map(deps.registry);
+  registry.set("work.renew", { ...renew, handler: () => { throw refusal; } });
+  return { ...deps, registry };
+}
+
+/**
+ * THE LEASE FOLLOWS LIVENESS, over the real store. Live (UnAI 2026-09-18, node 10, seat
+ * 87c543be): the wrapper claimed for 30 minutes and never renewed; the operator had raised the
+ * seat's wall-clock cap to 60; the seat worked 35 minutes, finished green, and every submit was
+ * refused REVIEW_SUBMISSION_CLAIM_REQUIRED. These arms drive the wrapper's OWN clock and read the
+ * claim back off the durable ledger: the horizon moves under the seat's own session id at the
+ * cadence, stops moving the instant the child exits, and a refused renewal is one log line that
+ * never touches the seat.
+ */
+describe("createAgentWrapper - the lease follows liveness", () => {
+  const TTL = 60_000;
+  const CADENCE = TTL / 3;
+  const iso = (ms: number): string => new Date(ms).toISOString();
+
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  function liveHarness(projectId: string, deps?: (base: CommandAdapterDeps) => CommandAdapterDeps) {
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    const lines: string[] = [];
+    let now = NOW;
+    let resolveExit!: () => void;
+    const exit = new Promise<void>((resolve) => { resolveExit = resolve; });
+    let suffix = 0;
+    const wrapper = createAgentWrapper({
+      affordances: harness.port, claimTtlMs: TTL, clock: () => now,
+      deps: deps === undefined ? harness.isolated.provide() : deps(harness.isolated.provide()),
+      log: (line) => { lines.push(line); },
+      maxAgents: 1,
+      mintSecret: () => `rnw-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+      operatorCredential: OPERATOR,
+      sessionTtlMs: 600_000,
+      spawnAgent: async () => ({ exit, ok: true, pid: CHILD_PID }),
+    });
+    const advance = async (ms: number): Promise<void> => {
+      now += ms;
+      await vi.advanceTimersByTimeAsync(ms);
+    };
+    return {
+      advance,
+      claimOf: (item: string) => readWorkClaimLedger(reader, projectId).claims.get(item),
+      dispose: () => { reader.close(); harness.dispose(); },
+      eventsOf: (item: string) => reader.readEvents(aggregateIdFor(item)).map((event) => event.eventType),
+      exitChild: resolveExit,
+      lines,
+      reader,
+      wrapper,
+    };
+  }
+
+  it("renews the claim under the seat's own session every third of the TTL, and stops when the child exits", async () => {
+    const live = liveHarness("proj-wrapper-renewal-cadence");
+    try {
+      const staffed = (await live.wrapper.runOnce()).spawned[0];
+      expect(staffed?.outcome).toBe("SPAWNED");
+      if (staffed?.sessionId === null || staffed?.sessionId === undefined) throw new Error("nothing staffed");
+      const item = staffed.workItemId;
+      expect(live.claimOf(item)).toMatchObject({ claimedBy: staffed.sessionId, expiresAt: iso(NOW + TTL), status: "OPEN" });
+
+      // Before the first third: the horizon the mission named still stands.
+      await live.advance(CADENCE - 1);
+      expect(live.claimOf(item)?.expiresAt).toBe(iso(NOW + TTL));
+
+      // The first third: renewed to now + TTL, by the seat's own principal, on the real ledger.
+      await live.advance(1);
+      expect(live.claimOf(item)).toMatchObject({
+        claimedBy: staffed.sessionId, expiresAt: iso(NOW + CADENCE + TTL), status: "OPEN",
+      });
+      await live.advance(CADENCE);
+      expect(live.claimOf(item)?.expiresAt).toBe(iso(NOW + 2 * CADENCE + TTL));
+      // Past the ORIGINAL horizon: the live seat died here. The claim is still open and later.
+      await live.advance(CADENCE);
+      expect(live.claimOf(item)).toMatchObject({ expiresAt: iso(NOW + 3 * CADENCE + TTL), status: "OPEN" });
+      expect(live.eventsOf(item)).toEqual(["WorkClaimed", "WorkClaimRenewed", "WorkClaimRenewed", "WorkClaimRenewed"]);
+      expect(live.lines).toEqual([]);
+      expect(live.wrapper.activeCount()).toBe(1);
+
+      // The child exits: the exit-path release is the LAST word on the claim, and no later
+      // tick renews a released claim (a renew cannot create one, and none is even dispatched).
+      live.exitChild();
+      await live.wrapper.settle();
+      expect(live.claimOf(item)).toMatchObject({ status: "RELEASED" });
+      const settled = live.eventsOf(item);
+      expect(settled.at(-1)).toBe("WorkReleased");
+      await live.advance(10 * CADENCE);
+      expect(live.eventsOf(item)).toEqual(settled);
+      expect(live.claimOf(item)).toMatchObject({ status: "RELEASED" });
+      expect(live.lines).toEqual([]);
+    } finally {
+      live.dispose();
+    }
+  });
+
+  it("logs a refused renew once by code with the authority's detail, and the seat keeps running", async () => {
+    const refusal = new DomainRefusal("WORK_CLAIM_NOT_CLAIMANT", "DAEMON_PREREQUISITE",
+      'work.renew: "x" is held by sess-other until 2099-01-01T00:00:00.000Z, not by you; only the holder renews its own claim');
+    const live = liveHarness("proj-wrapper-renewal-refused", (base) => withRenewRefusal(base, refusal));
+    try {
+      const staffed = (await live.wrapper.runOnce()).spawned[0];
+      expect(staffed?.outcome).toBe("SPAWNED");
+      if (staffed?.sessionId === null || staffed?.sessionId === undefined) throw new Error("nothing staffed");
+      const item = staffed.workItemId;
+
+      await live.advance(CADENCE);
+      await live.advance(CADENCE);
+      await live.advance(CADENCE);
+      // One line, the refusing authority's own words, and the seat was never touched.
+      expect(live.lines).toEqual([
+        `[wrapper] ${item} claim renew refused WORK_CLAIM_NOT_CLAIMANT: ${refusal.detail}`,
+      ]);
+      expect(live.wrapper.activeCount()).toBe(1);
+      expect(live.claimOf(item)).toMatchObject({ expiresAt: iso(NOW + TTL), status: "OPEN" });
+      expect(live.eventsOf(item)).toEqual(["WorkClaimed"]);
+
+      // The seat still exits cleanly and its release still commits under the live bearer.
+      live.exitChild();
+      await live.wrapper.settle();
+      expect(live.eventsOf(item)).toEqual(["WorkClaimed", "WorkReleased"]);
+    } finally {
+      live.dispose();
+    }
+  });
+
+  it("is a named no-op after the seat released the claim itself: nothing re-claimed, nothing refused", async () => {
+    const live = liveHarness("proj-wrapper-renewal-released");
+    try {
+      const staffed = (await live.wrapper.runOnce()).spawned[0];
+      expect(staffed?.outcome).toBe("SPAWNED");
+      if (staffed?.sessionId === null || staffed?.sessionId === undefined) throw new Error("nothing staffed");
+      const item = staffed.workItemId;
+      await live.advance(CADENCE);
+      expect(live.eventsOf(item)).toEqual(["WorkClaimed", "WorkClaimRenewed"]);
+
+      // The seat finishes and releases on its own, as its brief says, at the current version.
+      const version = live.reader.getAggregateVersion(aggregateIdFor(item));
+      writeClaim(live.reader, "proj-wrapper-renewal-released", "work.release", staffed.sessionId, item, version, "seat-own-release");
+      expect(live.claimOf(item)).toMatchObject({ status: "RELEASED" });
+
+      await live.advance(CADENCE);
+      await live.advance(CADENCE);
+      expect(live.eventsOf(item)).toEqual(["WorkClaimed", "WorkClaimRenewed", "WorkReleased"]);
+      expect(live.claimOf(item)).toMatchObject({ status: "RELEASED" });
+      expect(live.lines).toEqual([
+        `[wrapper] ${item} claim renew skipped CLAIM_NOT_HELD: no open claim on the item: the seat released it, or it expired`,
+      ]);
+
+      live.exitChild();
+      await live.wrapper.settle();
+      expect(live.eventsOf(item)).toEqual(["WorkClaimed", "WorkClaimRenewed", "WorkReleased"]);
+    } finally {
+      live.dispose();
     }
   });
 });

@@ -553,6 +553,30 @@ describe("every mission carries the seat-facing recovery and read facts", () => 
   ];
 
   for (const [name, text] of MISSIONS) {
+    /**
+     * Live (UnAI 2026-09-18): the seat read "until <iso>" as its deadline, outlived it, then
+     * tried work_renew with {"workItemId"} alone — the only shape any brief had shown — and was
+     * refused WORK_CLAIM_PAYLOAD_INVALID. Every brief now says who renews the claim and shows the
+     * exact payload, right after the horizon it names, and no brief still tells the seat to
+     * renew "if you need longer" as though the horizon were its own to tend.
+     */
+    it(`${name} says the wrapper renews the claim and states the exact work_renew payload`, () => {
+      const item = /work item "([^"]+)"/u.exec(text)?.[1];
+      if (item === undefined) throw new Error("no work item named");
+      const horizon = text.indexOf(`until ${EXPIRES}.`);
+      const facts = text.indexOf("That expiry is a floor, not your deadline");
+      expect(horizon).toBeGreaterThan(-1);
+      expect(facts).toBe(horizon + `until ${EXPIRES}.`.length + 1);
+      expect(text).toContain("the wrapper that spawned you renews the claim on your behalf, under your own session");
+      expect(text).toContain("for as long as your process runs");
+      expect(text).toContain("work_renew takes exactly "
+        + '{"expiresAt": "<ISO-8601 UTC instant with millisecond precision, later than now>", '
+        + `"workItemId": "${item}"} with targetAggregateId "${item}" and expectedVersion = `
+        + "the claimAggregateVersion work_get_context shows");
+      expect(text).toContain('a payload of only {"workItemId"} is refused WORK_CLAIM_PAYLOAD_INVALID');
+      expect(text).not.toContain("Renew your claim with work_renew if you need longer");
+    });
+
     it(`${name} names the observed version and bounds the retry to one`, () => {
       expect(text).toContain("actualVersion=<n>");
       expect(text).toContain("ONCE with expectedVersion = n");

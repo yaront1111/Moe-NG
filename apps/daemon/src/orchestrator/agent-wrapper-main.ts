@@ -24,6 +24,7 @@ import { createAgentWrapper } from "./agent-wrapper.js";
 import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { credentialValues } from "./credential-scrub.js";
 import { createRepositoryDeliveryRuntime } from "./repository-delivery-runtime.js";
+import { createSeatActivityProbe } from "./seat-liveness-probe.js";
 import { createReviewAwareNodeMissions } from "./wrapper-review-missions.js";
 import { loadPayloadHints } from "./wrapper-payload-hints.js";
 import { createCompilerMissionInputs, createDesignBriefResolver }
@@ -42,7 +43,8 @@ import {
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
 import { createSeatStartRecorder } from "./seat-start-recorder.js";
-import { readWrapperKnobs } from "./wrapper-knobs.js";
+import { describeSeatBudget, readWrapperKnobs } from "./wrapper-knobs.js";
+import { renewalCadenceMs } from "./agent-claim-renewal.js";
 import { readGovernancePolicySettings } from "../review/governance-policy-settings.js";
 import { createGovernorSeat, createProviderGovernorRunner } from "./governor-seat.js";
 import { createGovernancePass } from "./wrapper-governance-pass.js";
@@ -50,6 +52,9 @@ import { createPassLogger } from "./wrapper-pass-log.js";
 import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
 import { diagnosticProjectRoot } from "../diagnostics/diagnostic-project-root.js";
 import { teeDiagnosticLine } from "../diagnostics/diagnostic-line-tee.js";
+import {
+  mcpDispatchFaultReporter, mcpFaultFrameReporter, mcpSessionFaultReporter,
+} from "../mcp-dispatch-fault-report.js";
 
 export {
   createWrapperStopSignal,
@@ -75,8 +80,10 @@ import { resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
  * (default 2), MOE_WRAPPER_INTERVAL_MS (default 15000), MOE_WRAPPER_ONCE=1 for
  * a single pass, MOE_WRAPPER_MAX_ITEM_ATTEMPTS (default 3) staffing tries per
  * unmoved item before it is reported STAFFING_ATTEMPTS_EXHAUSTED instead of
- * respawned, and MOE_AGENT_TIMEOUT_MS (default 30 min) the hard lifetime of
- * one agent process, from which the agent's bearer TTL is derived. The trusted
+ * respawned, MOE_AGENT_SILENCE_MS (default 20 min) how long a seat may show no
+ * activity — no output, no tool child, flat CPU — before it is killed as hung,
+ * and MOE_AGENT_TIMEOUT_MS (default 2 h) the absolute lifetime of one agent
+ * process whatever it is doing, from which the agent's bearer TTL is derived. The trusted
  * wrapper hosts MCP on loopback; each agent receives only its scoped bearer,
  * never the operator credential or store path.
  *
@@ -105,7 +112,10 @@ async function main(): Promise<void> {
   });
   const seatDiagnostics = diagnostics.emitterFor("seat");
   const passDiagnostics = diagnostics.emitterFor("wrapper");
-  const provider = createStoreDependencies(config);
+  const mcpDiagnostics = diagnostics.emitterFor("mcp");
+  const verifierDiagnostics = diagnostics.emitterFor("verifier");
+  // The command ports this wrapper's host dispatches through report a store fault on this plane.
+  const provider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
   let verifierStore: SqliteEventStore | undefined;
   let verifierRunner: VerifierProcessRunner | undefined;
   let delivery: ReturnType<typeof createRepositoryDeliveryRuntime> | undefined;
@@ -236,10 +246,23 @@ async function main(): Promise<void> {
     process.stdout.write(`[verifier] database: image=${shape.image} urlVariables=${shape.urlVariables.join(",")}`
       + ` tls=${String(shape.tls)} caVariable=${shape.caPathVariable ?? "-"}`
       + `${verifierDatabase === undefined ? " (defaults: no MOE_VERIFIER_DB_* reached this process)" : ""}\n`);
+    // The seat budget the same way: silence kill, absolute cap, claim horizon and renewal cadence,
+    // so a restart proves in its first lines which policy this process holds.
+    process.stdout.write(`${describeSeatBudget(knobs, process.env, renewalCadenceMs(knobs.claimTtlMs))}\n`);
     verifierRunner = createVerifierDatabaseRunner({
       ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
       ...(verifierDatabase === undefined ? {} : { database: verifierDatabase }),
       // Same drop as the spawner's handler below, for the verifier's own child.
+      // A recipe that could not START used to read exactly like one the deadline killed.
+      onSpawnFault: (fault) => {
+        verifierDiagnostics.error("VERIFIER_SPAWN_FAILED", {
+          fields: {
+            stage: fault.stage, test: fault.test, thrownCode: fault.thrown.code,
+            thrownMessage: fault.thrown.message, thrownName: fault.thrown.name,
+            thrownStack: fault.thrown.stack, workspace: fault.workspace,
+          },
+        });
+      },
       onFatalContainment: (error: { readonly reason?: string }) => {
         process.stderr.write("[verifier] fatal containment failure: "
           + `${error.reason ?? "UNNAMED"}; stopping the fleet\n`);
@@ -296,6 +319,9 @@ async function main(): Promise<void> {
       claimTtlMs: knobs.claimTtlMs,
       clock: () => Date.now(),
       deps,
+      // The claim keepalive's lines belong in wrapper.log beside the seat quiet and kill lines,
+      // not on stderr: nothing tees console.error into the wrapper log (review of e15af58a).
+      log: (line) => { process.stdout.write(`${line}\n`); },
       maxAgents: knobs.maxAgents,
       maxItemAttempts: knobs.maxItemAttempts,
       mintSecret: () => randomUUID().replaceAll("-", ""),
@@ -361,6 +387,11 @@ async function main(): Promise<void> {
       // The seats' only MCP host is THIS one: without the graph reader every graph_get a
       // seat made refused INPUT_INVALID, whatever the brief told it to send (2026-09-05).
       graph: provider.graph?.(),
+      // A seat's tool call that THROWS host-side used to vanish: UNKNOWN_ERROR to the seat and
+      // nothing here. It now lands as MCP_DISPATCH_THREW on this wrapper's diagnostics plane.
+      onDispatchFault: mcpDispatchFaultReporter(mcpDiagnostics),
+      onFaultFrame: mcpFaultFrameReporter(mcpDiagnostics),
+      onSessionFault: mcpSessionFaultReporter(mcpDiagnostics),
       subscriptions,
       v2Deps,
     });
@@ -396,7 +427,19 @@ async function main(): Promise<void> {
         event: "SEAT_LINE",
         write: (line) => { process.stdout.write(`${line}\n`); },
       }),
+      // The OS view of a seat that prints nothing (`claude -p` says nothing until it finishes):
+      // tool children and tree CPU. Silence kills a hung seat; the cap bounds a working one.
+      probeActivity: createSeatActivityProbe(process.platform),
+      silenceMs: knobs.agentSilenceMs,
       timeoutMs: knobs.agentTimeoutMs,
+      // A probe that cannot see the tree (PowerShell timing out, `ps` missing) grants no liveness
+      // and would kill a working seat as silent; its first failure per seat is filed at WARN.
+      warn: teeDiagnosticLine({
+        emitter: seatDiagnostics,
+        event: "SEAT_PROBE_FAILED",
+        level: "warn",
+        write: (line) => { process.stderr.write(`${line}\n`); },
+      }),
     });
     secureSpawn = agentSpawner;
 

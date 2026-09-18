@@ -19,6 +19,9 @@ import type {
 } from "./work-claim-contracts.js";
 import { readWorkClaimLedger } from "./work-claim-read-model.js";
 import type { WorkClaimLedger, WorkClaimRecord } from "./work-claim-read-model.js";
+import {
+  claimHeldDetail, claimNotFoundDetail, notClaimantDetail, payloadInvalidDetail,
+} from "./work-claim-refusal-detail.js";
 
 /**
  * The durable handlers: claim, renew, release. One aggregate per work item
@@ -48,6 +51,14 @@ export interface WorkClaimRefused {
   readonly advisoryOnly: true;
   readonly authority: "NONE";
   readonly code: string;
+  /**
+   * WHY, in the caller's terms: the key that was missing or malformed and the shape it takes,
+   * or who holds the item. A live seat (UnAI 2026-09-18) met `WORK_CLAIM_PAYLOAD_INVALID` on
+   * `work.renew {workItemId}` and `WORK_CLAIM_NOT_FOUND` on its release with nothing but the
+   * code to read, and gave up. `null` where the code is the whole story; the dispatch seam
+   * renders the code alone then, exactly as before.
+   */
+  readonly detail: string | null;
   readonly error: RuntimeError | null;
   readonly kind: WorkClaimCommandKind | null;
   readonly ok: false;
@@ -63,10 +74,11 @@ function refuse(
   code: DaemonCode | string,
   refusedBy: WorkClaimRefusedBy,
   error: RuntimeError | null = null,
+  detail: string | null = null,
 ): WorkClaimRefused {
   return Object.freeze({
     advisoryOnly: true as const, authority: "NONE" as const, code,
-    error, kind, ok: false as const, refusedBy,
+    detail, error, kind, ok: false as const, refusedBy,
   });
 }
 
@@ -205,14 +217,18 @@ function decide(
 ): WorkClaimOutcome {
   const { expiresAt, workItemId } = claimInputs(request);
   if (workItemId === null || (request.kind !== "work.release" && expiresAt === null)) {
-    return refuse(request.kind, "WORK_CLAIM_PAYLOAD_INVALID", "DAEMON_INGRESS");
+    // The detail is derived from the same payload AFTER the decision above, so it can only
+    // describe a refusal this function already made, never make one.
+    return refuse(request.kind, "WORK_CLAIM_PAYLOAD_INVALID", "DAEMON_INGRESS", null,
+      payloadInvalidDetail(request.kind, request.payload));
   }
   const existing = ledger.claims.get(workItemId);
   const held = activeClaim(existing, request.decidedAt);
 
   if (request.kind === "work.claim") {
     if (held !== null && held.claimedBy !== request.principalId) {
-      return refuse(request.kind, "WORK_CLAIM_HELD", "DAEMON_PREREQUISITE");
+      return refuse(request.kind, "WORK_CLAIM_HELD", "DAEMON_PREREQUISITE", null,
+        claimHeldDetail(workItemId, held));
     }
     const result: JsonValue = {
       claimedBy: request.principalId, expiresAt: expiresAt as string,
@@ -225,7 +241,8 @@ function decide(
   }
 
   if (held === null || existing === undefined) {
-    return refuse(request.kind, "WORK_CLAIM_NOT_FOUND", "DAEMON_PREREQUISITE");
+    return refuse(request.kind, "WORK_CLAIM_NOT_FOUND", "DAEMON_PREREQUISITE", null,
+      claimNotFoundDetail(request.kind, workItemId, existing, request.decidedAt));
   }
   if (held.claimedBy !== request.principalId) {
     // RELEASE, and only release, widens for a holder that is no longer live.
@@ -243,7 +260,8 @@ function decide(
       ? holderHasLiveSession(store, request.projectId, held.claimedBy, request.decidedAt)
       : true;
     if (live !== false) {
-      return refuse(request.kind, "WORK_CLAIM_NOT_CLAIMANT", "DAEMON_PREREQUISITE");
+      return refuse(request.kind, "WORK_CLAIM_NOT_CLAIMANT", "DAEMON_PREREQUISITE", null,
+        notClaimantDetail(request.kind, workItemId, held, request.principalId));
     }
   }
   const result: JsonValue = request.kind === "work.release"

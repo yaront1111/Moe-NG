@@ -2,11 +2,12 @@ import type { JsonValue } from "@moe/contracts";
 import { REVIEW_ROUND_ABSOLUTE_CEILING, qualifyReviewAcceptance } from "@moe/review";
 import type { ReviewerIndependenceInput } from "@moe/review";
 
-import { commitAccepted, payloadRef, refuse, refuseFromKernel } from "./review-ledger.js";
+import { commitAccepted, payloadRef, refuse, refuseFromKernel, refuseInvalidPayload } from "./review-ledger.js";
 import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "./verifier-receipt-ledger.js";
 import { continuationSourceAttested, reviewContinuationAvailable, reviewContinuationForAcceptance, reviewContinuationSource } from "./review-continuation.js";
 import { implementationGuidanceResult, readReviewGuidanceSource, validImplementationGuidance } from "./review-implementation-guidance.js";
+import { describeJson, exactKeysDetail, firstDetail, memberDetail, refDetail } from "./review-payload-shape.js";
 import { reviewDecisionRequired, reviewStall } from "./review-stall.js";
 
 /**
@@ -45,12 +46,22 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   const subjectRef = payloadRef(request.payload, "subjectRef");
   const decision = escalationDecisionOf(request.payload);
   if (escalationRef === null || subjectRef === null || decision === null) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+    return refuseInvalidPayload(request.kind, firstDetail(
+      refDetail(request.payload, "escalationRef"),
+      refDetail(request.payload, "subjectRef"),
+      memberDetail(request.payload, "decision", ESCALATION_DECISIONS),
+    ) ?? "payload shape invalid");
   }
   const hasGuidance = Object.hasOwn(request.payload, "implementationGuidance");
   const text = request.payload["implementationGuidance"];
-  if (hasGuidance && (decision !== "ALLOW_MORE_ATTEMPTS" || !validImplementationGuidance(text))) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  if (hasGuidance && decision !== "ALLOW_MORE_ATTEMPTS") {
+    return refuseInvalidPayload(
+      request.kind, `implementationGuidance is admitted only with decision ALLOW_MORE_ATTEMPTS, got ${decision}`,
+    );
+  }
+  if (hasGuidance && !validImplementationGuidance(text)) {
+    return refuseInvalidPayload(request.kind, "implementationGuidance must be a non-blank, well-formed"
+      + ` JSON string of at most 4000 characters, got ${describeJson(text)}`);
   }
   if (ledger.unreadable) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
@@ -113,6 +124,9 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
 export const ESCALATION_DECISIONS = Object.freeze(["ALLOW_MORE_ATTEMPTS", "REPLAN"] as const);
 export type EscalationDecision = (typeof ESCALATION_DECISIONS)[number];
 
+/** Exactly these two: the former caller-authored authority fields refuse by name. */
+const ACCEPT_PAYLOAD_KEYS = Object.freeze(["receiptId", "subjectRef"] as const);
+
 function escalationDecisionOf(payload: unknown): EscalationDecision | null {
   if (typeof payload !== "object" || payload === null) return null;
   const raw = (payload as Record<string, unknown>)["decision"];
@@ -130,12 +144,15 @@ function escalationDecisionOf(payload: unknown): EscalationDecision | null {
  */
 export const acceptOutput: CommandHandler = (context): ReviewOutcome => {
   const { ledger, request, store } = context;
-  const payloadKeys = Object.keys(request.payload);
   const receiptId = payloadRef(request.payload, "receiptId");
   const subjectRef = payloadRef(request.payload, "subjectRef");
-  if (payloadKeys.length !== 2 || !payloadKeys.includes("receiptId")
-    || !payloadKeys.includes("subjectRef") || receiptId === null || subjectRef === null) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  const shape = firstDetail(
+    exactKeysDetail(request.payload, ACCEPT_PAYLOAD_KEYS),
+    refDetail(request.payload, "receiptId"),
+    refDetail(request.payload, "subjectRef"),
+  );
+  if (shape !== null || receiptId === null || subjectRef === null) {
+    return refuseInvalidPayload(request.kind, shape ?? "payload shape invalid");
   }
   if (ledger.unreadable) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");

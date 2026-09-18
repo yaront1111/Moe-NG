@@ -124,6 +124,50 @@ it("refuses with a DISTINCT code when the provider itself throws", async () => {
   expect(started).not.toHaveProperty("port");
 });
 
+it("says on the log WHAT the boot reconciliation sweep threw, beside the same refusal", async () => {
+  // DAEMON_ENTRY_PROVIDER_THREW alone reads as "the provider module is broken"; a locked store
+  // under the sweep is a different repair, and the code cannot tell them apart.
+  const lines: string[] = [];
+  const started = await startDaemon({
+    dependencies: {
+      ...provider,
+      reconciliation: () => ({
+        sweep(): never {
+          throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+        },
+      }),
+    },
+    log: (line) => lines.push(line),
+  });
+  expect(started).toMatchObject({ code: "DAEMON_ENTRY_PROVIDER_THREW", layer: DAEMON_ENTRY_LAYER, ok: false });
+  expect(lines).toEqual(["boot reconciliation threw: Error SQLITE_BUSY: database is locked"]);
+});
+
+it("names the optional seam on the log when a factory is INVALID, and when one THROWS", async () => {
+  // DEPENDENCIES_INVALID covered thirty-four optional seams and PROVIDER_THREW thirty-six calls;
+  // the code alone sent an operator reading the whole provider module.
+  const invalidLines: string[] = [];
+  const invalid = await startDaemon({
+    dependencies: { ...provider, graph: () => ({}) as never },
+    log: (line) => invalidLines.push(line),
+  });
+  expect(invalid).toMatchObject({ code: "DAEMON_ENTRY_DEPENDENCIES_INVALID", ok: false });
+  expect(invalidLines).toEqual([
+    'optional port "graph" is INVALID: not a factory function, or a port without its required methods',
+  ]);
+
+  const threwLines: string[] = [];
+  const threw = await startDaemon({
+    dependencies: {
+      ...provider,
+      graph: () => { throw Object.assign(new Error("disk I/O error"), { code: "SQLITE_IOERR" }); },
+    },
+    log: (line) => threwLines.push(line),
+  });
+  expect(threw).toMatchObject({ code: "DAEMON_ENTRY_PROVIDER_THREW", ok: false });
+  expect(threwLines).toEqual(['optional port "graph" threw: Error SQLITE_IOERR: disk I/O error']);
+});
+
 it("surfaces a non-loopback refusal with the LISTENER's own code and layer, unflattened", async () => {
   // PortRefusal's contract: the entry holds no translation table. Two layers can
   // refuse here, so the test names which one did — collapsing this into a

@@ -32,6 +32,17 @@ export interface RepositoryDeliveryConfig {
   readonly describeHolder?: ((nodeRef: string, phase: RepositoryExecutionPhase) => string) | undefined;
   /** Whether the owning runtime has begun closing; re-read after the awaited baseline. */
   readonly closed?: (() => boolean) | undefined;
+  /**
+   * The goal whose approved publish has not yet held the repository, or null. A FREE
+   * repository is not acquired for a delivery while one is named: deliveries and the
+   * publisher share one reservation, the delivery pass runs first, and without this a
+   * publish starved behind the node queue for as long as nodes kept arriving (UnAI
+   * 2026-09-18: node 4 took the repository the pass node 3 released it, the operator's
+   * publish still waiting). Only a publish that has journaled NO intent counts — once the
+   * publisher holds the reservation the ordinary BUSY path already applies, and a wedged
+   * effect must never stall every delivery. Absent = deliveries never yield.
+   */
+  readonly publishWaiting?: (() => string | null) | undefined;
   readonly controller: RepositoryExecutionController;
   /** The handle is what lets a refusal be told apart from a refusal that journaled nothing. */
   readonly facts: (nodeRef: string, handle?: RepositoryExecutionHandle) => RepositoryDeliveryFacts;

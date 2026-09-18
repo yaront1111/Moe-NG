@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +31,8 @@ const revParses = (): number => vi.mocked(execFileSync).mock.calls
 
 const roots: string[] = [];
 function repository(): string {
-  const root = mkdtempSync(join(tmpdir(), "moe-identity-")); roots.push(root);
+  // git answers with the realpath; macOS's tmpdir() is /var/folders, a symlink into /private.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-identity-"))); roots.push(root);
   git(root, "init", "--quiet");
   writeFileSync(join(root, "app.txt"), "one\n");
   git(root, "add", "--", "app.txt");

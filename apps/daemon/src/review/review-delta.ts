@@ -7,8 +7,10 @@ import type {
 import { isPlainJsonObject } from "./review-contracts.js";
 import type { DeltaNodeClassification } from "./review-contracts.js";
 import { reviewContinuationAvailable } from "./review-continuation.js";
-import { commitAccepted, payloadArray, payloadRef, refuse } from "./review-ledger.js";
+import { commitAccepted, payloadArray, payloadRef, refuse, refuseInvalidPayload } from "./review-ledger.js";
 import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
+import { arrayDetail, describeJson, firstDetail, refDetail } from "./review-payload-shape.js";
+import type { PayloadParse } from "./review-payload-shape.js";
 import { reviewDecisionRequired } from "./review-stall.js";
 
 /**
@@ -30,15 +32,20 @@ interface DeltaNodeInput {
   readonly nodeRef: string;
 }
 
-function parseNodes(values: readonly JsonValue[]): readonly DeltaNodeInput[] | undefined {
+function parseNodes(values: readonly JsonValue[]): PayloadParse<readonly DeltaNodeInput[]> {
   const parsed: DeltaNodeInput[] = [];
-  for (const value of values) {
-    if (!isPlainJsonObject(value)) return undefined;
+  for (const [index, value] of values.entries()) {
+    const at = `nodes[${String(index)}]`;
+    if (!isPlainJsonObject(value)) {
+      return { detail: `${at} must be a JSON object {nodeRef}, got ${describeJson(value)}`, ok: false };
+    }
     const nodeRef = value["nodeRef"];
-    if (typeof nodeRef !== "string" || nodeRef.length === 0) return undefined;
+    if (typeof nodeRef !== "string" || nodeRef.length === 0) {
+      return { detail: `${at}.nodeRef must be a non-empty JSON string, got ${describeJson(nodeRef)}`, ok: false };
+    }
     parsed.push({ nodeRef });
   }
-  return parsed;
+  return { ok: true, value: parsed };
 }
 
 const UNREADABLE_CARRY_FACTS = Object.freeze({
@@ -67,7 +74,11 @@ export const classifyReplanDelta: CommandHandler = (context): ReviewOutcome => {
   const subjectRef = payloadRef(request.payload, "subjectRef");
   const successorPlanRef = payloadRef(request.payload, "successorPlanRef");
   if (nodeValues === null || subjectRef === null || successorPlanRef === null) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+    return refuseInvalidPayload(request.kind, firstDetail(
+      arrayDetail(request.payload, "nodes"),
+      refDetail(request.payload, "subjectRef"),
+      refDetail(request.payload, "successorPlanRef"),
+    ) ?? "payload shape invalid");
   }
   if (Object.hasOwn(request.payload, "supportedCanonicalizerVersions")) {
     return refuse(request.kind, "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE", "DAEMON_INGRESS");
@@ -79,10 +90,9 @@ export const classifyReplanDelta: CommandHandler = (context): ReviewOutcome => {
   if (nodeValues.length === 0) {
     return refuse(request.kind, "REVIEW_DELTA_NODES_EMPTY", "DAEMON_INGRESS");
   }
-  const nodes = parseNodes(nodeValues);
-  if (nodes === undefined) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
-  }
+  const parsedNodes = parseNodes(nodeValues);
+  if (!parsedNodes.ok) return refuseInvalidPayload(request.kind, parsedNodes.detail);
+  const nodes = parsedNodes.value;
   if (new Set(nodes.map((node) => node.nodeRef)).size !== nodes.length) {
     return refuse(request.kind, "REVIEW_DELTA_NODE_DUPLICATED", "DAEMON_INGRESS");
   }

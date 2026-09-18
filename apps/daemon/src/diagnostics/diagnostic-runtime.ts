@@ -95,3 +95,20 @@ export function createDiagnosticRuntime(options: DiagnosticRuntimeOptions): Diag
     sink,
   });
 }
+
+const shared = new Map<string, DiagnosticRuntime>();
+
+/**
+ * ONE runtime per project root per process. The daemon bin builds a runtime to tee its console,
+ * and the shipped dependency provider — loaded by module path, handed no arguments — needs an
+ * emitter for the command ports it composes. Two runtimes over the same `.moe/logs` would be two
+ * file sinks rotating one file, so both ask here and the second gets the first's instance. Never
+ * evicted: a composition root closes it on the way out of the process and nothing else.
+ */
+export function sharedDiagnosticRuntime(options: DiagnosticRuntimeOptions): DiagnosticRuntime {
+  const existing = shared.get(options.projectRoot);
+  if (existing !== undefined) return existing;
+  const created = createDiagnosticRuntime(options);
+  shared.set(options.projectRoot, created);
+  return created;
+}

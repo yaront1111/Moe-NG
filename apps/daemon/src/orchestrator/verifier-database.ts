@@ -7,6 +7,7 @@ import type { DockerRunner } from "../deployment/deploy-ports.js";
 import { classifyDockerProbe } from "../repository/deployment/deployment-docker-probe.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
+import { recipeVerdictLines } from "./verifier-recipe-verdict-lines.js";
 import {
   isPemCertificate, resolveVerifierDatabaseProvisioning, tlsCertificateCommand, tlsEnableCommand,
   tlsExtractCommand, type ResolvedVerifierDatabaseProvisioning, type VerifierDatabaseProvisioning,
@@ -107,7 +108,10 @@ function failedFile(
  * and a different password. This is a same-UID recipe boundary, not hostile-process isolation.
  * Raw DB child output is deliberately NOT persisted: it can contain a URL, password, SQL or
  * split/truncated secret. The runner's raw byte count/digest remain the receipt binding;
- * only its operator-facing output tail is replaced with a value-free verdict.
+ * its operator-facing output tail is replaced with a verdict that carries, for a FAILED
+ * recipe, only the runner's own verdict lines scrubbed of every delivered value
+ * (`verifier-recipe-verdict-lines.ts`): a seat told "exit 1" and nothing else could not fix
+ * what it could not see (UnAI 2026-09-18, node 11).
  */
 class DisposableDatabase {
   readonly name = `moe-verifier-${randomUUID()}`;
@@ -223,7 +227,9 @@ class DisposableDatabase {
       this.runner = createVerifierProcessRunner({ ...this.options, delivered: this.deliveredVariables(url) });
       const migration = await this.runner({ ...this.brief, test: "pnpm db:migrate" });
       if (migration.exitCode !== 0) {
-        const secrets = [this.password, ...Object.values(this.options.delivered ?? {})];
+        // The same list the recipe verdict is scrubbed with: every delivered value, not only the
+        // operator's own (review of ed62c143 found the two lists eighteen lines apart).
+        const secrets = [this.password, ...Object.values(this.deliveredVariables(url))];
         const point = failedFile(this.brief.workspace, migration.output, secrets);
         if (point.named !== null) throw new DatabaseRefusal("MIGRATION_FAILED", { file: point.file });
         // Nothing the output names means no migration ever started. A null exit is the runner's
@@ -238,7 +244,12 @@ class DisposableDatabase {
       }
       this.checkCancellation();
       const result = await this.runner(this.brief);
-      return { ...result, output: JSON.stringify({ migrations: "PASSED", recipeExitCode: result.exitCode }) };
+      const verdict: Record<string, unknown> = { migrations: "PASSED", recipeExitCode: result.exitCode };
+      if (result.exitCode !== 0) {
+        verdict["recipeVerdictLines"] = recipeVerdictLines(result.output,
+          [this.password, ...Object.values(this.deliveredVariables(url))]);
+      }
+      return { ...result, output: JSON.stringify(verdict) };
     } finally { await this.dispose(); }
   }
 

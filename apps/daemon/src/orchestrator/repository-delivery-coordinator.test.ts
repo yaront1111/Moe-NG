@@ -24,6 +24,7 @@ function request(workspace: string, nodeRef = "node-a"): SpawnRequest {
 interface FixtureExtras {
   readonly clean?: (root: string) => Promise<boolean>;
   readonly describeHolder?: (nodeRef: string, phase: string) => string;
+  readonly publishWaiting?: () => string | null;
 }
 function fixture(workspace = repository(), controllerId = "controller-a", controllerPid = 101, closed?: () => boolean,
   extras: FixtureExtras = {}) {
@@ -378,5 +379,37 @@ describe("an idle holder yields the repository", () => {
     expect(f.coordinator.admission(f.workspace, "node-a")).toBeNull();
     expect(f.port.inspect(f.workspace)).toEqual(before);
     f.finish();
+  }, 120_000);
+});
+
+describe("a free repository yields to an approved publish", () => {
+  // The delivery pass runs before the publisher's pass and they share one reservation, so on
+  // UnAI 2026-09-18 node 4 acquired the repository the same pass node 3 released it while the
+  // operator's publish had been waiting since before node 3 finished. A named waiting publish
+  // now turns a delivery away from a FREE repository, in admission and in start alike.
+  it("refuses admission and start, without acquiring, while a publish is waiting; then admits", async () => {
+    let waiting: string | null = "goal-1";
+    const f = fixture(undefined, undefined, undefined, undefined, { publishWaiting: () => waiting });
+    expect(f.coordinator.admission(f.workspace, "node-a")).toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_BUSY",
+      layer: "REPOSITORY_DELIVERY", detail: "an approved publish of goal-1 is waiting for the repository" });
+    expect(await f.coordinator.start(request(f.workspace), f.spawn)).toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_BUSY",
+      detail: "an approved publish of goal-1 is waiting for the repository" });
+    expect(f.spawn).not.toHaveBeenCalled(); expect(f.baseline).not.toHaveBeenCalled();
+    // Nothing was reserved: the publisher's pass finds the repository free.
+    expect(f.port.inspect(f.workspace)).toEqual({ ok: true, reservation: null });
+    waiting = null;
+    expect(f.coordinator.admission(f.workspace, "node-a")).toBeNull();
+    expect((await f.coordinator.start(request(f.workspace), f.spawn)).ok).toBe(true);
+    f.finish();
+  }, 120_000);
+  it("does not turn away the holder of an already-reserved repository, and never yields when unwired", async () => {
+    const f = fixture(undefined, undefined, undefined, undefined, { publishWaiting: () => null });
+    const started = await f.coordinator.start(request(f.workspace), f.spawn);
+    if (!started.ok) throw new Error(started.code);
+    // Held by node-a: the publish hook is not even consulted for the holder's own admission.
+    expect(f.coordinator.admission(f.workspace, "node-a")).toBeNull();
+    f.finish();
+    const unwired = fixture();
+    expect(unwired.coordinator.admission(unwired.workspace, "node-z")).toBeNull();
   }, 120_000);
 });

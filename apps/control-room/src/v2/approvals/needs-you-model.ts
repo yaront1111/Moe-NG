@@ -37,8 +37,13 @@ import type { ReleaseFacts } from "./needs-you-release.js";
  *    one kind that does NOT route to a goal - an outage belongs to an environment - so it
  *    carries no goal id at all and its facts live in `needs-you-incident.ts`.
  *  - ESCALATION: the surface OFFERS `escalation.decide` for a node, which the daemon does
- *    only when three review rounds failed and the kernel refuses more until a human decides.
- *    The runs read names the goal the node belongs to.
+ *    when the kernel refuses more rounds until a human decides: either three review rounds
+ *    carried a blocking (CRITICAL or MAJOR) finding, or the rounds stalled (the same own
+ *    findings repeated on an unchanged workspace; `review-stall.ts` `reviewDecisionRequired`).
+ *    "Allow one more attempt" funds exactly one round, accepted unless it carries another
+ *    blocking finding; MINOR findings are recorded but never block
+ *    (`needs-you-escalation.ts` `blockingFindingsOf` counts by that rule). The runs read names
+ *    the goal the node belongs to.
  *  - PREVIEW: the surface OFFERS `preview.decide` for a goal whose preview receipt says
  *    STARTED. That is Gate 2 - the operator looks at their product actually running and
  *    says whether it is good enough. `needs-you-preview.ts` states the four facts that

@@ -9,8 +9,11 @@ import type { DaemonDependencyProvider } from "../daemon-entry.js";
 import fixtureProvider from "../daemon-entry-fixtures.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { startControlRoomListener } from "../http/http-listener.js";
+import { createDiagnosticEmitter } from "@moe/contracts";
+import type { DiagnosticRecord } from "@moe/contracts";
 import { createDurableSchedule, DEFAULT_SCHEDULE_INTERVAL_MS } from "./durable-schedule.js";
-import type { ScheduleTimer } from "./durable-schedule.js";
+import type { ScheduleFault, ScheduleTimer } from "./durable-schedule.js";
+import { SCHEDULE_FAULT } from "./schedule-fault-report.js";
 
 vi.mock("../http/http-listener.js", async (original) => ({
   ...await original<typeof import("../http/http-listener.js")>(), startControlRoomListener: vi.fn(),
@@ -285,4 +288,83 @@ it("rejects a malformed scheduler factory before starting a listener", async () 
   Reflect.set(dependencies, "schedules", () => ({}));
   expect(await startDaemon({ dependencies })).toEqual({ ok: false, code: "DAEMON_ENTRY_DEPENDENCIES_INVALID", layer: "DAEMON_ENTRY" });
   expect(startControlRoomListener).not.toHaveBeenCalled();
+});
+
+it("hands every refusal to onFault with the throw the notice may not carry", async () => {
+  await withSchedule(async (_s, t, store) => {
+    const faults: ScheduleFault[] = [];
+    const observed = createDurableSchedule({
+      onFault: (fault) => { faults.push(fault); }, projectId: "schedule-faults", now: t.now, store, timer: t,
+    });
+    try {
+      observed.register("a", () => { throw Object.assign(new Error("callback failed"), { code: "EACCES" }); }, 10);
+      await t.advance(10);
+      expect(faults).toEqual([{
+        code: "SCHEDULE_CALLBACK_FAILED", id: "a",
+        thrown: expect.objectContaining({ code: "EACCES", message: "callback failed", name: "Error" }) as unknown,
+      }]);
+      // The notice itself is unchanged: code and layer, no exception.
+      expect(observed.refusals()).toEqual([{ ok: false, id: "a", code: "SCHEDULE_CALLBACK_FAILED", layer: "DAEMON_INGRESS" }]);
+    } finally { observed.release(); }
+
+    const resolverFaults: ScheduleFault[] = [];
+    const unresolved = createDurableSchedule({
+      onFault: (fault) => { resolverFaults.push(fault); }, projectId: "schedule-faults", now: t.now, store, timer: t,
+      resolve: () => { throw new Error("resolver failed"); },
+    });
+    try {
+      expect(resolverFaults.map((fault) => [fault.code, fault.id, fault.thrown?.message])).toEqual([
+        ["SCHEDULE_TARGET_UNRESOLVED", "a", "resolver failed"],
+      ]);
+    } finally { unresolved.release(); }
+
+    const storeFaults: ScheduleFault[] = [];
+    const storeless = createDurableSchedule({
+      onFault: (fault) => { storeFaults.push(fault); }, projectId: "schedule-faults", now: t.now, timer: t,
+      store: { readEvents: () => { throw new Error("database is locked"); }, commit: () => { throw new Error("unused"); } },
+    });
+    try {
+      expect(storeFaults.map((fault) => [fault.code, fault.id, fault.thrown?.message])).toEqual([
+        ["SCHEDULE_STORE_FAILED", null, "database is locked"],
+      ]);
+    } finally { storeless.release(); }
+  });
+});
+
+it("keeps refusing the same way when the observer itself throws", async () => {
+  await withSchedule(async (_s, t, store) => {
+    const observed = createDurableSchedule({
+      onFault: () => { throw new Error("sink closed"); }, projectId: "schedule-faults", now: t.now, store, timer: t,
+    });
+    try {
+      let calls = 0;
+      observed.register("a", () => { if (++calls === 1) throw new Error("callback failed"); }, 10);
+      await t.advance(30); expect(calls).toBe(3);
+      expect(observed.refusals()).toEqual([{ ok: false, id: "a", code: "SCHEDULE_CALLBACK_FAILED", layer: "DAEMON_INGRESS" }]);
+    } finally { observed.release(); }
+  });
+});
+
+it("reports a failed tick as SCHEDULE_FAULT on the diagnostics plane through the shipped composition", async () => {
+  const t = new FakeTime();
+  const dir = mkdtempSync(join(tmpdir(), "moe-schedule-fault-"));
+  const records: DiagnosticRecord[] = [];
+  let provider: ReturnType<typeof createStoreDependencies> | undefined;
+  try {
+    provider = createStoreDependencies({ projectId: "schedule-fault-provider", principalId: "operator",
+      credential: randomUUID(), storePath: join(dir, "store.db"), clock: () => new Date(t.now()).toISOString(),
+      diagnostics: createDiagnosticEmitter({
+        clock: () => "2026-09-18T11:00:00.000Z", component: "schedule", sink: { emit: (record) => { records.push(record); } },
+      }),
+      schedule: { timer: t } });
+    const s = provider.schedules();
+    s.register("backups/nightly", () => { throw new Error("cannot write backup"); }, 10);
+    await t.advance(10);
+    const faults = records.filter((record) => record.event === SCHEDULE_FAULT);
+    expect(faults).toHaveLength(1);
+    expect(faults[0]).toMatchObject({
+      fields: { code: "SCHEDULE_CALLBACK_FAILED", id: "backups/nightly", thrownMessage: "cannot write backup" },
+      level: "error",
+    });
+  } finally { provider?.close(); rmSync(dir, { recursive: true, force: true }); }
 });

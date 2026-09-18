@@ -226,3 +226,57 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // `projectId` ABSENT BY CONSTRUCTION like every kind above.
     [ENVIRONMENT_RETIREMENT_COMMAND_KIND]: [...ENVIRONMENT_RETIREMENT_PAYLOAD_KEYS],
   });
+
+export interface PayloadIntegerKey {
+  /** What the MCP schema says about the member; it names the JSON type in words too. */
+  readonly description: string;
+  readonly minimum: number;
+}
+
+/**
+ * WHICH ADMITTED KEYS ARE JSON INTEGERS, beside the roster of which keys are admitted at all.
+ *
+ * The MCP tool schema is generated per kind with an OPAQUE payload (the daemon decoder is the
+ * only payload authority), so until this table existed a seat learned that `round` is a number
+ * only by being refused: three UnAI seats (2026-09-18) each sent the string "2", read a bare
+ * `REVIEW_PAYLOAD_INVALID`, and burned a call finding out. `mcp-tool-allowlist.ts` turns each
+ * row into a typed `payload.properties` member on the advertised tool
+ * (`{"type":"integer","minimum":…}`), so the client reads the type BEFORE it sends the value.
+ *
+ * ADVERTISEMENT ONLY. Nothing here admits or coerces: the decoders that refuse `"4"` by exact
+ * type are unchanged, and `mcp-tool-allowlist.test.ts` pins that every key named here is on the
+ * kind's `PAYLOAD_KEYS` row, so the advertised type and the enforced one cannot name different
+ * fields. Each `minimum` is transcribed from the decoder that enforces it:
+ * `review-services.ts` `positiveInteger` (round >= 1),
+ * `planning/supersession-preparation-contracts.ts` `decodeReleaseRequest` and
+ * `planning/graph-supersede-contracts.ts` (generation > 0, expectedPreparationVersion >= 0).
+ */
+export const PAYLOAD_INTEGER_KEYS:
+  Readonly<Partial<Record<WiredCommandKind, Readonly<Record<string, PayloadIntegerKey>>>>> =
+  Object.freeze({
+    "graph.release_preparation": Object.freeze({
+      expectedPreparationVersion: Object.freeze({
+        description: "The preparation version the caller acts against, as a JSON integer >= 0.",
+        minimum: 0,
+      }),
+      generation: Object.freeze({
+        description: "The supersession generation, as a JSON integer >= 1.", minimum: 1,
+      }),
+    }),
+    "graph.supersede": Object.freeze({
+      expectedPreparationVersion: Object.freeze({
+        description: "The preparation version the caller acts against, as a JSON integer >= 0.",
+        minimum: 0,
+      }),
+      generation: Object.freeze({
+        description: "The supersession generation, as a JSON integer >= 1.", minimum: 1,
+      }),
+    }),
+    "review.submit": Object.freeze({
+      round: Object.freeze({
+        description: "The review round as a JSON integer >= 1 (expectedVersion + 1): send 2,"
+          + " never the quoted string \"2\", which is refused REVIEW_PAYLOAD_INVALID.",
+        minimum: 1,
+      }),
+    }),
+  });

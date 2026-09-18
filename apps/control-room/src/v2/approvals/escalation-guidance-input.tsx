@@ -17,7 +17,7 @@ export function EscalationGuidanceInput({ disabled, onChange, supported, value }
         maxLength={ESCALATION_GUIDANCE_MAX_LENGTH} rows={4} style={{ width: "100%", boxSizing: "border-box" }}
         onChange={(event): void => onChange(event.currentTarget.value)} value={value} />
       <p className="cr2-needs-note" id={`${id}-note`}>
-        Saved with your approval for one more attempt and sent to the worker. Approved requirements and checks still apply.
+        Optional. Saved with your approval of one more attempt and sent to the worker word for word; leave it empty to retry as is. Approved requirements and checks still apply.
       </p>
       {!supported ? <p className="cr2-needs-note" role="status">
         This daemon does not support retry guidance. Refresh after updating Moe.

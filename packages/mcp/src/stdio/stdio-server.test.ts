@@ -40,6 +40,7 @@ import {
   registerDispatchConformanceSuite,
 } from "../dispatch-conformance.js";
 import type { ConformanceOutcome, ConformanceSubject } from "../dispatch-conformance.js";
+import type { McpDispatchFault } from "../dispatch-fault.js";
 import {
   ADAPTER_SUPPLIED_COMMAND_FIELDS,
   ADAPTER_SUPPLIED_QUERY_FIELDS,
@@ -134,6 +135,50 @@ describe("stdio server tool listing", () => {
       STDIO_TOOL_ENTRIES.map((entry) => entry.tool.name),
     );
     expect(listed.tools[0]?.inputSchema).toEqual(STDIO_TOOL_ENTRIES[0]?.tool.inputSchema);
+  });
+
+  it("advertises a host-typed payload member on tools/list and keeps the payload open", async () => {
+    const server = createStdioMcpServer({
+      credential: CREDENTIAL,
+      payloadProperties: { "review.submit": { round: {
+        description: "The review round as a JSON integer >= 1.",
+        maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+      } } },
+      port: createRecordingPort(),
+      toolAllowlist: ["goal.create", "review.submit"],
+    });
+    const client = new Client({ name: "overlay-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const listed = await client.listTools();
+      const submit = listed.tools.find((tool) => tool.name === toolLabelForKind("review.submit"));
+      const payload = submit?.inputSchema.properties?.["payload"] as Record<string, unknown> | undefined;
+      expect(payload).toMatchObject({ additionalProperties: true, type: "object" });
+      expect(payload?.["properties"]).toEqual({ round: {
+        description: "The review round as a JSON integer >= 1.",
+        maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+      } });
+      // The other advertised kind is untouched by the overlay.
+      const create = listed.tools.find((tool) => tool.name === toolLabelForKind("goal.create"));
+      expect(Object.hasOwn(create?.inputSchema.properties?.["payload"] as object, "properties")).toBe(false);
+      // And the capability set is still the allowlist, so a typed tool is also a callable one.
+      expect(listed.tools.map((tool) => tool.name).sort()).toEqual(["goal_create", "review_submit"]);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("refuses at construction an overlay that types a kind outside the allowlist", () => {
+    expect(() => createStdioMcpServer({
+      credential: CREDENTIAL,
+      payloadProperties: { "review.submit": { round: {
+        description: "x", maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+      } } },
+      port: createRecordingPort(),
+      toolAllowlist: ["goal.create"],
+    })).toThrow("MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND: review.submit is not an advertised tool");
   });
 
   it("never leaks the bootstrap credential through the listing", async () => {
@@ -553,5 +598,102 @@ describe("stdio server tool allowlist", () => {
         name: entry.tool.name,
       })),
     );
+  });
+});
+
+describe("stdio server dispatch fault disclosure", () => {
+  /**
+   * The containment above is half a contract. The client sees UNKNOWN_ERROR; until
+   * `onDispatchFault` the daemon saw NOTHING, and a seat whose every tool call died on a
+   * locked store left no line anywhere. These arms drive the observer through the published
+   * `createStdioMcpServer` options, the seam `mcp-main.ts` composes.
+   */
+  const secret = "SQLITE_BUSY: database is locked at /var/lib/moe/events.db";
+
+  async function callObserved(port: StdioDispatchPort, label = CONFORMANCE_COMMAND_LABEL): Promise<{
+    readonly faults: readonly McpDispatchFault[];
+    readonly thrown: unknown;
+  }> {
+    const faults: McpDispatchFault[] = [];
+    const server = createStdioMcpServer({
+      credential: CREDENTIAL, onDispatchFault: (fault) => { faults.push(fault); }, port,
+    });
+    const client = new Client({ name: "stdio-fault-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    let thrown: unknown;
+    try {
+      await client.callTool({ arguments: { ...CONFORMANCE_COMMAND_ARGS }, name: label });
+    } catch (error) {
+      thrown = error;
+    } finally {
+      await client.close();
+      await server.close();
+    }
+    return { faults, thrown };
+  }
+
+  it("reports a throwing dispatch to the host while the client still sees exactly UNKNOWN_ERROR", async () => {
+    const { faults, thrown } = await callObserved({
+      authenticate: () => ({ ok: true }),
+      dispatchCommandBytes: () => { throw Object.assign(new Error(secret), { code: "SQLITE_BUSY" }); },
+      dispatchQueryBytes: () => new Uint8Array(0),
+    });
+
+    expect(thrown).toBeInstanceOf(McpError);
+    expect((thrown as McpError).data).toMatchObject({ code: "UNKNOWN_ERROR" });
+    expect(JSON.stringify((thrown as McpError).data)).not.toContain("SQLITE_BUSY");
+    expect((thrown as McpError).message).not.toContain(secret);
+    expect(faults).toHaveLength(1);
+    expect(faults[0]).toMatchObject({
+      stage: "dispatch",
+      surface: "command",
+      thrown: { code: "SQLITE_BUSY", message: secret, name: "Error" },
+      toolKind: CONFORMANCE_COMMAND_KIND,
+      transport: "stdio",
+    });
+    // The host gets the stack the client must never see.
+    expect(faults[0]?.thrown.stack).toContain("dispatchCommandBytes");
+  });
+
+  it("reports a throwing authenticate at its own stage, with zero dispatch", async () => {
+    const calls: string[] = [];
+    const { faults } = await callObserved({
+      authenticate: () => { throw new Error("credential store is closed"); },
+      dispatchCommandBytes: () => { calls.push("dispatchCommandBytes"); return new Uint8Array(0); },
+      dispatchQueryBytes: () => { calls.push("dispatchQueryBytes"); return new Uint8Array(0); },
+    });
+
+    expect(calls).toEqual([]);
+    expect(faults.map((fault) => [fault.stage, fault.thrown.message])).toEqual([
+      ["authenticate", "credential store is closed"],
+    ]);
+  });
+
+  it("reports daemon bytes that are not UTF-8 as a response-decode fault", async () => {
+    const { faults, thrown } = await callObserved(
+      createRecordingPort({ commandResponse: Uint8Array.from([0x7b, 0xff, 0xfe, 0x7d]) }),
+    );
+
+    expect((thrown as McpError).data).toMatchObject({ code: "UNKNOWN_ERROR" });
+    expect(faults.map((fault) => fault.stage)).toEqual(["response-decode"]);
+    expect(faults[0]?.thrown.name).toBe("TypeError");
+  });
+
+  it("reports nothing for a refusal the port RETURNED: a verdict is not a fault", async () => {
+    const { faults, thrown } = await callObserved({
+      authenticate: () => ({ error: createRuntimeError({ code: "SESSION_EXPIRED" }), ok: false }),
+      dispatchCommandBytes: () => new Uint8Array(0),
+      dispatchQueryBytes: () => new Uint8Array(0),
+    });
+
+    expect((thrown as McpError).data).toMatchObject({ code: "SESSION_EXPIRED" });
+    expect(faults).toEqual([]);
+  });
+
+  it("reports nothing for a clean call", async () => {
+    const { faults, thrown } = await callObserved(createRecordingPort());
+    expect(thrown).toBeUndefined();
+    expect(faults).toEqual([]);
   });
 });

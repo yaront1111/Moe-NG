@@ -193,6 +193,8 @@ it("excludes every test module for a named reason, and only those", () => {
   // classified it "bridge" and this expectation would go red.
   expect(verdicts).toEqual({
     "dispatch-conformance.ts": "imports-vitest",
+    "dispatch-fault.test.ts": "test-file",
+    "http/http-dispatch-fault.test.ts": "test-file",
     "http/http-parity.test.ts": "test-file",
     "http/http-server-close-latch.test.ts": "test-file",
     "http/http-server-lifecycle.test.ts": "test-file",
