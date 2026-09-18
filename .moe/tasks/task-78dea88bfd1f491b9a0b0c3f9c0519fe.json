@@ -103,16 +103,23 @@
     {
       "stepId": "step-7",
       "description": "DOCS, GATES AND ADVERSARIAL REVIEW. (A) Update the publisher bullet in apps/daemon/CLAUDE.md in its existing register: a publish whose push git REJECTED and whose remote tip provably did not move is released automatically with a REFUSED `PUBLISH_NOT_LANDED` receipt; a push that succeeded, timed out, threw, or whose result was lost is never auto-resolved and waits for an operator; and a publish stuck before this rule existed has no evidence to resolve on. (B) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/repository`, count line quoted — the approved-test file is IN the gate to prove it still passes unchanged. Read the OUTPUT, not the exit code. (C) The full `pnpm --filter @moe/daemon test` and `pnpm typecheck`, both quoted; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (D) ADVERSARIAL REVIEW in the completion record: Can any sequence of events auto-resolve a push that actually landed — walk a hook that fails after the ref moves, a concurrent push by someone else, a force-push-back, a crash between push and record, and a replayed intent after restart. Can an unreadable pre-push tip ever be compared as if it were a sha? Is the REFUSED receipt written under the SAME decisionId the card scans, so the card really un-sticks? Is the reservation released exactly once, and what happens if the release fails after the receipt is written? (E) State in the completion record that this is FORWARD-ONLY: a publish stuck before it landed stays UNKNOWN until task-21be6e90's operator command exists.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/CLAUDE.md"
       ],
-      "startedAt": "2026-09-18T19:59:11.261Z"
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts",
+        "apps/daemon/CLAUDE.md"
+      ],
+      "note": "RESUMED session worker-952c612b. I re-verified everything from disk and git.\nBYTES. Steps 2-6 and 7A (the CLAUDE.md publisher bullet) were swept into peer QA checkpoint 50d7a0a9. Governor-f32726f9 then merged origin/main (f7d014d6/f02da08b, human-approved at 20:19Z, AFTER my first gate run). That merge rewrote node-publisher.ts, git-publication-port.ts and this row's tests to carry main's pre-flight and named UNKNOWN reasons. I re-read both merged files. The rule is intact: transmit, notLanded (REJECTED AND a known tipBefore AND an equal tip), the settled re-drive, and the port's numeric-exit=REJECTED / null-or-throw=UNKNOWN split. The CLAUDE.md bullet survived beside main's \"names its outcome\" bullet, and the two are consistent.\nPOST-MERGE FIX (owned files, scope reason: the merge's integration):\n(1) giveBack, when the release is refused after the PUBLISH_NOT_LANDED receipt, used to return null. notLanded then fell to \"remote … is at …, expected …\", naming the wrong check although the receipt had already decided. It now answers UNKNOWN \"PUBLISH_EFFECT_RECONCILIATION_REQUIRED: PUBLISH_NOT_LANDED receipted, but the reservation release was refused: <code>\". The settled path shares it, which also drops its `?? unknown(...)`. node-publisher.ts is 247 lines.\n(2) The merge had weakened STUCK to a prefix regex. It is now STUCK(tip, pass), which pins each pass's exact named reason: the push pass names its transmission words, and the replay names \"no push this pass (an intent was already journaled)\". Arm 8 pins the refused-release reason. The test file is 245 lines.\nGATES, all at HEAD with these 2 edits:\n- (B) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=30000 src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/repository` gives \"Test Files 56 passed (56) / Tests 610 passed | 15 skipped (625)\", EXIT 0. --testTimeout=30000 is the package script's own value. The 5 owned test files alone give \"Test Files 5 passed (5) / Tests 45 passed (45)\" with 0 skipped. node-publisher-approved.test.ts is byte-identical to origin/main (0-line diff), so this row never changed it.\n- `pnpm typecheck`: \"Scope: 19 of 20\", 19x Done, 0 error TS, EXIT 0.\n- (C) The full `pnpm --filter @moe/daemon test` ran under a full-suite-gate lease, HEAD b38a6e5b before and after. It gives \"Test Files 1 failed | 762 passed (763) / Tests 1 failed | 12541 passed | 21 skipped (12563)\", EXIT 1. The only red is agent-wrapper-main.test.ts \"rejects a binary that pins the wrapper deps to /1 (positive control)\" at :402. Alone it is still red, \"Tests 1 failed | 51 passed (52)\". Its it.each anchor \"      deps,\\n      maxAgents: knobs.maxAgents,\" is absent from agent-wrapper-main.ts at HEAD AND at origin/main. Both files are byte-identical to origin/main (main's e6d5e260), and the test reads no owned path. So the delta, intersected with the owned paths, is EMPTY. I filed it as task-d6ada0821e0043dcaec8a4a265c40da0, and the governor had flagged it too.\nDRILLS, in memory: a vite load hook in %TEMP%/moe-task-78dea88b-worker-952c612b, re-run on the merged tree. D1 drop REJECTED: red, arms 3 and 4. D2 drop tip equality: red, arm 2. D3 drop the settled giveBack: red, arm 8. D4 drop the settled re-drive: red, arm 8. D5 INDETERMINATE counted as REJECTED: red, arm 4. D6 a refused release reported as REFUSED: red, arm 8 :191. D7 port numeric exit as UNKNOWN: red, port arms :38 and :58. D8 port null exit as REJECTED: red, :38. Each drill logged hits=1. CONTROL: 10/10 green, hits 0. sha256 before, after and in a separate call: node-publisher.ts a9b8e114…596e, git-publication-port.ts d9b38e9e…f8d2. Nothing was written.\n(D)/(E): the adversarial review and forward-only statement are in comment-93bfa0ad. Delivery location is in comment-1fdbbf78. Follow-ups (transport-race residual, pre-transmission refusals, main landing) are in comment-8cac2c04.",
+      "startedAt": "2026-09-18T19:59:11.261Z",
+      "completedAt": "2026-09-18T20:39:13.594Z"
     }
   ],
-  "planRevision": 14,
-  "status": "WORKING",
-  "assignedWorkerId": "worker-952c612b",
+  "planRevision": 15,
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -127,11 +134,29 @@
       "author": "worker-69773bc1",
       "content": "STANDING DOWN (worker-69773bc1). My session was relaunched on this row at 20:12:43Z. The governor's crash-release at 20:13:41Z was aimed at worker-6433dce1 but stripped my seat instead. worker-952c612b claimed the row at 20:13:47Z, and the row is theirs. I made NO edits and ran no gates. Here is what I measured at HEAD e55a4f88 on moe/work-2026-09-18, around 20:14Z, so you do not have to repeat it:\n1. `git status --porcelain` on the 10 owned paths plus node-publisher-approved.test.ts is EMPTY.\n2. `git diff 50d7a0a9 HEAD -- <the 10 owned paths>` is EMPTY. So the sweep commit 50d7a0a9 (labelled Moe-Task: task-8bc14883) carries the delivered bytes of steps 2-6 exactly as HEAD holds them. This row's task.commits has only e55a4f88, which touches .moe/* only. The completion commit will therefore carry no source bytes, and completionSummary must name 50d7a0a9 as the carrier.\n3. Step 7(A) is ALREADY DONE and IN 50d7a0a9. apps/daemon/CLAUDE.md:75-84 has the bullet \"The publisher pushes once, then only observes.\" It covers: REJECTED plus an unchanged tip gives a REFUSED PUBLISH_NOT_LANDED receipt and then a PUBLISH_NOT_TRANSMITTED release; why both halves are needed; succeeded/timed out/threw/lost goes to an operator; and a publish stuck before this rule has no evidence to resolve on. No edit is needed unless you want to reword it.\n4. 50d7a0a9 is an amend of a353c62a: the same parent 0cf56be3 and the same author date 16:03:29+0300, but committed at 23:06:32+0300. Its trailer says Moe-Paths: 7 while it carries 27 files. It was merged back as 20fa6949 at 23:06:40+0300.\nWhat remains is step 7 (B)-(E): the targeted vitest gate (use --testTimeout=30000 on this loaded host; the LIVE arm carries its own 600 s guard), then the full `pnpm --filter @moe/daemon test` plus `pnpm typecheck`, then the adversarial review, the FORWARD-ONLY statement and complete_task.",
       "timestamp": "2026-09-18T20:15:02.144Z"
+    },
+    {
+      "id": "comment-1fdbbf78d22842368640ce8a91414ae6",
+      "author": "worker-952c612b",
+      "content": "WHERE THE BYTES ARE (QA read first). This row's 10 owned paths were swept into a PEER checkpoint, 50d7a0a9 (`wip(task-8bc14883…) [status=DONE role=qa]`, Moe-Session qa-84420029), on moe/work-2026-09-18. task.commits lists only e55a4f88, which carries .moe/ board files, no source. Measured this session at HEAD 4ff4dfb2:\n- `git diff --name-status a353c62a 50d7a0a9 -- apps/daemon` lists exactly the 10 owned paths, all M: apps/daemon/CLAUDE.md; src/orchestrator/node-publisher.ts and its .test.ts; src/repository/git-publication-port.ts and its .test.ts; publication-effect-ledger.ts and its .test.ts; repository-execution-contracts.ts; repository-execution-port.ts and its .test.ts.\n- `git log -1 -- apps/daemon/src/orchestrator/node-publisher.ts` is 50d7a0a9, so nothing has touched these files since.\n- `git status --porcelain` on the 10 paths is EMPTY, so the delivered tree is HEAD.\n- `git diff a353c62a HEAD -- apps/daemon/src/orchestrator/node-publisher-approved.test.ts` is 0 lines: UNCHANGED, per DoD 2.\nWhole-row diff: `git diff a353c62a 50d7a0a9 -- <the 10 paths>`. 50d7a0a9 also carries foreign paths (control-room v2 tests, contracts runtime-vocabulary, generated-client). Those are NOT this row's, and I did not touch them.\nNo new .ts module was created, so no .js bridge is needed. Line counts: node-publisher.ts 145, publication-effect-ledger.ts 119, git-publication-port.ts 93, repository-execution-port.ts 112, node-publisher.test.ts 236. All are under 250.",
+      "timestamp": "2026-09-18T20:19:09.116Z"
+    },
+    {
+      "id": "comment-93bfa0ad648b46e7b1c9a976e38918f4",
+      "author": "worker-952c612b",
+      "content": "ADVERSARIAL REVIEW (step 7D). Line numbers are node-publisher.ts at HEAD.\n- HOOK FAILING AFTER THE REF MOVES. post-receive and post-update run after the update, and git ignores their exit, so the push is 0: ACCEPTED, never resolved. If git exits non-zero after the server moved the ref (e.g. the transport drops mid-report, exit 128, REJECTED), the observe at :108 reads the approved sha, so the success path gives PUSHED. If it reads a foreign tip, that differs from tipBefore, so UNKNOWN.\n- CONCURRENT PUSH. A peer pushes before ours: git refuses the non-fast-forward (exit 1, REJECTED) and the observe sees the peer's tip, not tipBefore, so UNKNOWN. That is conservative: the operator exit handles it. A peer pushes after ours landed: outcome ACCEPTED, so :63 answers null and it stays UNKNOWN.\n- FORCE-PUSH-BACK. ACCEPTED with the tip back at tipBefore: :63 requires REJECTED, so UNKNOWN (arm 3; drill D1 went red).\n- RESIDUAL, DISCLOSED, NOT BUILT: both anomalies at once. Git exits non-zero AFTER the server moved the ref, AND the tip reads exactly tipBefore when an observe succeeds. That needs a foreign reset to that exact sha, or a server that finishes the ref update only after our ls-remote. This reads as not-landed. The harm is bounded: auto-resolve never pushes. It records REFUSED and frees the hold. Any second transmission needs a fresh HUMAN repository.publish decision (createPublishRepository isHuman), and that push is a non-force push of the same sha. Upgrade path: count only `git push --porcelain` per-ref `!` lines with [rejected]/[remote rejected] (the server's own report proves no update), or require the unchanged tip on a LATER pass.\n- CRASH BETWEEN PUSH AND RECORD. No transmission record, so :63 `sent === null` keeps it UNKNOWN (the operator exit, task-21be6e90). A crash between the pre-push observe and the push behaves the same. The intent still forbids any later push.\n- REPLAYED INTENT AFTER RESTART. `fresh` is true only when this pass committed the intent (:94). A replay never reaches transmit (:107): it only observes and reads the record the pushing process wrote. The record key is deterministic per (project, goal, decision), and a second, different write throws PUBLISH_TRANSMISSION_CONFLICT, which the catch turns into UNKNOWN.\n- UNREADABLE PRE-PUSH TIP. The reader admits tipBefore only as null, \"UNREADABLE\" or a valid sha (ledger :101). notLanded rejects UNREADABLE BEFORE the equality test (:63). observe only yields validPublicationSha or null (port :87-89), so the marker cannot equal an observed tip even without the guard. Arm 6 pins this, and a malformed record reads null (13 tamperings).\n- SAME decisionId. The receipt is written under request.decisionId from the same readPublishLedger request the card iterates. `run-goal-publication.ts:12` then skips it. Arm 1 asserts readRunGoalPublication returns {REFUSED, PUBLISH_NOT_LANDED, decisionId}.\n- RELEASE EXACTLY ONCE. giveBack releases at the handle's revision, and a stale second release fails on revision. The receipt is written first. Releasing first could crash into a fresh RESERVED hold whose ownerDigest mismatches the intent: a permanent stall. If the release fails after the receipt, that pass is UNKNOWN. publishOnce re-drives a PUBLISH_NOT_LANDED receipt only while the hold is still publish:<decisionId> (:130-137). publish(request, settled) gives it back WITHOUT re-reading the remote (:106). Arm 8 pins this: 0 new observes, pushes still 1. Once released, the reservation is null and the decision is skipped (:135).\nFORWARD-ONLY (7E): a publish stuck before this row landed has no transmission record. It stays UNKNOWN until task-21be6e90's operator command exists.",
+      "timestamp": "2026-09-18T20:19:24.299Z"
+    },
+    {
+      "id": "comment-8cac2c04295e4be992e87ff256511efb",
+      "author": "worker-952c612b",
+      "content": "FOLLOW-UPS (per the DELIVERY BIAS rail: recorded here, not filed as rows).\n1. TRANSPORT-RACE RESIDUAL. This is the one sequence that can auto-resolve a push that landed: a non-zero exit after the server moved the ref, AND the tip reading exactly tipBefore. Hardening would count only `git push --porcelain` per-ref `!` [rejected]/[remote rejected] lines, or re-observe on a later pass. Its bound: a re-push always needs a fresh human repository.publish.\n2. PRE-TRANSMISSION REFUSALS STAY STUCK. The port's PUBLISH_REPOSITORY_CHANGED, PUBLISH_OBJECTS_UNREADABLE and PUBLISH_COMMIT_UNREADABLE, plus an `init --bare` failure (which surfaces as PUBLISH_PUSH_UNKNOWN), all return BEFORE `git push` runs. They still classify INDETERMINATE, so they remain UNKNOWN until the operator exit, even though nothing was transmitted. Treating them as not-transmitted evidence, still behind the tip-equality half, is a safe widening for a later row. It is outside this plan, which classifies from step 2's codes only.\n3. LANDING TO MAIN WILL CONFLICT. Measured now: origin/main 3630e0c1, merge-base 5b981dc7. `git diff --stat HEAD origin/main` shows node-publisher.ts 191 lines, git-publication-port.ts 68, node-publisher-reservation.ts 40 (main's fix10 pre-flight: WAITING, a diverged/unreadable-remote refusal, named UNKNOWN details). The ledger and reason halves (publication-effect-ledger.ts, repository-execution-*) differ only by this row's own hunks. Whoever lands this branch on main must resolve node-publisher.ts and git-publication-port.ts by hand. On main, the pre-flight observe already reads the remote before the intent, so the transmission record's tipBefore should reuse that read rather than add a second ls-remote.",
+      "timestamp": "2026-09-18T20:19:41.234Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:02:52.886Z",
-  "updatedAt": "2026-09-18T20:15:02.145Z",
+  "updatedAt": "2026-09-18T20:40:37.460Z",
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -141,7 +166,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T19:05:43.012Z",
@@ -149,7 +175,7 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
     "firstClaimAt": "2026-09-18T19:05:49.272Z",
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "planningNotes": {
     "codebaseInsights": "Filed by me this session as the lean first slice of task-21be6e90; the owner chose to land it FIRST, with task-21be6e90's operator command queued behind it (dependsOn set). Re-measured at HEAD 2026-09-18 — source reads unless marked.\n\n(1) THE STUCK PATH. apps/daemon/src/orchestrator/node-publisher.ts (100 lines): a fresh intent pushes inside `try { await config.git.push(candidate); } catch { /* reconcile below */ }` (:62-65), DISCARDING the port's return value; then `if (!observed.ok || observed.sha !== candidate.approval.sha) return unknown();` (:67). A refused push never reaches the approved sha, so it is UNKNOWN every pass. The only release from PUBLISHING is `\"PUBLISHED\"` (:74). Line anchors in the parent row's reopen reason (:98-101, :124) are STALE — the file is 100 lines.\n\n(2) THE DISTINCTION ALREADY EXISTS AND IS THROWN AWAY. apps/daemon/src/repository/git-publication-port.ts:19-21, the git runner: `code: error === null ? 0 : typeof error.code === \"number\" ? error.code : null`. So git that RAN and exited non-zero yields a NUMBER; a timeout, a kill or a spawn failure (error.code a string like ENOENT, or absent) yields NULL. `push` then collapses both into `publicationRefused(\"PUBLISH_PUSH_UNKNOWN\")` (:66-67), and a throw in the outer catch does the same. Splitting that one return is the whole enabling change.\n\n(3) THE REFUSAL CODE IS FREE-FORM, AND push HAS ONE CONSUMER. `export const publicationRefused = (code: string): PublicationRefusal => ...` (publication-approval-contracts.ts:21) takes a plain string: there is no closed code roster to update. `git grep -n \"git.push(\"` finds exactly ONE caller, node-publisher.ts:64 (the other `.push(` hits are Array.push).\n\n(4) THE RESERVATION MACHINE. `RepositoryExecutionReleaseReason` is a string union in apps/daemon/src/repository/repository-execution-contracts.ts:10. The port's release guard is a ternary chain at repository-execution-port.ts:101-105 mapping each reason to the ONE prior phase it may leave; a reason missing from the chain falls through to `false` — it fails CLOSED. `PUBLISHING: [\"PUBLISHING\", \"BLOCKED\"]` at :16 is the TRANSITION map (phase to phase); release is separate and keyed on reason.\n\n(5) THE CARD ALREADY UN-STICKS ON A RECEIPT — measured, because it looked like a gap. apps/daemon/src/http/run-goal-publication.ts decides UNKNOWN only for a request with NO receipt: `if (state.receipts.has(pending.decisionId)) continue;` precedes the intent check. The intent is append-only and survives, but once a REFUSED receipt exists for the SAME decisionId, that decision is skipped, and the card reports outcome REFUSED with the receipt's code instead of UNKNOWN — which re-enables Publish. So recording the receipt for the right decisionId is what frees the card; run-goal-publication.ts needs NO edit.\n\n(6) THE INTENT MUST NOT BE WIDENED. It is `moe-publication-intent/1` in apps/daemon/src/repository/publication-effect-ledger.ts (VERSION at :10, reader at :24). The pre-push tip and the push outcome go in a SEPARATE, ADDITIVE event on the intent's aggregate. Widening an exact-key-set durable record without a legacy path is the failure fixed three times on this board today.\n\n(7) THE PATH CAP. The event's TYPE is declared in publication-effect-ledger.ts beside its writer and reader, not in publication-effect-contracts.ts, to hold the row at exactly 10 files. node-publisher-approved.test.ts is deliberately NOT an owned path: DoD 2 requires its single-transmission arms to pass UNCHANGED."
@@ -206,27 +232,49 @@
       "treeId": "79a8f2e12f3cef33d8da8ab6d9a0d52ad61a4dc9",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "ea0075303b1d51df9a73f718ecec6f66424f9e15",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-18T20:12:44Z",
+      "paths": [
+        ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-18T20:21:28.430Z",
+      "treeId": "c8cbc740375c2955b442a83f418e34d15d493016",
+      "status": "WORKING",
+      "pushed": false
     }
   ],
   "filesModified": [
-    ".moe/project.json",
-    ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
-    ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
-    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
-    ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json",
-    ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
-    ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
-    ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json",
-    ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json",
-    ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json",
-    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
-    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+    "apps/daemon/src/repository/git-publication-port.ts",
+    "apps/daemon/src/repository/git-publication-port.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.test.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-port.test.ts",
+    "apps/daemon/src/orchestrator/node-publisher.ts",
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/CLAUDE.md"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-69773bc1@2026-09-18T20:12:44Z",
-    "at": "2026-09-18T20:12:48.804Z"
-  }
+    "at": "2026-09-18T20:21:28.430Z"
+  },
+  "reviewStartedAt": "2026-09-18T20:40:37.458Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=30000 src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/repository",
+    "exitCode": 0,
+    "outputTail": "HEAD=b38a6e5b 2026-09-18T20:39:28Z (+2 owned edits: node-publisher.ts, node-publisher.test.ts)\n Test Files  56 passed (56)\n      Tests  610 passed | 15 skipped (625)\n   Duration  22.98s\nEXIT=0\npnpm typecheck: Scope: 19 of 20 workspace projects, 19x typecheck: Done, 0 error TS, EXIT=0\nFull `pnpm --filter @moe/daemon test` (leased, HEAD b38a6e5b stable): Test Files 1 failed | 762 passed (763), Tests 1 failed | 12541 passed | 21 skipped (12563). Only red: agent-wrapper-main.test.ts 'wrapper deps /1 positive control'. Its anchor is absent in origin/main too, and neither file touches an owned path, so it is inherited; filed task-d6ada082.",
+    "reportedAt": "2026-09-18T20:40:37.458Z",
+    "source": "agent-reported"
+  },
+  "completionSummary": "A publish whose push git REJECTED (a numeric non-zero exit) and whose remote tip still equals the tip read just before the push is now resolved automatically. The publisher records a REFUSED PUBLISH_NOT_LANDED receipt under the same decisionId, whose detail names both tips, then releases the hold as PUBLISH_NOT_TRANSMITTED (legal only from PUBLISHING). The card un-sticks, and a fresh human decision can push again. A push that succeeded, threw, timed out or lost its answer, or followed an unreadable pre-push tip, stays UNKNOWN. So does a crash between push and record. The evidence is a separate moe-publication-transmission/1 event; moe-publication-intent/1 is unchanged.\nFORWARD-ONLY: a publish stuck before this row has no transmission record and stays UNKNOWN until task-21be6e90's operator command lands.\nWHERE THE BYTES ARE:\n- Steps 2-6 and the CLAUDE.md bullet were swept into peer checkpoint 50d7a0a9. Row comment comment-1fdbbf78 lists the paths.\n- The governor's origin/main merge f7d014d6 wove in main's pre-flight and named UNKNOWN reasons.\n- This session made 2 owned edits, which ride in the completion commit:\n  - giveBack now names a release refused after the receipt (\"PUBLISH_NOT_LANDED receipted, but the reservation release was refused: <code>\"). Before, it named a remote mismatch.\n  - The STUCK arms pin each pass's exact reason. The merge had loosened them to a prefix regex.\nGATES (HEAD b38a6e5b):\n- Scoped run: Test Files 56 passed (56), 610 passed.\n- typecheck: 19/19, 0 errors.\n- Full daemon suite: 762/763 files. The one red is inherited from main; filed as task-d6ada082.\n- node-publisher-approved.test.ts is byte-identical to origin/main.\n- 8 in-memory mutation drills went red at their intended arms, and the control stayed green. sha256 is unchanged.\nREVIEW: comment-93bfa0ad covers the hook-after-move, concurrent-push, force-back, crash and replay cases, UNREADABLE handling, the same decisionId, and release-once. One residual is disclosed: git exits non-zero "
 }

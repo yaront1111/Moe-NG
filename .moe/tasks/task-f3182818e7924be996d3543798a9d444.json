@@ -70,7 +70,7 @@
     }
   ],
   "planRevision": 9,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -90,12 +90,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:10:28.284Z",
-  "updatedAt": "2026-09-18T20:27:38.120Z",
+  "updatedAt": "2026-09-18T20:40:45.928Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T19:22:29.745Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-18T20:40:45.928Z",
+    "wallClockMs": 4696183
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -114,7 +116,8 @@
   "planApprovedAt": "2026-09-18T19:27:21.913Z",
   "contextFetchedBy": [
     "worker-e0435164",
-    "worker-07e6de2a"
+    "worker-07e6de2a",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-18T19:28:28.702Z",
   "priorHandoffs": [
@@ -142,6 +145,21 @@
       "treeId": "7ae219556aa1b522930c5bd8637a91de6d27adea",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "b38a6e5b2e8f5dc5d83bbcc70b4101b4c1d9e837",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-18T20:13:50Z",
+      "paths": [
+        ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-18T20:27:45.392Z",
+      "treeId": "665057499d6e0e9943e52c07050a2924a132b299",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -151,14 +169,15 @@
     "packages/control-room-client/src/generated-coverage.test.ts",
     "apps/control-room/src/v2/goals/approve-plan.test.tsx",
     "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
-    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx"
+    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-07e6de2a@2026-09-18T20:13:50Z",
-    "at": "2026-09-18T20:13:54.470Z"
+    "at": "2026-09-18T20:27:45.392Z"
   },
   "declaredFiles": [
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
@@ -177,5 +196,8 @@
     "reportedAt": "2026-09-18T20:27:38.119Z",
     "source": "agent-reported"
   },
-  "completionSummary": "ROW 1 roster+mirrors: repository.publish_resolve joined RUNTIME_COMMAND_KINDS between repository.publish and repository.recover (vocab:116); neighbour pin :189-192; size pin 122. Client regenerated (not hand-edited). Digest cbe06719…e5708 → 10d93d2d9117b749658bff66f366cd2ecaa3f0fb6b30f0f59cd6734a636d4ce9.\n\nCENSUS (`git grep -ln` new digest, exit 0): approve-plan-reject.test.tsx, approve-plan.test.tsx, plan-run-resolution.test.tsx, generated-coverage.test.ts, generated-client.ts. Old digest: empty, exit 1.\n\nGATES: contracts Test Files 18 passed (18)/Tests 540 passed (540); control-room-client 10 passed (10)/96 passed (96); owned CR mirrors 3 passed (3)/39 passed (39); typecheck 19/20 projects Done exit 0; roster-coherence+human-only-fence 2 passed (2)/13 passed (13).\nFOREIGN disclosed: full @moe/control-room test 1 failed (work-labels.test.ts:244; branch lacks origin/main afe5683f); full @moe/daemon test Test Files 55 failed | 690 passed (745)/Tests 102 failed | 11474 passed. Owned-path intersection EMPTY. No daemon dispatch. human-only-fence green; classification is row 3 task-2c3f878b.\nBytes carrier: 50d7a0a9 (mislabelled sibling checkpoint) + this row’s declared 7 paths."
+  "completionSummary": "ROW 1 roster+mirrors: repository.publish_resolve joined RUNTIME_COMMAND_KINDS between repository.publish and repository.recover (vocab:116); neighbour pin :189-192; size pin 122. Client regenerated (not hand-edited). Digest cbe06719…e5708 → 10d93d2d9117b749658bff66f366cd2ecaa3f0fb6b30f0f59cd6734a636d4ce9.\n\nCENSUS (`git grep -ln` new digest, exit 0): approve-plan-reject.test.tsx, approve-plan.test.tsx, plan-run-resolution.test.tsx, generated-coverage.test.ts, generated-client.ts. Old digest: empty, exit 1.\n\nGATES: contracts Test Files 18 passed (18)/Tests 540 passed (540); control-room-client 10 passed (10)/96 passed (96); owned CR mirrors 3 passed (3)/39 passed (39); typecheck 19/20 projects Done exit 0; roster-coherence+human-only-fence 2 passed (2)/13 passed (13).\nFOREIGN disclosed: full @moe/control-room test 1 failed (work-labels.test.ts:244; branch lacks origin/main afe5683f); full @moe/daemon test Test Files 55 failed | 690 passed (745)/Tests 102 failed | 11474 passed. Owned-path intersection EMPTY. No daemon dispatch. human-only-fence green; classification is row 3 task-2c3f878b.\nBytes carrier: 50d7a0a9 (mislabelled sibling checkpoint) + this row’s declared 7 paths.",
+  "completedAt": "2026-09-18T20:40:45.928Z",
+  "reviewCompletedAt": "2026-09-18T20:40:45.928Z",
+  "reviewSummary": "APPROVED at HEAD b38a6e5b (moe/work-2026-09-18, pushed). Commits b38a6e5b/4ff4dfb2 carry only task JSON; the 7 owned paths ride in 50d7a0a9 (amend-sweep labelled task-8bc14883), on branch+origin; `git diff 50d7a0a9 HEAD -- <7 paths>` empty, owned paths clean. Diff: vocab:116 one-token insert at sorted slot; roster+size pin 121->122+neighbour pin :189-192; client +2 builder lines+digest; 4 mirror literals+GENERATED_FILE_SHA256.\nDoD1: emitGeneratedClient() into %TEMP% -> sha256 1a4ea12c..5222 == committed file == HEAD blob (regenerated, not hand-edited). OLD cbe06719.. full-tree git grep (HEAD tree, --untracked worktree, 8-char prefix): 0 hits exit 1. NEW 10d93d2d..4ce9: 5 files (approve-plan-reject/approve-plan/plan-run-resolution .test.tsx, generated-coverage.test.ts, generated-client.ts) = completion census.\nDoD3: @moe/control-room Test Files 195 passed (195)/Tests 2584 passed (2584) exit 0 (worker's foreign work-labels red gone: afe5683f now in HEAD); mirrors alone 3/39.\nDoD4: @moe/contracts 18 passed (18)/540 (= task.verification); @moe/control-room-client 10 passed (10)/96. git grep publish_resolve = 3 owned files only: no PAYLOAD_KEYS/registry/refusal/fence. Unwired kind fails closed (http-command-ingress.ts:155-156 REGISTRY refusal); daemon MCP passes wiredMcpToolKinds() (PAYLOAD_KEYS-derived) so agents never see it.\nDoD5: pnpm typecheck Scope 19 of 20, all Done, exit 0.\nRegression (full-suite-gate held by worker-952c612b -> scoped superset): 105 daemon roster/digest/vocab/MCP consumers incl gates-roster-coherence+human-only-fence 105 passed/2436; +5 daemon MCP files 5/37; root-lane consumers 35/900; packages/mcp 15/263; security transport-boundaries 1/119, tsc exit 0.\nDrills (in-memory transform, no disk writes): M1 kind removed -> :190 'expected -1 to be greater than -1' + :110 (reproduces recorded RED); M2 misplaced -> :110+:152. Non-blocking: generic sort check :143-152 fires before the neighbour pin, so 'only this pin' overstates (pre-existing idiom)."
 }

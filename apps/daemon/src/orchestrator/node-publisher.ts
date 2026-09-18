@@ -99,10 +99,12 @@ export function createNodePublisher(config: NodePublisherConfig) {
       tipBefore, outcome, transmittedAt: clock() });
     return transmission;
   };
-  /** Gives a PUBLISHING hold back once its PUBLISH_NOT_LANDED receipt exists, so a fresh decision can push again. */
-  const giveBack = (goalId: string, workspace: string, handle: RepositoryExecutionHandle, detail: string): PublishReport | null =>
-    config.repository.release(workspace, handle.owner, handle.reservation.revision, "PUBLISH_NOT_TRANSMITTED", config.controller.controllerId).ok
-      ? report(goalId, "REFUSED", `${PUBLISH_NOT_LANDED}: ${detail}`) : null;
+  /** Gives a PUBLISHING hold back once its PUBLISH_NOT_LANDED receipt exists; a refused release is named, and the next pass re-drives it. */
+  const giveBack = (goalId: string, workspace: string, handle: RepositoryExecutionHandle, detail: string): PublishReport => {
+    const released = config.repository.release(workspace, handle.owner, handle.reservation.revision, "PUBLISH_NOT_TRANSMITTED", config.controller.controllerId);
+    return released.ok ? report(goalId, "REFUSED", `${PUBLISH_NOT_LANDED}: ${detail}`) : report(goalId, "UNKNOWN",
+      `${PUBLISH_EFFECT_RECONCILIATION_REQUIRED}: ${PUBLISH_NOT_LANDED} receipted, but the reservation release was refused: ${released.code}`);
+  };
   // BOTH CONDITIONS, NEVER ONE, each read from the evidence journaled beside the intent:
   // (1) git REFUSED the push. Alone it is not enough: git can exit non-zero after the remote ref already moved.
   // (2) the remote tip still equals the tip read before the push. Alone it is not enough: a push that landed and
@@ -197,7 +199,7 @@ export function createNodePublisher(config: NodePublisherConfig) {
       }
       if (handle.reservation.phase !== "PUBLISHING") return unknown(`reservation phase ${handle.reservation.phase}, expected PUBLISHING`);
       // A crash or a refused release after the receipt left only the hold to give back: the receipt is the decision.
-      if (settled !== null) return giveBack(goalId, config.workspace, handle, settled) ?? unknown(`${PUBLISH_NOT_LANDED} receipted, but the reservation release was refused`);
+      if (settled !== null) return giveBack(goalId, config.workspace, handle, settled);
       const transmission = fresh ? await transmit(request, candidate) : "no push this pass (an intent was already journaled)";
       const observed = await config.git.observe(candidate);
       if (!observed.ok) return unknown(`remote unreadable ${observed.code}: ${observed.detail}; ${transmission}`);

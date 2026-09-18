@@ -63,7 +63,11 @@ const candidate: PublicationCandidate = { approval, identity };
 const BEFORE = "b".repeat(40); const FOREIGN = "c".repeat(40); const NOW = "2026-09-18T12:00:00.000Z";
 const CONTROLLER = { controllerId: "controller-1", controllerPid: 1234 };
 const REJECTED = { ok: false, code: "PUBLISH_PUSH_REJECTED", detail: "PUBLISH_PUSH_REJECTED" } as const;
-const STUCK = [{ goalId: GOAL, outcome: "UNKNOWN", detail: expect.stringMatching(/^PUBLISH_EFFECT_RECONCILIATION_REQUIRED: /u) }];
+const REPLAY = "no push this pass (an intent was already journaled)";
+/** The UNKNOWN of a pass whose remote is not at the approved sha: it names the tip it read and what the pass sent. */
+const STUCK = (tip: string | null, pass: string) => [{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: "
+  + `remote ${approval.branch} is at ${tip === null ? "absent" : tip.slice(0, 10)}, expected ${approval.sha.slice(0, 10)}; ${pass}` }];
+const PUSH_REJECTED = "push refused PUBLISH_PUSH_REJECTED: PUBLISH_PUSH_REJECTED";
 const NOT_LANDED = (sha: string, branch: string, before: string, after: string) =>
   `git refused the push of ${sha} to ${branch}; the remote tip was ${before} before the push and is ${after} after it`;
 const sent = (decisionId: string, tipBefore: string | null, outcome: PublicationTransmission["outcome"]): PublicationTransmission =>
@@ -125,10 +129,10 @@ function evidenceWorld(onPush: Remote["onPush"]) {
     receipt: () => readPublishLedger(store, PROJECT_ID).get(GOAL)?.receipts.get(decisionId),
     evidence: () => readPublicationTransmission(store, PROJECT_ID, GOAL, decisionId) };
 }
-/** Stays UNKNOWN on the push pass AND on a replay, with the hold still PUBLISHING, no receipt, no release and no second push. */
-async function expectStuck(w: ReturnType<typeof evidenceWorld>, evidence: PublicationTransmission | null, pushes: number) {
-  for (let pass = 0; pass < 2; pass += 1) {
-    expect(await w.publisher.publishOnce()).toEqual(STUCK);
+/** Stays UNKNOWN on the push pass AND on a replay, each naming its check, with the hold still PUBLISHING, no receipt, no release and no second push. */
+async function expectStuck(w: ReturnType<typeof evidenceWorld>, evidence: PublicationTransmission | null, pushes: number, firstPass: string) {
+  for (const pass of [firstPass, REPLAY]) {
+    expect(await w.publisher.publishOnce()).toEqual(STUCK(w.remote.tip, pass));
     expect(w.receipt()).toBeUndefined(); expect(w.repository.phase()).toBe("PUBLISHING"); expect(w.repository.releases).toEqual([]);
     expect(w.card()).toMatchObject({ outcome: "UNKNOWN", code: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED", decisionId: w.decisionId });
     expect(w.evidence()).toEqual(evidence); expect(w.remote.pushes).toBe(pushes);
@@ -154,17 +158,17 @@ describe("a publish whose push provably did not land (both conditions, never one
   });
   it("keeps a refused push UNKNOWN when the remote tip MOVED while it ran", async () => {
     const w = evidenceWorld((remote) => { remote.tip = FOREIGN; return REJECTED; });
-    await expectStuck(w, sent(w.decisionId, BEFORE, "REJECTED"), 1);
+    await expectStuck(w, sent(w.decisionId, BEFORE, "REJECTED"), 1, PUSH_REJECTED);
   });
   it("keeps a SUCCESSFUL push UNKNOWN when the tip is back at its pre-push value (landed, then force-pushed back)", async () => {
     // The remote accepted the push and someone reset the branch to BEFORE before the post-push observe.
     const w = evidenceWorld(() => ({ ok: true }));
-    await expectStuck(w, sent(w.decisionId, BEFORE, "ACCEPTED"), 1);
+    await expectStuck(w, sent(w.decisionId, BEFORE, "ACCEPTED"), 1, "push exited 0");
   });
   it("keeps an INDETERMINATE push UNKNOWN: a throw, or a push that never answered", async () => {
-    const answers: Remote["onPush"][] = [() => { throw new Error("lost effect response"); },
-      () => ({ ok: false, code: "PUBLISH_PUSH_UNKNOWN", detail: "PUBLISH_PUSH_UNKNOWN" })];
-    for (const onPush of answers) { const w = evidenceWorld(onPush); await expectStuck(w, sent(w.decisionId, BEFORE, "INDETERMINATE"), 1); }
+    const answers: [Remote["onPush"], string][] = [[() => { throw new Error("lost effect response"); }, "push threw: lost effect response"],
+      [() => ({ ok: false, code: "PUBLISH_PUSH_UNKNOWN", detail: "PUBLISH_PUSH_UNKNOWN" }), "push refused PUBLISH_PUSH_UNKNOWN: PUBLISH_PUSH_UNKNOWN"]];
+    for (const [onPush, words] of answers) { const w = evidenceWorld(onPush); await expectStuck(w, sent(w.decisionId, BEFORE, "INDETERMINATE"), 1, words); }
     expect(answers).toHaveLength(2);
   });
   it("keeps an intent from before this rule UNKNOWN: it has no transmission record and is never pushed again", async () => {
@@ -175,15 +179,17 @@ describe("a publish whose push provably did not land (both conditions, never one
       .toMatchObject({ ok: true });
     recordPublicationIntent(w.store, { version: "moe-publication-intent/1", candidate, decisionId: w.decisionId, goalId: GOAL, projectId: PROJECT_ID,
       ownerDigest: publicationOwnerDigest(owner), reservationRevision: 1, controllerId: CONTROLLER.controllerId, intendedAt: NOW });
-    await expectStuck(w, null, 0);
+    await expectStuck(w, null, 0, REPLAY);
   });
   it("keeps a refused push UNKNOWN when the pre-push tip was UNREADABLE, even though the post-push tip reads unchanged", async () => {
     const w = evidenceWorld(() => REJECTED); w.remote.unreadableFirst = true;
-    await expectStuck(w, sent(w.decisionId, "UNREADABLE", "REJECTED"), 1);
+    await expectStuck(w, sent(w.decisionId, "UNREADABLE", "REJECTED"), 1, PUSH_REJECTED);
   });
   it("finishes a release refused after the PUBLISH_NOT_LANDED receipt: the receipt is the decision, even once the tip moves", async () => {
     const w = evidenceWorld(() => REJECTED); w.repository.refuseNextRelease();
-    expect(await w.publisher.publishOnce()).toEqual(STUCK);
+    // The UNKNOWN names the refused release, not the remote: the receipt already decided this publish.
+    expect(await w.publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: "
+      + "PUBLISH_NOT_LANDED receipted, but the reservation release was refused: REPOSITORY_EXECUTION_REVISION_CONFLICT" }]);
     expect(w.receipt()).toMatchObject({ outcome: "REFUSED", refusal: { code: "PUBLISH_NOT_LANDED" } });
     expect(w.repository.phase()).toBe("PUBLISHING"); expect(w.repository.releases).toEqual([]);
     w.remote.tip = FOREIGN; const observes = w.remote.observes;
