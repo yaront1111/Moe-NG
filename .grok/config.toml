@@ -2,9 +2,15 @@
 
 [mcp_servers.moe]
 command = "node"
-args = ["scripts/mcp-moe.mjs"]
+args = ["C:/Users/Yaron/AppData/Roaming/JetBrains/PyCharm2026.1/plugins/moe-jetbrains/proxy/index.js"]
 startup_timeout_sec = 120
+tool_timeout_sec = 120
+tool_timeouts = { moe_wait_for_task = 720, moe_chat_wait = 720, moe_wait_for_resource = 720 }
 
+[mcp_servers.moe.env]
+MOE_PROJECT_PATH = "D:/projexts/moe-next"
+MOE_WORKER_ID = "${MOE_WORKER_ID:-}"
+MOE_TOOL_NAME_STYLE = "underscore"
 [mcp_servers.serena]
-command = "node"
-args = ["scripts/mcp-serena.mjs", "agent"]
+command = "C:/Users/Yaron/.local/bin/serena.exe"
+args = ["start-mcp-server", "--context", "agent", "--project", "D:/projexts/moe-next", "--enable-web-dashboard", "false", "--enable-gui-log-window", "false"]
