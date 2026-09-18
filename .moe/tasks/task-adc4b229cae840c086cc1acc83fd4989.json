@@ -176,7 +176,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:18:13.296Z",
-  "updatedAt": "2026-09-18T05:41:40.657Z",
+  "updatedAt": "2026-09-18T05:42:09.567Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:21:54.554Z",
     "plannedStepCount": 6,
@@ -241,11 +241,40 @@
     "apps/control-room/src/live/live-sessions.test.ts",
     "apps/daemon/src/http/sessions-read.test.ts",
     "apps/daemon/src/orchestrator/seat-start-ledger.test.ts",
-    "apps/daemon/src/orchestrator/seat-start-recorder.test.ts"
+    "apps/daemon/src/orchestrator/seat-start-recorder.test.ts",
+    ".moe/tasks/task-14a2f0e4221e4def9153a2082a9385bf.json",
+    ".moe/tasks/task-adc4b229cae840c086cc1acc83fd4989.json",
+    ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
   ],
   "completionSummary": "/sessions/read now carries TWO per-seat members and the browser decodes them in the SAME COMMIT: `providerAtStart` and `agentVersionAtStart` on `SessionView`.\n\nTHE SETTLED DECISION AND ITS MEASUREMENT. A seat-START record, written by the WRAPPER at spawn, on `recordSeatExit`'s pattern - NOT a read-time probe and NOT a widened `session.open`. Measured: `SEAT_EXIT_COMMAND_KIND = \"internal.wrapper.seat_exit\"` has ZERO hits in daemon-command-vocabulary.ts, so it is a daemon-internal ledger kind committing straight through `store.commitExpectedVersionDecision` under `AGENT_WRAPPER_PRINCIPAL_ID`. Durability therefore cost NO roster work - no PAYLOAD_KEYS entry, no registry entry, no MCP fence, no contracts roster, no generated client - and widening `session.open`'s exact-arity payload was never required. The read-time probe was rejected because the daemon and the wrapper are SEPARATE PROCESSES: a daemon-side `claude --version` measures the DAEMON's PATH and would publish it as the seat's, the exact dishonesty `configuredAgentLimit`'s docblock exists to prevent, and it would spawn a child on every Seats poll.\n\nWHAT EACH NAME CLAIMS, AND WHO MEASURED IT WHEN. Both end in `AtStart` because they are a THIRD kind of fact: not `activeSeats` (\"IS measured\" by this read) and not `configuredAgentLimit` (\"CONFIGURED, never observed\"), but MEASURED-BUT-SECOND-HAND - the WRAPPER measured them, in its own process, at the instant it spawned this seat's child, and the daemon is quoting that note. A bare `provider`/`agentVersion` would claim a present-tense observation the daemon cannot perform. The docblock states it and a test PINS the declaration (`declared` contains `providerAtStart`/`agentVersionAtStart` and NOT `provider`/`agentVersion`), because a name is not something a value assertion can check.\n\nONE STATED UNKNOWN, `\"UNKNOWN\"` (`SEAT_FACT_UNMEASURED`), never \"\" and never a default. FOUR causes collapse to it: no record (every session opened before this ledger, and every paired ",
   "planRevision": 0,
   "completedAt": "2026-09-18T05:40:59.326Z",
   "reviewCompletedAt": "2026-09-18T05:40:59.326Z",
-  "reviewSummary": "APPROVED. Delivered bytes = completion commit c4c6faa6 (Moe-Task trailer; task.commits absent, found via git log --grep). Owned paths byte-identical in main squash 04b01548 (#30).\n\nGates re-run in a clean detached worktree at c4c6faa6, each foreground:\n- `pnpm --filter @moe/control-room test`: EXIT 0, Test Files 190 passed (190), Tests 2420 passed (2420). Matches the recorded verification.\n- `pnpm --filter @moe/daemon test`: EXIT 0, Test Files 576 passed (576), Tests 10353 passed | 7 skipped. The worker's 577 included a peer file absent from the commit.\n- `pnpm typecheck`: EXIT 0, 19/19.\n\nDoD:\n1. `providerAtStart` and `agentVersionAtStart` are on SessionView, docblocked MEASURED-BUT-SECOND-HAND, and the names are pinned by a source-text arm.\n2. Durable seat-start record (internal kind, no registry). The test writes with one SqliteEventStore and reads with another through the default reader.\n3. `SESSION_KEYS` exact-key decode with nonEmptyString guards. Arms assert {SESSIONS_RESPONSE_INVALID, CONTROL_ROOM_LIVE_SESSIONS} on extra, dropped and wrong-typed keys.\n4. The UNKNOWN token is asserted exactly.\n5. Drills reproduced; restores proved by SHA256 in a separate call:\n   - (i) decoder reverted: 6 failed | 12 passed, same lines as recorded.\n   - Daemon-only 10th member: the per-seat pin reds.\n   - (iii) truthiness guard: 2 red.\n\nPost-delivery defects, fixed on main by 0c21791f (on HEAD and main):\n- The probe inherited the wrapper env, including MOE_DAEMON_CREDENTIAL; its output was never published.\n- On win32 the probe timeout orphaned a grandchild.\n\nThe probe also caused an e2e red; the fix (6dbdbe69, task-df64aa20) is on main. At HEAD c89fa4fc the owned tests pass: daemon 57/57, decoder 24/24. File sizes are under 400. Detail is in comment-ddf53dce."
+  "reviewSummary": "APPROVED. Delivered bytes = completion commit c4c6faa6 (Moe-Task trailer; task.commits absent, found via git log --grep). Owned paths byte-identical in main squash 04b01548 (#30).\n\nGates re-run in a clean detached worktree at c4c6faa6, each foreground:\n- `pnpm --filter @moe/control-room test`: EXIT 0, Test Files 190 passed (190), Tests 2420 passed (2420). Matches the recorded verification.\n- `pnpm --filter @moe/daemon test`: EXIT 0, Test Files 576 passed (576), Tests 10353 passed | 7 skipped. The worker's 577 included a peer file absent from the commit.\n- `pnpm typecheck`: EXIT 0, 19/19.\n\nDoD:\n1. `providerAtStart` and `agentVersionAtStart` are on SessionView, docblocked MEASURED-BUT-SECOND-HAND, and the names are pinned by a source-text arm.\n2. Durable seat-start record (internal kind, no registry). The test writes with one SqliteEventStore and reads with another through the default reader.\n3. `SESSION_KEYS` exact-key decode with nonEmptyString guards. Arms assert {SESSIONS_RESPONSE_INVALID, CONTROL_ROOM_LIVE_SESSIONS} on extra, dropped and wrong-typed keys.\n4. The UNKNOWN token is asserted exactly.\n5. Drills reproduced; restores proved by SHA256 in a separate call:\n   - (i) decoder reverted: 6 failed | 12 passed, same lines as recorded.\n   - Daemon-only 10th member: the per-seat pin reds.\n   - (iii) truthiness guard: 2 red.\n\nPost-delivery defects, fixed on main by 0c21791f (on HEAD and main):\n- The probe inherited the wrapper env, including MOE_DAEMON_CREDENTIAL; its output was never published.\n- On win32 the probe timeout orphaned a grandchild.\n\nThe probe also caused an e2e red; the fix (6dbdbe69, task-df64aa20) is on main. At HEAD c89fa4fc the owned tests pass: daemon 57/57, decoder 24/24. File sizes are under 400. Detail is in comment-ddf53dce.",
+  "commits": [
+    {
+      "sha": "e65e12119da39d1d68f0838e044d02e43e622dfb",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T05:32:59Z",
+      "paths": [
+        ".moe/tasks/task-14a2f0e4221e4def9153a2082a9385bf.json",
+        ".moe/tasks/task-adc4b229cae840c086cc1acc83fd4989.json",
+        ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T05:42:09.567Z",
+      "treeId": "11772f3409124928cac75a0a5b478b0a62d5da14",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T05:32:59Z",
+    "at": "2026-09-18T05:42:09.567Z"
+  }
 }

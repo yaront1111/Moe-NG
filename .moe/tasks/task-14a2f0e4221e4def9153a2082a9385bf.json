@@ -180,7 +180,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T20:05:26.229Z",
-  "updatedAt": "2026-09-18T05:49:09.491Z",
+  "updatedAt": "2026-09-18T05:49:44.267Z",
   "metrics": {
     "firstClaimAt": "2026-09-17T20:39:59.929Z",
     "plannedStepCount": 8,
@@ -346,6 +346,21 @@
       "treeId": "6268127ce5d008e59be872eb9e45b982d805b973",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "e758aa1970d7ba97b50efcaeb948c6ec6db4d0a3",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T05:42:40Z",
+      "paths": [
+        ".moe/tasks/task-14a2f0e4221e4def9153a2082a9385bf.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T05:49:44.266Z",
+      "treeId": "261ef56b9bc4075d79ffdd2e3d659b0dad134409",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -360,9 +375,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6433dce1@2026-09-18T05:16:03Z",
-    "at": "2026-09-18T05:39:41.328Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T05:42:40Z",
+    "at": "2026-09-18T05:49:44.266Z"
   },
   "completedAt": "2026-09-18T05:49:09.491Z",
   "reviewSummary": "REOPEN 1 VERIFIED (qa-84420029). Full evidence is in comment-8b69dad1; the round-1 evidence in comment-67ebaf28 still holds.\n\nCOMMITS: completion f616c0be. origin/main tip 0dcf6ba9 (fast-forward from 0fc403f8, Moe-Task trailer). `git diff --stat origin/main f616c0be -- <18 owned paths>` is EMPTY, so DoD 5 holds.\n\nGATE re-run at HEAD e65e1211:\n- daemon src/cli + roundtrip + allowlist: 12 files / 166 passed.\n- pack-docs.test.ts: 5 passed | 2 skipped.\n- tools/packaging + release census: 13 files pass. The 2 reds are peer CLAUDE.md v0.1 lines (b51935a7) and README.md. The worker's own moe-cli-mcp.test.ts census red is gone.\n\nPIN DRILLS, in memory. pack-docs.ts sha is unchanged; the control run is green.\n- command \"moe\": red at :211.\n- MOE_CMD entry moved: red at :213, so the entry is derived.\n- relative project path: red at :217.\n- relative entry: red at :217.\n- the whole pre-fix 0fc403f8 blob: red at :211.\n\nLIVE, recipe as written (DoD 4). Taken from the real installDoc() output; only the placeholders were substituted. The project path had a space, PATH had no repo entry, and the client ran from a foreign cwd.\n- SDK stdio client: CONNECTED, 43 tools, goal_create_with_source present, goal_close absent.\n- Plain spawn with shell:false: exit 0, 2 stdout lines, both JSON-RPC.\n- The credential appeared in no stream.\n\nFOREIGN, not this row's: at HEAD, plain-Node `moe mcp` from the repo exits 1 with a coded MOE_CLI_MCP_UNAVAILABLE. The cause is 20896d47, which imports agent-spawn-contract.ts:79 (a parameter property). The live runs served the 20896d47^ blob through an in-memory load hook."

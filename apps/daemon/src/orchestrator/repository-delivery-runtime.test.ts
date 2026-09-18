@@ -10,6 +10,7 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import { calibration, envelope, escalationPayload, finding, packageItems, policyInput, seedVerifierReceipt, send, submitPayload } from "../review/review-test-fixtures.js";
 import * as gitLandingPort from "../repository/git-landing-port.js";
 import { readLandingReceipt, readLatestLandingBaseline } from "../repository/landing-ledger.js";
+import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import { landedWithNoEffect, landingAggregateId, landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger, readReviewLedgers } from "../review/review-read-model.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
@@ -170,12 +171,17 @@ describe("production repository delivery composition", () => {
   }, 120_000);
 
   /** Commit a tracked `.moe-next/start.ps1` under the operator's identity, then dirty it — the
-   *  exact live repro measured 2026-09-17, where an operator edit wedged every node. */
-  const dirtyTrackedMetadata = (f: ReturnType<typeof fixture>): void => {
+   *  exact live repro measured 2026-09-17, where an operator edit wedged every node. The exclusions
+   *  are the ones every hosted project carries (`/.moe/`, `/.moe-next/` in info/exclude), written by
+   *  the production writer the host runs before each start: under them `git add` of the tracked file
+   *  exits 1, which is how the first cut of the self-heal failed live while this fixture stayed green. */
+  const dirtyTrackedMetadata = async (f: ReturnType<typeof fixture>): Promise<void> => {
     mkdirSync(join(f.workspace, ".moe-next"));
     writeFileSync(join(f.workspace, ".moe-next", "start.ps1"), "# tracked original\n");
     git(f.workspace, "add", "--", ".moe-next/start.ps1");
     git(f.workspace, "-c", "user.name=Operator", "-c", "user.email=operator@example.test", "commit", "--quiet", "-m", "legacy launcher");
+    expect(await prepareRuntimeMetadataExcludes({ configPath: join(f.workspace, "moe.config.json"),
+      projectRoot: f.workspace, storePath: join(f.workspace, "store.sqlite") })).toEqual({ ok: true });
     writeFileSync(join(f.workspace, ".moe-next", "start.ps1"), "# existing operator edit\n");
   };
 
@@ -190,7 +196,7 @@ describe("production repository delivery composition", () => {
   // product dirt is still never written, including when it sits beside metadata dirt.
   it("checkpoints tracked runtime metadata dirt and proceeds to staff the node", async () => {
     const f = fixture();
-    dirtyTrackedMetadata(f);
+    await dirtyTrackedMetadata(f);
     const head = git(f.workspace, "rev-parse", "HEAD");
     let starts = 0;
 
@@ -211,7 +217,7 @@ describe("production repository delivery composition", () => {
 
   it("refuses a dirty product path that sits beside checkpointed metadata, leaving it dirty", async () => {
     const f = fixture();
-    dirtyTrackedMetadata(f);
+    await dirtyTrackedMetadata(f);
     // Tracked PRODUCT dirt in the same tree. The case a naive fix gets wrong: it must checkpoint
     // the metadata and still refuse, rather than sweeping the operator's real work in with it.
     writeFileSync(join(f.workspace, "keep.txt"), "operator work in progress\n");
@@ -244,7 +250,8 @@ describe("production repository delivery composition", () => {
       }));
     const f = fixture();
     try {
-      dirtyTrackedMetadata(f);
+      await dirtyTrackedMetadata(f);
+      const index = readFileSync(join(f.workspace, ".git", "index"));
       const spawn: AgentSpawnStart = async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() });
 
       expect(await f.runtime.start(spawn)(f.request("a")))
@@ -258,10 +265,13 @@ describe("production repository delivery composition", () => {
         .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
       expect(commits).toBe(1);
       expect(f.logs.join("\n")).toContain("already attempted for this unchanged set");
+      // A failed checkpoint has no effect: nothing was staged ahead of the commit that failed.
+      expect(readFileSync(join(f.workspace, ".git", "index"))).toEqual(index);
 
-      // The dirty set CHANGES, so the guard re-arms rather than latching forever.
+      // The dirty set CHANGES, so the guard re-arms rather than latching forever. `-f` because
+      // `.moe-next/` is excluded: an operator adding a new file there has to force it, as here.
       writeFileSync(join(f.workspace, ".moe-next", "seed.ps1"), "# a second runtime file\n");
-      git(f.workspace, "add", "--", ".moe-next/seed.ps1");
+      git(f.workspace, "add", "-f", "--", ".moe-next/seed.ps1");
       expect(await f.runtime.start(spawn)(f.request("a")))
         .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
       expect(commits).toBe(2);

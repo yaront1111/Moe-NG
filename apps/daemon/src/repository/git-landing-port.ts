@@ -61,6 +61,9 @@ export type GitPushResult =
   | Readonly<{ readonly ok: true; readonly receipt: GitPushReceipt }>
   | Readonly<{ readonly code: "GIT_PUSH_FAILED" | "NOT_A_REPOSITORY" | "DETACHED_HEAD"; readonly detail: string; readonly ok: false }>;
 
+/** `commit` of TRACKED paths with no `add` first: `add` exits 1 for one under an ignored directory (every hosted `.moe-next/`, 2026-09-18). */
+export interface GitTrackedCommitPort { commitTracked(workspace: string, paths: readonly string[], message: string): Promise<GitCommitResult> }
+
 /** The publisher's effect: push the workspace's current branch to a remote the human named. */
 export interface GitPublishPort {
   push(workspace: string, remoteUrl: string): Promise<GitPushResult>;
@@ -103,7 +106,7 @@ function workspaceDirectoryGone(workspace: string): boolean {
   }
 }
 
-export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLandingPort & GitPublishPort {
+export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLandingPort & GitPublishPort & GitTrackedCommitPort {
   // The repository root as git states it (a real path); the workspace resolved the same way,
   // so a temp directory reached through a symlink (macOS /var -> /private/var) does not read
   // as a path outside the repository when the two are made relative.
@@ -185,15 +188,15 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     };
   };
 
-  const commit = async (
+  const commitPaths = (stage: boolean) => async (
     workspace: string, paths: readonly string[], message: string,
   ): Promise<GitCommitResult> => {
     const located = await root(workspace);
     if (located.top === null) return { code: "GIT_COMMIT_FAILED", detail: located.detail, ok: false };
     const top = located.top;
     const pathspecs = `${paths.join("\0")}\0`;
-    const added = await run(top, ["add", "--pathspec-from-file=-", "--pathspec-file-nul"], pathspecs);
-    if (added.code !== 0) return { code: "GIT_COMMIT_FAILED", detail: tail(added.stderr), ok: false };
+    const added = stage ? await run(top, ["add", "--pathspec-from-file=-", "--pathspec-file-nul"], pathspecs) : null;
+    if (added !== null && added.code !== 0) return { code: "GIT_COMMIT_FAILED", detail: tail(added.stderr), ok: false };
     const scratch = mkdtempSync(join(tmpdir(), "moe-landing-"));
     try {
       const messagePath = join(scratch, "message.txt");
@@ -253,5 +256,5 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     return { ok: true, receipt: Object.freeze({ branch: name, sha }) };
   };
 
-  return Object.freeze({ commit, observe, push });
+  return Object.freeze({ commit: commitPaths(true), commitTracked: commitPaths(false), observe, push });
 }

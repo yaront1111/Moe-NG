@@ -1,5 +1,5 @@
 import { isMoeMetadata, TRACKED_RUNTIME_METADATA_DIRTY } from "../repository/git-landing-port.js";
-import type { GitLandingPort } from "../repository/git-landing-port.js";
+import type { GitLandingPort, GitTrackedCommitPort } from "../repository/git-landing-port.js";
 
 /**
  * The node runtime's self-heal for ONE narrow class of dirt: tracked Moe runtime
@@ -11,7 +11,14 @@ import type { GitLandingPort } from "../repository/git-landing-port.js";
  * retried on a timer for ~5 minutes until a human committed the one path by hand.
  * Owner direction the same day: the node should checkpoint what it needs rather
  * than park behind a human. Epic rail 3 forbids stash/reset, so the answer is a
- * commit by explicit pathspec — which `GitLandingPort.commit` already is.
+ * commit by explicit pathspec, under Moe's identity.
+ *
+ * The commit is `commitTracked` (`commit --only`, no `add` first), never `commit`.
+ * Every hosted project excludes `/.moe-next/` in info/exclude, and under that `git
+ * add` of a TRACKED path exits 1 while staging it anyway (measured 2026-09-18), so
+ * the first cut of this module failed in every live project. `commit --only` never
+ * walks the ignored directory and rolls the real index back when it fails: a FAILED
+ * checkpoint leaves HEAD and the operator's index exactly as they were.
  *
  * The commit lands in the OPERATOR'S history, so this module fences itself: it
  * refuses unless every supplied path is provably confined to Moe runtime metadata,
@@ -37,8 +44,8 @@ export type RuntimeMetadataCheckpointOutcome =
   | typeof RUNTIME_METADATA_CHECKPOINT_UNKNOWN_PATHS;
 
 export interface RuntimeMetadataCheckpointRequest {
-  /** Only `commit` and `observe` are used; the lander already holds the whole port. */
-  readonly git: Pick<GitLandingPort, "commit" | "observe">;
+  /** Only `commitTracked` and `observe` are used; the lander already holds the whole port. */
+  readonly git: GitTrackedCommitPort & Pick<GitLandingPort, "observe">;
   readonly nodeRef: string;
   /** Exactly the dirty set `observe` reported, root-relative, forward-slashed. */
   readonly paths: readonly string[];
@@ -61,15 +68,20 @@ const shown = (paths: readonly string[]): string =>
  *
  * `isMoeMetadata` is imported from the port, never reimplemented, so the fence and
  * the observer that produced these paths can never disagree about what counts.
- * Two further conditions the observer's own output always satisfies but an
- * arbitrary caller might not: a `..` segment would escape the metadata directory
- * while still containing a `.moe-next` segment (`.moe-next/../src/app.ts`), and an
- * absolute path is not a root-relative pathspec at all.
+ * The rest are ways a path that CONTAINS a `.moe-next` segment names something else
+ * once git reads it as a pathspec, each measured committing product code (2026-09-18):
+ * a `..` segment (`.moe-next/../src/app.ts`), a `\` (Git for Windows reads it as a
+ * separator, so `.moe-next/..\src\app.ts` is a traversal too), a leading `:` (pathspec
+ * magic: `:!x/.moe-next/y` excludes one path and so means the whole tree), and a NUL
+ * (the port NUL-delimits pathspecs, so one path becomes two; here git happens to refuse
+ * it only because this message lists the paths). An absolute path is not a root-relative
+ * pathspec at all. On Windows the observer never reports any of these; a POSIX file name
+ * that legally holds a `\` or a leading `:` is refused too, with this distinct code,
+ * rather than trusted to git's pathspec parser.
  */
 function isConfinedMetadata(path: string): boolean {
-  const segments = path.split("/");
-  if (segments.includes("..") || path.startsWith("/") || /^[a-z]:/iu.test(path)) return false;
-  return isMoeMetadata(path);
+  if (/[\0\\]/u.test(path) || path.startsWith(":") || path.startsWith("/") || /^[a-z]:/iu.test(path)) return false;
+  return !path.split("/").includes("..") && isMoeMetadata(path);
 }
 
 /**
@@ -99,7 +111,7 @@ export async function checkpointRuntimeMetadata(
     + "A node cannot record a landing baseline while tracked runtime metadata is dirty, so Moe\n"
     + "checkpointed these files itself instead of waiting for a human. Only .moe/ and .moe-next/\n"
     + "paths are ever checkpointed this way; product changes are left untouched. Safe to revert.\n";
-  const committed = await git.commit(workspace, paths, message);
+  const committed = await git.commitTracked(workspace, paths, message);
   if (!committed.ok) {
     return {
       detail: `git could not commit ${String(paths.length)} runtime metadata path(s) ${shown(paths)}: ${committed.detail}`,
