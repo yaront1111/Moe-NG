@@ -102,8 +102,8 @@
     }
   ],
   "planRevision": 45,
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-84420029",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -154,18 +154,26 @@
       "author": "worker-6433dce1",
       "content": "REOPEN-2 GATE EVIDENCE AND CORRECTED (C) ANSWERS (worker-6433dce1, 2026-09-18). Tree: HEAD c7211db8 plus this row's 3-file diff (git-landing-port.ts, runtime-metadata-checkpoint.ts, runtime-metadata-checkpoint.test.ts). c7211db8 is a peer wip that touches only .moe/tasks/*.json.\n\nCORRECTION TO comment-e8179468 (C). Its answer \"Non-metadata path reaching the commit: no\" was FALSE at 486edfc1. commitTracked sent plain pathspecs, and plain pathspecs glob. A fence-accepted path such as `src/product[/.moe-next/]ts` or `keep[/.moe-next/]txt` therefore also committed src/product.ts or keep.txt (QA comment-0ca3bce8; I reproduced it RED in step 2). The module header's \"provably confined\" was false for the same reason and has been removed.\n\nCORRECTED ANSWER, measured on the delivered bytes:\n- commitTracked sends each path as `:(literal)<path>` (git-landing-port.ts:197), so `[`, `*` and `?` match only themselves.\n- landingEnvironment strips every inherited GIT_* variable. So neither GIT_LITERAL_PATHSPECS (which stops git parsing `:(literal)`) nor GIT_GLOB_PATHSPECS can reach git.\n- The fence still refuses `\\`, NUL, a leading `:`, `..` and absolute paths, and two of these are still needed:\n  - `\\`: Git for Windows resolves `.moe-next/..\\src\\product.ts` to src/product.ts even under literal pathspecs (step-1 note).\n  - NUL: a NUL splits one path into two pathspecs, and only the first carries `:(literal)`.\n- What remains is by design: any path that observe classifies as metadata (a `.moe`/`.moe-next` segment anywhere) is committed as itself.\n\nWHY `:(literal)` AND NOT QA'S EXAMPLE `--literal-pathspecs`. I tested both on a scratch repo whose pre-commit hook echoes GIT_LITERAL_PATHSPECS. With the global flag the hook logged `LITERAL=1`, because git exports the variable to the operator's hooks. With `:(literal)` it logged `unset`. Both committed the same single path.\n\nGATES:\n- (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/git-landing-port.test.ts src/orchestrator/runtime-metadata-checkpoint.test.ts src/orchestrator/repository-delivery-runtime.test.ts src/orchestrator/node-lander-tracked-metadata.test.ts`: EXIT 0, `Test Files 4 passed (4)` / `Tests 62 passed (62)`. Round 2 was 61; the new arm is the +1.\n- (B) `pnpm --filter @moe/daemon test`, run under the full-suite-gate lease (since released): EXIT 1, `Test Files 13 failed | 732 passed (745)` / `Tests 17 failed | 12303 passed | 23 skipped (12343)`.\n  - These are the same 13 files QA listed in comment-5321b3fe and I listed in comment-572ae759.\n  - The log shows 8x `agent-spawn-contract.ts:79` ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and 2 NodeBriefUnreadableError lines, both from 20896d47.\n  - `grep -nE \"git-landing-port|runtime-metadata-checkpoint|repository-delivery-runtime|node-lander-tracked-metadata\"` over the log returns nothing.\n  - Delta against the 486edfc1 runs is empty. Intersection with owned paths is EMPTY.\n- (C) `pnpm --filter @moe/daemon typecheck`: EXIT 0, 0 `error TS`.\n\nPROBES (production modules under plain Node, scratch repos under %TEMP%, all removed, count 0 after):\n- QA's own kit (PROBE=LIVE,GLOB_CALLER,GLOB_OBSERVE,DELETE,MM):\n  - LIVE, DELETE and MM: CHECKPOINTED. In the MM case the product stays staged.\n  - GLOB_OBSERVE: CHECKPOINTED, committing ONLY `src/product[/.moe-next/]ts`; src/product.ts stays ` M`.\n  - GLOB_CALLER: now FAILED with \"pathspec ':(literal)src/product[/.moe-next/]ts' did not match\". HEAD is unchanged and the index is byte-identical. At 486edfc1 this case committed src/product.ts.\n- My edge probe:\n  - UNBORN: CHECKPOINTED. The root commit holds only the metadata; a.txt stays `A`.\n  - DETACHED: CHECKPOINTED on HEAD. This is the disclosed ceiling (comment-25f011b5).\n  - MID_MERGE: FAILED \"cannot do a partial commit during a merge.\"\n  - INDEX_LOCK: FAILED \"Unable to create ... index.lock\", coded; nothing throws.\n  - CONCURRENT: one CHECKPOINTED and one FAILED, with 1 Moe commit and a clean tree.\n  - `.MOE-NEXT/` alias: CHECKPOINTED.\n- QA's TEST_GLOB drill on the runtime mixed arm: :228-232 pass (BASELINE_UNAVAILABLE, starts 0). It fails only at :234, where the commit list is `.moe-next/start.ps1` plus `keep[/.moe-next/]txt`, WITHOUT keep.txt.\n- Unchanged by this diff and still covered by gate A: the guard (commits===1, re-arms on a changed set) and the one-`git revert` restore.\n\nDoD 3 remains N/A. UnAI `git ls-files -- .moe .moe-next` returns README.md, node-specs/01-core-memory-identities.json, seed.ps1 and start.ps1. `.gitignore` ignores only `.moe-next/store.sqlite*` and `.moe-next/*.local.*`. These are the operator's own versioned files.",
       "timestamp": "2026-09-18T06:49:12.885Z"
+    },
+    {
+      "id": "comment-63f2647eb9fc41628d1d3965569d6f7f",
+      "author": "qa-84420029",
+      "content": "QA ROUND-3 EVIDENCE (qa-84420029, 2026-09-18). APPROVED. Reviewed completion commit 75c64491, which carries the Moe-Task trailer, is on moe/work-2026-09-18 and is recorded in task.commits. `git diff 75c64491` on the 3 owned sources is empty, so the delivered bytes are the reviewed bytes.\n\nI graded the 3-issue contract from qa_reject #2 and nothing else.\n\n1 LITERAL PATHSPECS: DONE. At git-landing-port.ts:197, commitTracked (stage=false) sends each path as `:(literal)<path>`. `commit` (stage=true) is byte-identical to before. `git grep commitTracked` finds one production caller, runtime-metadata-checkpoint.ts:127. landingEnvironment (git-process-runner.ts:23-33) strips every GIT_* variable, so no inherited GIT_LITERAL_PATHSPECS, GIT_GLOB_PATHSPECS or GIT_ICASE_PATHSPECS can change how the magic is read. Per-path magic instead of the global flag is an equivalent fix, and the worker's reason for it (the flag exports GIT_LITERAL_PATHSPECS=1 to hooks) is sound.\n\n2 OBSERVE-REACHED ARM: DONE, at runtime-metadata-checkpoint.test.ts:127-148. It asserts observe returned TRACKED_RUNTIME_METADATA_DIRTY with paths [odd], the exact RUNTIME_METADATA_CHECKPOINTED, a committed list of exactly [\"src/product[/.moe-next/]ts\"], and src/product.ts at trimmed \"M src/product.ts\". That string is distinct from staged `M  ` and from clean \"\".\nDrills, in memory via a temp vitest config in %TEMP%, with zero on-disk mutation:\n- CONTROL: 38/38 across the checkpoint and runtime files.\n- LITERAL_DROP (magic removed): 1 failed | 37 passed. Only the new arm goes red, at :145, and the received list shows \"src/product.ts\" committed beside the odd path. That is the round-2 defect.\n- LITERAL_TYPO (`:(glob)` in place of `:(literal)`): the same single arm goes red at :145.\n- TEST_GLOB, the round-2 mixed-tree scenario, against the fix: :228-232 pass (BASELINE_UNAVAILABLE, starts 0, no baseline). It fails only at :234, where the commit is `.moe-next/start.ps1` plus `keep[/.moe-next/]txt` and keep.txt is absent. That is the expected, legitimate difference.\n- TEST_GLOB plus LITERAL_DROP: red at :228 with `{ok:true,pid}`, which is exactly the round-2 recorded red.\n\n3 CLAIMS: DONE. The module header (:23-31) drops \"provably confined\" and names globbing and the port's `:(literal)`. The fence docstring (:87-93) says globs pass the fence and keeps the `\\`, NUL and leading-`:` clauses, with reasons. completionSummary explicitly corrects the comment-e8179468 (C) answer and says the `\\` clause stays.\n\nPROBES: production modules under plain Node, on scratch repos whose exclude was written by prepareRuntimeMetadataExcludes. All removed afterwards; count 0.\n- LIVE (DoD 1): CHECKPOINTED; observe afterwards returns ok with 0 entries.\n- GLOB_OBSERVE: CHECKPOINTED, committing only the odd path; src/product.ts stays dirty.\n- GLOB_CALLER: FAILED \"pathspec ':(literal)src/product[/.moe-next/]ts' did not match\". HEAD is unchanged, the index is byte-identical, and the product stays dirty.\n- DELETE: CHECKPOINTED (D).\n- MM: CHECKPOINTED, and the operator's staged product change stays `M `.\n\nGATES, all re-run by me in the foreground:\n- The task.verification 4-file command: EXIT 0, `Test Files 4 passed (4)` / `Tests 62 passed (62)`, matching the worker.\n- A scoped superset, every daemon test file that imports git-landing-port, runtime-metadata-checkpoint or repository-delivery-runtime: EXIT 0, `Test Files 20 passed (20)` / `Tests 273 passed (273)`.\n- `pnpm --filter @moe/daemon typecheck`: EXIT 0, 0 `error TS`.\n- I did not re-run the full daemon suite. The worker's run shows 13 foreign files red, disjoint from the owned paths (comment-867291fa).\n\nThe recorded follow-ups for epic-final hardening stand unchanged from comment-0ca3bce8: git-landing-port.ts is at 260 lines, the lander's `commit` is still non-literal and runs `add` first, plus the guard latch, detached HEAD, and rm --cached re-tracking. The wrapper swept 2 peer task JSONs (.moe/tasks/task-4444…, task-df64…) into 75c64491. That is board metadata, not a worker path.",
+      "timestamp": "2026-09-18T06:58:46.616Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T20:39:33.812Z",
-  "updatedAt": "2026-09-18T06:51:00.228Z",
+  "updatedAt": "2026-09-18T06:58:56.302Z",
   "metrics": {
     "firstClaimAt": "2026-09-17T20:52:06.923Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
     "executedStepCount": 21,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-09-18T06:58:56.302Z",
+    "wallClockMs": 36409379
   },
   "contextFetchedBy": [
     "governor-cc0cc843",
@@ -220,10 +228,13 @@
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.test.ts",
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.ts",
     "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts"
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
+    ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json",
+    ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
   ],
   "completionSummary": "REOPEN-2: only the 3 issues from qa_reject #2.\n\n1 GLOB PATHSPECS FIXED. commitTracked now sends each pathspec as `:(literal)<path>` (git-landing-port.ts:197). The lander's `commit` is unchanged. I used per-path magic, not QA's example `--literal-pathspecs`: measured, that flag exports GIT_LITERAL_PATHSPECS=1 into the operator's hooks, and `:(literal)` confines the same way without the leak. landingEnvironment strips inherited GIT_*, so no env var can disable it.\n\n2 ARM. runtime-metadata-checkpoint.test.ts \"commits only the observed path when that path would glob onto product code\": a tracked src/product[/.moe-next/]ts, reached through observe. It asserts CHECKPOINTED, a committed list of exactly that path, and src/product.ts still ` M`. RED at 486edfc1. In-memory drills: LITERAL_DROP turns only this arm red, at the name list; FENCE_OFF turns arm 2 and 9 sweep cases red on the code.\n\n3 CLAIMS CORRECTED. The header's \"provably confined\" is removed; the fence docstring now names globbing, and the port's `:(literal)` as its defence.\nCORRECTION to comment-e8179468 (C): \"Non-metadata path reaching the commit: no\" was FALSE at 486edfc1, because glob pathspecs let a fence-accepted path commit product files. Measured now: no product path reaches the commit by globbing. The `\\` fence clause STAYS even under literal pathspecs, because Git for Windows still resolves .moe-next/..\\src\\product.ts to src/product.ts. The NUL, `:` and `..` clauses stay too.\n\nGATES:\n- 4-file gate: `Test Files 4 passed (4)` / `Tests 62 passed (62)`.\n- Daemon typecheck: 0 errors.\n- Daemon suite: `13 failed | 732 passed (745)`. The same 13 foreign files (20896d47); none is owned.\n- QA's TEST_GLOB drill: the mixed arm refuses (:228-232 pass) and fails only at :234, where the odd file is legitimately committed and keep.txt is not.\nDetails: comment-867291fa.\n\nDoD 3 N/A: UnAI tracks .moe-next/{README.md,node-specs/*.json,seed.ps1,start.ps1}, and .gitignore ignores only store.sqlite* and *.local.*.",
-  "reviewCompletedAt": "2026-09-18T06:26:47.620Z",
+  "reviewCompletedAt": "2026-09-18T06:58:56.302Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Scope fence proven: a dirty PRODUCT-CODE path STILL refuses the baseline (BASELINE_UNAVAILABLE) and is NOT auto-committed. Test asserts both arms — runtime-metadata dirt self-heals, product dirt still blocks — with the exact reason code/layer (global rail: assert the code, not just outcome)."
@@ -381,14 +392,34 @@
       "treeId": "afa2dcdc83ccbc8124f91edf18266938f33a31d1",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "75c644914ab9100cec538706cc15ef9cf07840e9",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-6433dce1@2026-09-18T06:31:57Z",
+      "paths": [
+        ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
+        ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json",
+        ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json",
+        "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.test.ts",
+        "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.ts",
+        "apps/daemon/src/repository/git-landing-port.ts"
+      ],
+      "recordedBy": "worker-6433dce1",
+      "recordedAt": "2026-09-18T06:51:49.682Z",
+      "treeId": "6551ff36df2d86e677c6a0824c4db344ea76996c",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-84420029@2026-09-18T06:13:07Z",
-    "at": "2026-09-18T06:28:06.766Z"
+    "kind": "completion",
+    "sessionId": "worker-6433dce1@2026-09-18T06:31:57Z",
+    "at": "2026-09-18T06:51:49.682Z"
   },
   "touchedFiles": [
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.ts",
@@ -401,5 +432,7 @@
     "apps/daemon/src/repository/git-landing-port.ts",
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.ts",
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.test.ts"
-  ]
+  ],
+  "completedAt": "2026-09-18T06:58:56.302Z",
+  "reviewSummary": "Round 3 APPROVED on completion commit 75c64491, recorded in task.commits, on moe/work-2026-09-18. The owned sources match the tree exactly. I graded only the 3-issue contract from reject #2.\n\n(1) commitTracked sends each path as `:(literal)<path>` (git-landing-port.ts:197). `commit` is unchanged. commitTracked has one caller, and landingEnvironment strips all GIT_*.\n(2) New real-git arm, reached through observe (checkpoint.test.ts:127-148). It asserts exact CHECKPOINTED, the committed list [odd] only, and src/product.ts still ` M`. In-memory drills:\n- LITERAL_DROP and LITERAL_TYPO: only this arm red, at :145, with src/product.ts committed.\n- TEST_GLOB on the fix: the mixed arm passes :228-232 and fails only at :234, where the odd metadata file is legitimately committed and keep.txt is not.\n- TEST_GLOB plus LITERAL_DROP: reproduces the round-2 red at :228 (`{ok:true}`).\n(3) The header drops \"provably confined\". The fence docstring names globs and the port's `:(literal)`, and keeps the `\\`, NUL and `:` clauses. completionSummary corrects the comment-e8179468 (C) answer.\n\nProbes, production modules on scratch repos with the production exclude writer:\n- LIVE: CHECKPOINTED, then observe returns 0 entries.\n- GLOB_OBSERVE: only the odd path is committed.\n- GLOB_CALLER: coded FAILED, HEAD unchanged, index byte-identical.\n- DELETE and MM: OK.\n\nGates, re-run by me:\n- 4-file verification command: `Test Files 4 passed (4)` / `Tests 62 passed (62)`, exit 0.\n- Scoped superset of the 20 daemon test files that import the touched modules: `20 passed (20)` / `273 passed (273)`.\n- Daemon typecheck: exit 0, 0 errors.\n\nDoD 1, 2 and 4 are met. DoD 3 is N/A, confirmed in round 2. Follow-ups are in comment-0ca3bce8, and the evidence is in comment-63f2647e."
 }
