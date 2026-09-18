@@ -3,6 +3,9 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
 import { win32 as windowsPath } from "node:path";
 
+import { describeThrown } from "@moe/contracts";
+import type { DiagnosticThrown } from "@moe/contracts";
+
 import { deliverEnvironment, type EnvironmentDeliveredVariables } from "../environment/environment-delivery.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
@@ -38,6 +41,19 @@ type SpawnProcess = (
   file: string, args: readonly string[], options: SpawnOptions,
 ) => ChildProcess;
 
+/**
+ * A recipe the runner could not START, or whose process errored before it exited. The capture
+ * answers `exitCode: null` with empty output either way — the recipe produced nothing — and
+ * until this observer that was the whole story: a verifier whose `bash` was not on PATH, or
+ * whose workspace had gone, read exactly like a recipe that ran and was killed by the deadline.
+ */
+export interface VerifierSpawnFault {
+  readonly stage: "process" | "spawn";
+  readonly test: string;
+  readonly thrown: DiagnosticThrown;
+  readonly workspace: string;
+}
+
 export interface VerifierProcessRunnerOptions {
   readonly delivered?: EnvironmentDeliveredVariables | undefined; // Onto the allowlisted RESULT.
   /**
@@ -51,6 +67,8 @@ export interface VerifierProcessRunnerOptions {
   readonly killGraceMs?: number;
   readonly killProcessGroup?: (pid: number, signal: NodeJS.Signals) => void;
   readonly onFatalContainment?: ((error: VerifierProcessContainmentError) => void) | undefined;
+  /** Host-side disclosure of a recipe that could not be spawned or errored; absent means silent. */
+  readonly onSpawnFault?: ((fault: VerifierSpawnFault) => void) | undefined;
   readonly outputTailBytes?: number;
   readonly platform?: NodeJS.Platform;
   readonly spawn?: SpawnProcess;
@@ -150,6 +168,14 @@ export function createVerifierProcessRunner(
         reject(new VerifierProcessCancelledError());
       };
 
+      // Fenced: a broken observer must not change what the capture answers.
+      const reportSpawnFault = (stage: VerifierSpawnFault["stage"], error: unknown): void => {
+        try {
+          options.onSpawnFault?.({
+            stage, test: brief.test, thrown: describeThrown(error), workspace: brief.workspace,
+          });
+        } catch { /* the null exit is the contract */ }
+      };
       let child: ChildProcess;
       try {
         child = spawn(brief.test, [], {
@@ -159,7 +185,8 @@ export function createVerifierProcessRunner(
           shell: true,
           stdio: ["ignore", "pipe", "pipe"],
         });
-      } catch {
+      } catch (error) {
+        reportSpawnFault("spawn", error);
         finish(null);
         return;
       }
@@ -222,10 +249,15 @@ export function createVerifierProcessRunner(
       });
       // Keep this listener after settlement: a late/repeated EventEmitter
       // `error` must remain contained instead of becoming an uncaught throw.
-      child.on("error", () => {
+      child.on("error", (error: unknown) => {
         if (settled || termination !== null) return;
-        if (child.pid === undefined) finish(null);
-        else beginTermination("PROCESS_ERROR");
+        if (child.pid === undefined) {
+          reportSpawnFault("spawn", error);
+          finish(null);
+          return;
+        }
+        reportSpawnFault("process", error);
+        beginTermination("PROCESS_ERROR");
       });
 
       const killDirectBestEffort = (): void => {

@@ -33,7 +33,8 @@ function world() {
     requestBytes: encoder.encode("{}"), targetAggregateId: aggregateId });
   let pushes = 0;
   const git: PublicationGitPort = { async push() { pushes += 1; throw new Error("unbound request must not push"); },
-    async observe() { throw new Error("unbound request must not query remote"); } };
+    async observe() { throw new Error("unbound request must not query remote"); },
+    async contains() { throw new Error("unbound request must not query remote"); } };
   return { store, decisionId: response.decision.decisionId, pushes: () => pushes,
     config: { git, projectId: PROJECT_ID, store, workspace: "D:/ws", repository: createRepositoryExecutionPort(),
       storeId: "D:/store", controller: { controllerId: "legacy-test", controllerPid: process.pid } } };
@@ -62,7 +63,7 @@ const candidate: PublicationCandidate = { approval, identity };
 const BEFORE = "b".repeat(40); const FOREIGN = "c".repeat(40); const NOW = "2026-09-18T12:00:00.000Z";
 const CONTROLLER = { controllerId: "controller-1", controllerPid: 1234 };
 const REJECTED = { ok: false, code: "PUBLISH_PUSH_REJECTED", detail: "PUBLISH_PUSH_REJECTED" } as const;
-const STUCK = [{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED" }];
+const STUCK = [{ goalId: GOAL, outcome: "UNKNOWN", detail: expect.stringMatching(/^PUBLISH_EFFECT_RECONCILIATION_REQUIRED: /u) }];
 const NOT_LANDED = (sha: string, branch: string, before: string, after: string) =>
   `git refused the push of ${sha} to ${branch}; the remote tip was ${before} before the push and is ${after} after it`;
 const sent = (decisionId: string, tipBefore: string | null, outcome: PublicationTransmission["outcome"]): PublicationTransmission =>
@@ -109,9 +110,11 @@ function evidenceWorld(onPush: Remote["onPush"]) {
   const remote: Remote = { tip: BEFORE, pushes: 0, observes: 0, unreadableFirst: false, onPush };
   const git: PublicationGitPort = {
     async push(given) { expect(given).toEqual(candidate); remote.pushes += 1; return remote.onPush(remote); },
+    async contains(given) { expect(given).toEqual(candidate); return { ok: true, contains: true, known: true }; },
     async observe(given) {
       expect(given).toEqual(candidate); remote.observes += 1;
-      return remote.observes === 1 && remote.unreadableFirst ? { ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "PUBLISH_REMOTE_UNREADABLE" }
+      // Read #1 is the pre-flight before any intent; #2 is the pre-push tip the transmission journals.
+      return remote.observes === 2 && remote.unreadableFirst ? { ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "PUBLISH_REMOTE_UNREADABLE" }
         : { ok: true, sha: remote.tip };
     },
   };

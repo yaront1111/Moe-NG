@@ -43,8 +43,18 @@ export interface StdioIntegerSchema {
 export interface StdioOpaqueObjectSchema {
   readonly additionalProperties: true;
   readonly description: string;
+  /**
+   * Members a host has TYPED for one kind's payload (`withPayloadProperties`). The object stays
+   * open: the daemon decoder remains the payload authority, and naming a member here only
+   * tells the client what JSON type that member is before it sends it.
+   */
+  readonly properties?: Readonly<Record<string, StdioPropertySchema>>;
   readonly type: "object";
 }
+
+/** Per-kind payload members a host declares; every named kind must be an advertised tool. */
+export type StdioPayloadPropertyOverlay =
+  Readonly<Record<string, Readonly<Record<string, StdioPropertySchema>>>>;
 
 export type StdioPropertySchema =
   | StdioIntegerSchema
@@ -242,4 +252,52 @@ export function allowlistedToolEntries(
     selected.set(kind, entry);
   }
   return Object.freeze([...selected.values()]);
+}
+
+/** An overlay naming a kind that no selected entry advertises: a construction-time refusal. */
+export const MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND = "MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND" as const;
+
+/**
+ * Types the payload members a host declares, kind by kind, on top of the generated entries.
+ *
+ * The generator itself cannot know a payload's members: the exact-key roster and the typed
+ * decoders live in the daemon, behind the dispatch port. What the host passes here is read
+ * from that roster, so the advertised type and the enforced one have one source. The payload
+ * object stays `additionalProperties: true` — the daemon decoder is still the only authority —
+ * but a client that reads the schema now learns, for example, that `round` is an integer
+ * BEFORE it sends the string "4" and is refused. Three seats did exactly that (2026-09-18).
+ *
+ * It REFUSES an overlay naming a kind the entries do not carry, on the allowlist's own rule:
+ * a roster and an overlay that drifted apart would otherwise advertise a typed member for a
+ * tool that is not there, and nothing would notice until an agent looked for it.
+ */
+export function withPayloadProperties(
+  entries: readonly StdioToolEntry[],
+  overlay: StdioPayloadPropertyOverlay | undefined,
+): readonly StdioToolEntry[] {
+  if (overlay === undefined) return entries;
+  const advertised = new Set(entries.map((entry) => entry.kind));
+  for (const kind of Object.keys(overlay)) {
+    if (!advertised.has(kind)) {
+      throw new Error(`${MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND}: ${kind} is not an advertised tool`);
+    }
+  }
+  return Object.freeze(entries.map((entry) => {
+    const members = overlay[entry.kind];
+    const payload = entry.tool.inputSchema.properties["payload"];
+    if (members === undefined || payload === undefined || payload.type !== "object") return entry;
+    const typedPayload: StdioOpaqueObjectSchema = Object.freeze({
+      ...payload, properties: Object.freeze({ ...members }),
+    });
+    return Object.freeze({
+      ...entry,
+      tool: Object.freeze({
+        ...entry.tool,
+        inputSchema: Object.freeze({
+          ...entry.tool.inputSchema,
+          properties: Object.freeze({ ...entry.tool.inputSchema.properties, payload: typedPayload }),
+        }),
+      }),
+    });
+  }));
 }

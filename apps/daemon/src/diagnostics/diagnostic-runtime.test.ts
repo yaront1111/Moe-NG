@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DIAGNOSTIC_LOG_FILENAME } from "./diagnostic-file-sink.js";
-import { createDiagnosticRuntime, nullDiagnosticRuntime } from "./diagnostic-runtime.js";
+import {
+  createDiagnosticRuntime, nullDiagnosticRuntime, sharedDiagnosticRuntime,
+} from "./diagnostic-runtime.js";
 
 const dirs: string[] = [];
 
@@ -136,5 +138,22 @@ describe("createDiagnosticRuntime", () => {
     expect(() => {
       nullDiagnosticRuntime().emitterFor("store").error("STORE_READ_FAILED");
     }).not.toThrow();
+  });
+});
+
+describe("sharedDiagnosticRuntime", () => {
+  it("hands every caller with the same project root the same instance, and another root its own", () => {
+    // The daemon bin and the shipped provider both build from MOE_STORE_PATH in one process; two
+    // file sinks on one log would race its rotation.
+    const root = scratch();
+    const other = scratch();
+    const first = sharedDiagnosticRuntime({ env: { MOE_LOG_CONSOLE: "off" }, projectRoot: root });
+    const second = sharedDiagnosticRuntime({ env: { MOE_LOG_CONSOLE: "off" }, projectRoot: root });
+    const elsewhere = sharedDiagnosticRuntime({ env: { MOE_LOG_CONSOLE: "off" }, projectRoot: other });
+
+    expect(second).toBe(first);
+    expect(elsewhere).not.toBe(first);
+    first.close();
+    elsewhere.close();
   });
 });

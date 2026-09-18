@@ -8,6 +8,12 @@ export {
   readBootstrapCredential,
 } from "./stdio/stdio-server.js";
 export type { StdioServerOptions } from "./stdio/stdio-server.js";
+export type {
+  McpDispatchFault,
+  McpDispatchFaultObserver,
+  McpDispatchFaultStage,
+} from "./dispatch-fault.js";
+export type { McpSessionFault, McpSessionFaultObserver } from "./session-fault.js";
 export type { StdioAuthOutcome, StdioDispatchPort } from "./stdio/stdio-dispatch-port.js";
 export {
   ADAPTER_SUPPLIED_COMMAND_FIELDS,
@@ -23,6 +29,7 @@ export {
 } from "./stdio/stdio-tool-schemas.js";
 export type {
   StdioObjectSchema,
+  StdioPayloadPropertyOverlay,
   StdioPropertySchema,
   StdioTool,
   StdioToolEntry,

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+
+import { describeThrown } from "@moe/contracts";
 import type { DurableSchedule } from "./orchestrator/durable-schedule.js";
 
 import {
@@ -192,11 +194,26 @@ type ResolvedDependencies = DaemonEntryRefused | (ResolvedOptionalDaemonPorts & 
   readonly v2Deps?: CommandAdapterDeps;
 });
 
-function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDependencies {
+/** One line for a throw, on the entry's log: name, errno code when there is one, message. */
+function thrownLine(error: unknown): string {
+  const thrown = describeThrown(error);
+  return `${thrown.name}${thrown.code === null ? "" : ` ${thrown.code}`}: ${thrown.message}`;
+}
+
+/**
+ * Two codes cover every way a provider can fail to compose, and the codes ALONE told the
+ * operator nothing: PROVIDER_THREW for any of 36 calls, DEPENDENCIES_INVALID for any of 34
+ * optional seams. The log now names the call and the throw beside the unchanged code.
+ */
+function resolveDependencies(
+  provider: DaemonDependencyProvider,
+  log: ((line: string) => void) | undefined,
+): ResolvedDependencies {
   let provided: unknown;
   try {
     provided = provider.provide();
-  } catch {
+  } catch (error) {
+    log?.(`provider.provide() threw: ${thrownLine(error)}`);
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
   if (!isCommandAdapterDeps(provided)) {
@@ -206,7 +223,8 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
   let providedV2: unknown;
   try {
     providedV2 = provider.provideV2?.();
-  } catch {
+  } catch (error) {
+    log?.(`provider.provideV2() threw: ${thrownLine(error)}`);
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
   if (providedV2 !== undefined && !isCommandAdapterDeps(providedV2)) {
@@ -215,8 +233,12 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
 
   const ports = resolveOptionalDaemonPorts(provider);
   if (!ports.ok) {
-    return refuseEntry(ports.failure === "THREW"
-      ? "DAEMON_ENTRY_PROVIDER_THREW" : "DAEMON_ENTRY_DEPENDENCIES_INVALID");
+    if (ports.failure === "THREW") {
+      log?.(`optional port "${ports.port}" threw: ${thrownLine(ports.thrown)}`);
+      return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
+    }
+    log?.(`optional port "${ports.port}" is INVALID: not a factory function, or a port without its required methods`);
+    return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
   }
   return Object.freeze({
     deps: provided,
@@ -231,16 +253,20 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
  * start and BEFORE anything binds. `null` means carry on — the provider wires no
  * sweep, or the sweep succeeded; every other answer stops the boot. A port that
  * THROWS is the one condition named here, under the EXISTING provider code: a
- * dead port is a broken provider with no durable code or layer to preserve.
+ * dead port is a broken provider with no durable code or layer to preserve. The
+ * throw itself is said on the log, because the code alone reads as "the provider
+ * module is broken" when what happened is a locked store under the sweep.
  */
 function runBootReconciliation(
   port: BootReconciliationPort | undefined,
+  log: ((line: string) => void) | undefined,
 ): BootReconciliationRefused | DaemonEntryRefused | null {
   if (port === undefined) return null;
   try {
     const outcome = port.sweep();
     return outcome.ok ? null : outcome;
-  } catch {
+  } catch (error) {
+    log?.(`boot reconciliation threw: ${thrownLine(error)}`);
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
 }
@@ -276,12 +302,12 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
     }
     schedules = schedule;
-    const resolved = resolveDependencies(dependencies);
+    const resolved = resolveDependencies(dependencies, options.log);
     if (!resolved.ok) return resolved;
 
     // BEFORE the listener, never after: a daemon that becomes ready while the last
     // crash is still unclassified is the exact failure this sweep exists to stop.
-    const swept = runBootReconciliation(resolved.reconciliation);
+    const swept = runBootReconciliation(resolved.reconciliation, options.log);
     if (swept !== null) return swept;
 
     // Minted here when unsupplied and returned IN PROCESS only. Design 19.2 keeps

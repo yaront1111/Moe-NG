@@ -24,6 +24,12 @@ injected dispatch port.
 - `HttpSessionPort` → `apps/daemon/src/mcp-http/mcp-http-session-port.ts`.
 - `toolAllowlist` on both option bags takes runtime KINDS, never tool labels; the roster
   comes from `apps/daemon/src/mcp-tool-allowlist.ts` (`wiredMcpToolKinds()`).
+- `onDispatchFault` on both option bags (`McpDispatchFaultObserver`, `dispatch-fault.ts`) →
+  `apps/daemon/src/mcp-dispatch-fault-report.ts`, composed by `mcp-main.ts`,
+  `mcp-http/mcp-http-main.ts` and `orchestrator/agent-wrapper-main.ts` (through
+  `McpHttpHostOptions.onDispatchFault`) as `MCP_DISPATCH_THREW` on the diagnostics plane.
+  `onSessionFault` (`McpSessionFaultObserver`, `session-fault.ts` — SDK-free, because
+  `http-session.ts` must stay so) is its twin for a session port that throws under the screen.
 - `STDIO_TOOL_INDEX` / `toolLabelForKind` are also read by
   `tests/integration/portability/portability-cases.ts`.
 
@@ -39,7 +45,15 @@ injected dispatch port.
 - **`payload` is an opaque `additionalProperties: true` object** — the daemon decoder is the
   only payload authority. `leaseAuthority`'s inner shape is described in prose inside the
   schema description rather than as properties, deliberately: MCP clients LOG tool
-  arguments, so naming the bearer field would put it in the log.
+  arguments, so naming the bearer field would put it in the log. The one exception is
+  host-declared: `payloadProperties` on both option bags (`withPayloadProperties`,
+  `stdio-tool-schemas.ts`) adds typed `properties` to the payload of the kinds it names while
+  the object stays open. The daemon derives it from its own key roster
+  (`wiredMcpPayloadProperties()`), so `review.submit.round` advertises
+  `{"type":"integer","minimum":1}` and a seat no longer learns the type from a refusal. An
+  overlay naming a kind the allowlist lacks throws `MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND` at
+  construction; the generated `STDIO_TOOL_ENTRIES` stay opaque, and
+  `stdio-schemas.test.ts` pins both.
 - **Envelope field ordering is the security control.** `buildCommandEnvelopeBytes`
   (`stdio-server.ts`) and `buildEnvelopeBytes` (`http-tool-bridge.ts`) spread `...args`
   FIRST and write `commandKind`, `requestDigest`, `schemaVersion`, `sessionCredential`
@@ -60,7 +74,12 @@ injected dispatch port.
   `new McpError(error.transport.mcpCode, error.code, error)`. Unknown tool label →
   `INPUT_INVALID`; known but outside the allowlist → `CAPABILITY_DENIED`, before envelope
   construction; a port that THROWS → `UNKNOWN_ERROR`, so a store's message never reaches
-  client logs, while a refusal the port RETURNS passes through intact.
+  client logs, while a refusal the port RETURNS passes through intact. The throw itself goes
+  HOST-SIDE: `containDispatchThrow` (`dispatch-fault.ts`) hands `onDispatchFault` the verbatim
+  kind, the stage (`authenticate` / `dispatch` / `response-decode`) and the described throw;
+  a returned refusal is never reported, and an observer that throws is swallowed so the
+  refusal stands. `adapter-refusals.ts` holds the `refuse*` / `serialize` helpers both
+  transports share.
 - **An allowlist refuses rather than drops**: `allowlistedToolEntries` throws
   `MCP_TOOL_ALLOWLIST_UNKNOWN_KIND` / `MCP_TOOL_ALLOWLIST_EMPTY` at CONSTRUCTION, so a
   drifted roster is a startup failure, not a tool that quietly vanished.
@@ -108,7 +127,7 @@ injected dispatch port.
 - `distribution-inventory.ts` ships `mcp-bridge` as exactly `["packages/mcp/src/index.ts"]`
   (mirrored in `distribution-packaging.test.ts`); `release-version-surfaces.test.ts` pins
   this `package.json`.
-- `http-server.ts` is 375 lines against the repo's split-before-400 rail;
+- `http-server.ts` is 389 lines against the repo's split-before-400 rail;
   `http-request-screen.ts`, `http-resume.ts`, `http-adapter-lifecycle.ts` and
   `http-inflight-requests.ts` were carved out of it. New behaviour goes in a sibling.
 - `tsconfig.json` pins `types: ["node"]` with `skipLibCheck` because the SDK's types drag

@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { describeBindFailure } from "./bind-failure-detail.js";
-import { refusalTagOf } from "./http-refusal-tag.js";
+import { SLOW_REQUEST_MS, logServedRequest } from "./http-listener-request-log.js";
 import type { AffordancePort } from "./affordance-contract.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { DocumentIngestPort } from "./document-ingest-route.js";
@@ -208,6 +208,8 @@ export interface StartListenerOptions {
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
+  /** A served request slower than this earns a LISTENER_SLOW line; default `SLOW_REQUEST_MS`. */
+  readonly slowRequestMs?: number;
   /**
    * The runtime credential mint invoked only after an approved pairing claim,
    * and the source of the `projectId` `/bootstrap` answers. Absent means neither
@@ -325,39 +327,22 @@ export async function startControlRoomListener(
     : createPairingOpenCompletion(requestOptions.pairingOpenSessions);
   try {
     server = createServer((request, response) => {
-      const served = serve(
-        request, response, requestOptions, authority, origin, assets, pairingApproval,
-        pairingCompletion,
-      );
-      // THE RESPONSE SIDE OF THE ONE PER-REQUEST LINE. The line above `serve` is written before
-      // dispatch and carries method and path only, so no refusal the listener made was recorded
-      // anywhere: a control room whose CSRF token drifted got 403 on every call while the
-      // daemon's output read as an ordinary list of paths. Only REFUSED requests add a line —
-      // a served request logs exactly what it did before, and a thrown one is still reported by
-      // the catch below and carries no tag.
-      void served.then(() => {
-        const refusal = refusalTagOf(response);
-        if (refusal === null) return;
-        try {
-          const path = (request.url ?? "?").split("?")[0] ?? "";
-          requestOptions.log?.(`LISTENER_REFUSED ${request.method ?? "?"} ${path} ${refusal}`
-            + ` ${String(response.statusCode)}`);
-        } catch {
-          // A failed diagnostic sink must not turn an answered refusal into a failure.
-        }
-      }, (error: unknown) => {
-        // A throw from the handler must still answer and must still leave the
-        // listener closable; it may never surface as a hung socket. The cause is
-        // logged host-side (never sent to the client) so a 500 stays diagnosable.
-        try {
-          const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-          const path = (request.url ?? "?").split("?")[0] ?? "";
-          requestOptions.log?.(`LISTENER_REQUEST_FAILED ${request.method ?? "?"} ${path} ${cause}`);
-        } catch {
-          // A failed diagnostic sink must not prevent the stable error response.
-        }
-        if (!response.headersSent) refuseRequest(response, "LISTENER_REQUEST_FAILED");
-        else response.end();
+      // The response side of the one per-request line — a refusal's code and status, a slow
+      // request's duration, a thrown handler's cause — lives in `http-listener-request-log.ts`.
+      logServedRequest({
+        log: requestOptions.log,
+        now: () => performance.now(),
+        onThrown: () => {
+          if (!response.headersSent) refuseRequest(response, "LISTENER_REQUEST_FAILED");
+          else response.end();
+        },
+        request,
+        response,
+        served: serve(
+          request, response, requestOptions, authority, origin, assets, pairingApproval,
+          pairingCompletion,
+        ),
+        slowRequestMs: requestOptions.slowRequestMs ?? SLOW_REQUEST_MS,
       });
     });
 

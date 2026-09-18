@@ -45,12 +45,23 @@ export interface AgentWrapperConfig {
    *  null when it has none. A fact, not a store handle. */
   readonly agentProvider?: ((goalId: string) => string | null) | undefined;
   /**
-   * Claim lifetime per spawn: the reap horizon when a child dies without
-   * releasing. The agent renews it if the work runs longer.
+   * Claim lifetime per spawn: the reap horizon when a child dies without releasing. While
+   * the child LIVES the wrapper renews the claim under the seat's own bearer every third of
+   * this (agent-claim-renewal.ts), so a seat that outruns one TTL never loses its claim; the
+   * seat may still renew itself. The bearer (`sessionTtlMs`) is derived from the agent
+   * lifetime and so outlives every renewal's release: a renewal only ever moves the CLAIM's
+   * horizon, and the exit-path release happens while the child's own cap still bounds it.
    */
   readonly claimTtlMs: number;
   readonly clock: () => number;
   readonly deps: CommandAdapterDeps;
+  /**
+   * One line of wrapper diagnostics: a refused or skipped claim renewal is said here, once per
+   * code per seat (`[wrapper] <item> claim renew refused <code>: <detail>`). Absent = stderr.
+   * The wrapper bin passes its wrapper.log sink (stdout) so these lines sit beside the seat
+   * quiet and kill lines; nothing tees stderr into that log.
+   */
+  readonly log?: ((line: string) => void) | undefined;
   readonly maxAgents: number;
   /** Stops restaffing one unmoved item; leaving READY or a new proved review grant re-arms it. */
   readonly maxItemAttempts?: number | undefined;

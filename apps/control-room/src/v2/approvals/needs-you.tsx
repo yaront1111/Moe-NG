@@ -12,6 +12,8 @@ import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model
 import { PreviewCard } from "./preview-card.js";
 import { EscalationFindings } from "./needs-you-escalation-findings.js";
 import { EscalationGuidanceInput } from "./escalation-guidance-input.js";
+import { EscalationOptions } from "./escalation-options.js";
+import { listedFindingsBlockNothing } from "./needs-you-escalation.js";
 import { supportsEscalationGuidance, validEscalationGuidance } from "./escalation-port.js";
 import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 import type { OfferOutcome } from "./offer-wire.js";
@@ -176,9 +178,15 @@ function DecisionCard({
   const guided = replan !== null && guidance.length > 0;
   const guidanceBlocked = guided && (!guidanceSupported || !validEscalationGuidance(guidance));
   // A stalled review repeats unless something changes: where the node takes instructions, the
-  // bare retry waits for them and replanning becomes the primary answer.
-  const stalled = (replan?.stalledRounds?.length ?? 0) > 0;
+  // bare retry waits for them and replanning becomes the primary answer. A stall on findings
+  // that block nothing (all MINOR, or owned by other nodes) cannot repeat: the kernel accepts
+  // the next such round, so the plain retry stays primary (UnAI 2026-09-17/18). A list at the
+  // daemon's cap proves nothing (a blocking finding may be unlisted), so it keeps the gate.
+  const stalled = (replan?.stalledRounds?.length ?? 0) > 0 && !listedFindingsBlockNothing(replan?.findings ?? []);
   const allowNeedsGuidance = stalled && guidanceSupported && !guided;
+  // The guidance textbox renders only where a decision port exists; the option copy that says
+  // "whatever you write below" must not outlive it on a read-only card.
+  const guidanceEntry = guidanceSupported && onDecide !== undefined;
   return (
     <li className="cr2-needs-card" data-kind={item.kind} data-testid={`cr.needsyou.item.${slug}`}>
       <div className="cr2-needs-main">
@@ -188,6 +196,7 @@ function DecisionCard({
           ? result.busy ? "The replacement goal is being created." : "Replacement creation needs retry. The original node is already retired."
           : replanPending ? "Resume to check the saved request against the daemon and finish creating its replacement." : item.detail}</p>
         {item.escalation === undefined ? null : <EscalationFindings facts={item.escalation} />}
+        {replan === null || replanPending ? null : <EscalationOptions guidanceEntry={guidanceEntry} />}
         {replan === null || onDecide === undefined || replanPending ? null : <EscalationGuidanceInput
           disabled={result?.busy === true || done || reviewUnavailable} onChange={setGuidance}
           supported={guidanceSupported} value={guidance} />}

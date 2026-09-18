@@ -13,6 +13,13 @@ import type {
   HttpDispatchPort,
   HttpMcpAdapter,
   HttpSessionPort,
+  McpDispatchFault,
+  McpDispatchFaultObserver,
+  McpDispatchFaultStage,
+  McpSessionFault,
+  McpSessionFaultObserver,
+  StdioDispatchPort,
+  StdioServerOptions,
 } from "@moe/mcp";
 
 /**
@@ -198,4 +205,31 @@ it("reaches all six published types through the bare specifier", () => {
     authOutcome,
   ]).toHaveLength(6);
   expect(authOutcome).toEqual({ ok: true });
+});
+
+/**
+ * The dispatch-fault types, pinned the same way. Harder than existence: the observer is
+ * assigned into BOTH published option bags, so `onDispatchFault` on the stdio server and on
+ * the HTTP adapter must expect exactly the published observer type, and the fault it receives
+ * must be the published fault.
+ */
+const faultStage: McpDispatchFaultStage = "dispatch";
+const observer: McpDispatchFaultObserver = (fault: McpDispatchFault): void => {
+  if (fault.stage !== faultStage) return;
+};
+const stdioOptions: StdioServerOptions = {
+  credential: "type-surface-probe", onDispatchFault: observer, port: null as unknown as StdioDispatchPort,
+};
+const sessionObserver: McpSessionFaultObserver = (fault: McpSessionFault): void => {
+  if (fault.stage !== "validate-bearer") return;
+};
+const observedAdapterOptions: HttpAdapterOptions = {
+  dispatchPort, onDispatchFault: observer, onSessionFault: sessionObserver, sessionPort,
+};
+
+it("reaches the five published fault types through the bare specifier", () => {
+  expect([faultStage, observer, sessionObserver, stdioOptions, observedAdapterOptions]).toHaveLength(5);
+  expect(stdioOptions.onDispatchFault).toBe(observer);
+  expect(observedAdapterOptions.onDispatchFault).toBe(observer);
+  expect(observedAdapterOptions.onSessionFault).toBe(sessionObserver);
 });

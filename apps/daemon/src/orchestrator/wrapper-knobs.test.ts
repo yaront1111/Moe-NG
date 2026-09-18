@@ -1,17 +1,38 @@
 import { describe, expect, it } from "vitest";
 
-import { WRAPPER_ENV_INVALID, readWrapperKnobs } from "./wrapper-knobs.js";
+import { WRAPPER_ENV_INVALID, describeSeatBudget, readWrapperKnobs } from "./wrapper-knobs.js";
 
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+const TWENTY_MINUTES_MS = 20 * 60 * 1000;
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const DEFAULTS = Object.freeze({
-  agentTimeoutMs: THIRTY_MINUTES_MS,
+  agentSilenceMs: TWENTY_MINUTES_MS,
+  // The ABSOLUTE cap behind the silence watch, no longer the hang detector: it was the 30-minute
+  // claim TTL, which killed a working node with a tool child alive (UnAI 2026-09-18).
+  agentTimeoutMs: TWO_HOURS_MS,
   claimTtlMs: THIRTY_MINUTES_MS,
   intervalMs: 15_000,
   maxAgents: 2,
   maxItemAttempts: 3,
   nodeTrees: false,
   once: false,
-  sessionTtlMs: THIRTY_MINUTES_MS + 60_000,
+  // Derived from the cap, so a two-hour seat's bearer still outlives its exit-path release.
+  sessionTtlMs: TWO_HOURS_MS + 60_000,
+});
+
+describe("describeSeatBudget", () => {
+  it("states every horizon the wrapper enforces, and says when none of it was configured", () => {
+    const line = describeSeatBudget(readWrapperKnobs({}), {}, 10 * 60 * 1000);
+    expect(line).toBe("[wrapper] seat budget: silence=20m cap=2h claim=30m renew=10m session=121m"
+      + " (defaults: no MOE_AGENT_* reached this process)");
+  });
+
+  it("drops the defaults marker once a MOE_AGENT_* knob reached the process, and prints the stated value", () => {
+    const env = { MOE_AGENT_SILENCE_MS: "90000" };
+    const line = describeSeatBudget(readWrapperKnobs(env), env, 600_000);
+    expect(line).toContain("silence=90s");
+    expect(line).not.toContain("defaults");
+  });
 });
 
 describe("readWrapperKnobs", () => {
@@ -19,8 +40,26 @@ describe("readWrapperKnobs", () => {
     expect(readWrapperKnobs({})).toEqual(DEFAULTS);
     // Empty is absent, not zero.
     expect(readWrapperKnobs({
-      MOE_AGENT_TIMEOUT_MS: "", MOE_WRAPPER_INTERVAL_MS: "", MOE_WRAPPER_MAX_AGENTS: "",
+      MOE_AGENT_SILENCE_MS: "", MOE_AGENT_TIMEOUT_MS: "", MOE_WRAPPER_INTERVAL_MS: "",
+      MOE_WRAPPER_MAX_AGENTS: "",
     })).toEqual(DEFAULTS);
+  });
+
+  it("keeps the silence cap under the absolute cap by default, so a hung seat dies first", () => {
+    const knobs = readWrapperKnobs({});
+    expect(knobs.agentSilenceMs).toBeLessThan(knobs.agentTimeoutMs);
+    expect(knobs.agentSilenceMs).toBeLessThan(knobs.claimTtlMs);
+  });
+
+  it("reads an explicit silence cap and refuses a malformed one by name", () => {
+    expect(readWrapperKnobs({ MOE_AGENT_SILENCE_MS: "600000" }).agentSilenceMs).toBe(600_000);
+    // The silence cap does not stretch the bearer: only the absolute cap derives it.
+    expect(readWrapperKnobs({ MOE_AGENT_SILENCE_MS: "99999999" }).sessionTtlMs)
+      .toBe(DEFAULTS.sessionTtlMs);
+    for (const bad of ["abc", "0", "-1", "1.5", "1e3"]) {
+      expect(() => readWrapperKnobs({ MOE_AGENT_SILENCE_MS: bad }))
+        .toThrow(new RegExp(`${WRAPPER_ENV_INVALID}: MOE_AGENT_SILENCE_MS`, "u"));
+    }
   });
 
   it("reads explicit values", () => {
@@ -31,13 +70,13 @@ describe("readWrapperKnobs", () => {
   });
 
   it("derives the bearer TTL from the agent lifetime so the session outlives the process", () => {
-    // A two-hour agent keeps renewing a thirty-minute claim; the bearer that
-    // must release on exit has to last the whole two hours plus the kill grace.
+    // A three-hour agent keeps renewing a thirty-minute claim; the bearer that
+    // must release on exit has to last the whole three hours plus the kill grace.
     // The claim TTL itself is NOT stretched: it stays the reap horizon.
-    const long = readWrapperKnobs({ MOE_AGENT_TIMEOUT_MS: "7200000" });
-    expect(long.agentTimeoutMs).toBe(7_200_000);
+    const long = readWrapperKnobs({ MOE_AGENT_TIMEOUT_MS: "10800000" });
+    expect(long.agentTimeoutMs).toBe(10_800_000);
     expect(long.claimTtlMs).toBe(THIRTY_MINUTES_MS);
-    expect(long.sessionTtlMs).toBe(7_200_000 + 60_000);
+    expect(long.sessionTtlMs).toBe(10_800_000 + 60_000);
     // A short agent never shortens the bearer below the claim horizon.
     const short = readWrapperKnobs({ MOE_AGENT_TIMEOUT_MS: "60000" });
     expect(short.agentTimeoutMs).toBe(60_000);

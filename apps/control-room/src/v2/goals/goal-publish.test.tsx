@@ -80,11 +80,17 @@ describe("publishOffer, publishLine, boundRemoteUrl and landedCommits", () => {
     expect(publishOffer(null, "goal-1")).toBeNull();
     expect(publishLine(null)).toContain("Not published yet");
     expect(publishLine({ branch: null, code: null, decisionId: "d", outcome: "PENDING", remoteUrl: "https://x/y.git", requestedAt: "t", sha: null, url: null }))
-      .toBe("Publishing to https://x/y.git · waiting for the wrapper to push");
+      .toBe("Publishing to https://x/y.git · waiting for the wrapper to push (it waits while a coding seat holds the repository)");
     expect(publishLine({ branch: "main", code: null, decisionId: "d", outcome: "PUSHED", remoteUrl: "https://x/y.git", requestedAt: "t", sha: "0123456789abcdef", url: null }))
       .toBe("Pushed 0123456789 on main to https://x/y.git");
     expect(publishLine({ branch: null, code: "GIT_PUSH_FAILED", decisionId: "d", outcome: "REFUSED", remoteUrl: "https://x/y.git", requestedAt: "t", sha: null, url: null }))
       .toBe("Publish refused · GIT_PUSH_FAILED · decide again to retry");
+    // A diverged remote reads as the operator's instruction, not "decide again" (which would refuse again).
+    // The view carries only the code, so the copy says where the two shas are: the wrapper log.
+    expect(publishLine({ branch: "main", code: "PUBLISH_REMOTE_DIVERGED", decisionId: "d", outcome: "REFUSED", remoteUrl: "https://x/y.git", requestedAt: "t", sha: "a".repeat(40), url: null }))
+      .toBe("Publish refused · PUBLISH_REMOTE_DIVERGED · the remote branch has commits the approved commit does not contain "
+        + "(someone merged or pushed there behind Moe); the wrapper log names the remote and approved commits. "
+        + "Fetch and merge (or rebase) the remote branch into the workspace branch, then decide again");
   });
 
   it("reads the bound url only from a REMOTE frame, and treats unread, unbound and refused alike", () => {

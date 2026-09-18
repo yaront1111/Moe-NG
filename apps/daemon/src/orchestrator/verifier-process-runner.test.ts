@@ -9,6 +9,7 @@ import type { NodeMission } from "./agent-wrapper.js";
 import {
   createVerifierProcessRunner,
   type VerifierProcessRunnerOptions,
+  type VerifierSpawnFault,
 } from "./verifier-process-runner.js";
 
 interface FakeChild {
@@ -761,5 +762,62 @@ describe("createVerifierProcessRunner", () => {
       expect(after).toStrictEqual(expected);
       expect(Object.keys(after ?? {})).toEqual(["LANG", "TMPDIR"]); // ORDER and arity
     }
+  });
+});
+
+describe("createVerifierProcessRunner spawn fault disclosure", () => {
+  it("answers a null exit for a recipe that could not be spawned, and says why to the observer", async () => {
+    // Before this a missing `bash`, an unreadable workspace and a deadline kill all read alike:
+    // exitCode null, no output.
+    const faults: VerifierSpawnFault[] = [];
+    const runner = createVerifierProcessRunner({
+      onSpawnFault: (fault) => { faults.push(fault); },
+      platform: "linux",
+      spawn: () => { throw Object.assign(new Error("spawn bash ENOENT"), { code: "ENOENT" }); },
+      timeoutMs: 10_000,
+    });
+
+    const capture = await runner(brief);
+
+    expect(capture).toMatchObject({ byteCount: 0, exitCode: null, output: "" });
+    expect(faults).toEqual([{
+      stage: "spawn",
+      test: brief.test,
+      thrown: expect.objectContaining({ code: "ENOENT", message: "spawn bash ENOENT", name: "Error" }) as unknown,
+      workspace: brief.workspace,
+    }]);
+  });
+
+  it("reports a child that errored before it had a pid the same way, from the error event", async () => {
+    const fake = fakeChild(null);
+    const faults: VerifierSpawnFault[] = [];
+    const runner = createVerifierProcessRunner({
+      onSpawnFault: (fault) => { faults.push(fault); },
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 10_000,
+    });
+
+    const done = runner(brief);
+    fake.emitter.emit("error", Object.assign(new Error("spawn EACCES"), { code: "EACCES" }));
+    const capture = await done;
+
+    expect(capture.exitCode).toBeNull();
+    expect(faults.map((fault) => [fault.stage, fault.thrown.code])).toEqual([["spawn", "EACCES"]]);
+  });
+
+  it("still answers the null exit when the observer itself throws, and identically with none", async () => {
+    const throwing = createVerifierProcessRunner({
+      onSpawnFault: () => { throw new Error("sink closed"); },
+      platform: "linux",
+      spawn: () => { throw new Error("spawn failed"); },
+      timeoutMs: 10_000,
+    });
+    expect((await throwing(brief)).exitCode).toBeNull();
+
+    const silent = createVerifierProcessRunner({
+      platform: "linux", spawn: () => { throw new Error("spawn failed"); }, timeoutMs: 10_000,
+    });
+    expect((await silent(brief)).exitCode).toBeNull();
   });
 });

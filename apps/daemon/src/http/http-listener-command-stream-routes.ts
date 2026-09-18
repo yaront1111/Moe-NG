@@ -6,7 +6,7 @@ import {
   readAffordanceRequest,
 } from "./affordance-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
-import { tagRefusal } from "./http-refusal-tag.js";
+import { faultFrameOf, refusalTagOf, tagFaultFrame, tagRefusal } from "./http-refusal-tag.js";
 import {
   eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
 } from "./event-stream-access.js";
@@ -71,6 +71,13 @@ export function reply(
   response: ServerResponse, status: number, body: unknown, headers: ReplyHeaders = {},
 ): void {
   const payload = JSON.stringify(body);
+  // A frame that reports the DAEMON'S OWN FAULT — a store that could not be read, a commit the
+  // durable store refused — is tagged here, at the one funnel every frame passes, so the
+  // completion line can name it. A refusal the listener already tagged keeps its own line.
+  if (refusalTagOf(response) === null) {
+    const fault = faultFrameOf(body);
+    if (fault !== null) tagFaultFrame(response, fault);
+  }
   response.writeHead(status, { ...headers, "content-type": "application/json" });
   response.end(payload);
 }

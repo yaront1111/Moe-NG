@@ -3,6 +3,7 @@ import { REVIEW_REASON_CODES, findingFingerprint } from "@moe/review";
 import type { ReviewPackageBoundItem, ReviewPackageItemInput } from "@moe/review";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { DomainRefusal, decisionOf } from "../daemon-command-dispatch.js";
 import { REVIEW_COMMAND_KINDS, REVIEW_SCHEMA_VERSION, decodeReviewRequestBytes } from "./review-contracts.js";
 import { commitAccepted, readReviewLedger } from "./review-ledger.js";
 import type { StoredPackageItems } from "./review-round-items.js";
@@ -342,7 +343,118 @@ describe("a refusal names the code AND the layer that produced it", () => {
     expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
     expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
     expect(outcome.kernelLayer).toBeNull();
+    expect(outcome.detail).toBe("findings must be a JSON array, got absent");
     expect(decisionCount(store)).toBe(0);
+  });
+
+  /**
+   * The live defect (UnAI 2026-09-18): three seats each sent `round` as the JSON string "2",
+   * read a bare REVIEW_PAYLOAD_INVALID, and burned a call finding out by trial that the number
+   * was wanted. The refusal is UNCHANGED — "4" is still not a round, nothing coerces — and the
+   * detail now names the field, the type and what arrived, then travels to the wire verbatim.
+   */
+  it("refuses round as the string \"4\" and says which field, which type and what arrived", () => {
+    const store = openStore();
+
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [finding()], { round: "4" })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    expect(outcome.detail).toBe('round must be a JSON integer >= 1, got string "4"; send the number unquoted');
+    expect(decisionCount(store)).toBe(0);
+
+    // The dispatch translation keeps the authority's own words: the seat reads them off the
+    // HTTP/MCP refusal body as `refusal.detail`, not the code echoed as its own detail.
+    let raised: unknown;
+    try { decisionOf(outcome); } catch (error) { raised = error; }
+    expect(raised).toBeInstanceOf(DomainRefusal);
+    expect(raised).toMatchObject({
+      code: "REVIEW_PAYLOAD_INVALID", detail: outcome.detail, layer: "DAEMON_INGRESS",
+    });
+  });
+
+  it.each([
+    { detail: "round must be a JSON integer >= 1, got number 0", label: "round 0", round: 0 },
+    { detail: "round must be a JSON integer >= 1, got number 1.5", label: "round 1.5", round: 1.5 },
+    { detail: "round must be a JSON integer >= 1, got null", label: "round null", round: null },
+  ])("names the offending round value for $label", ({ detail, round }) => {
+    const store = openStore();
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [finding()], { round })));
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect({ code: outcome.code, detail: outcome.detail }).toEqual({ code: "REVIEW_PAYLOAD_INVALID", detail });
+  });
+
+  it("names an unexpected payload key and the exact roster it must match", () => {
+    const store = openStore();
+
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [finding()], { reviewer: "me" })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(outcome.detail).toBe("payload must have exactly findings, packageItems, round, subjectRef; unexpected: \"reviewer\"");
+  });
+
+  it("keeps the unexpected-key detail under 1 KiB against 50 keys of 300 chars", () => {
+    // The header's rule on the wire: 15 000 bytes of caller keys come back as 8 cut keys and a
+    // count, so a hostile payload cannot make its own refusal grow with it.
+    const store = openStore();
+    const hostile: Record<string, unknown> = {};
+    for (let index = 0; index < 50; index += 1) hostile[`k${String(index).padStart(2, "0")}${"x".repeat(297)}`] = index;
+
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [finding()], hostile)));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(Buffer.byteLength(outcome.detail ?? "", "utf8")).toBeLessThan(1024);
+    expect(outcome.detail).toContain("+42 more");
+    expect(outcome.detail).not.toContain("x".repeat(64));
+  });
+
+  it("names the malformed finding by index and member, against the kernel's own vocabulary", () => {
+    const store = openStore();
+
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [
+      finding(), finding({ severity: "BLOCKER" }),
+    ])));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(outcome.detail).toBe('findings[1].severity must be one of CRITICAL, MAJOR, MINOR, got string "BLOCKER"');
+    expect(decisionCount(store)).toBe(0);
+  });
+
+  it("names a malformed package item by index and member", () => {
+    const store = openStore();
+
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [finding()], {
+      packageItems: [...packageItems(), { digest: hex64("99"), kind: "RUBRIC", locator: 7 }],
+    })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(outcome.detail).toBe("packageItems[7].locator must be a JSON string, got number 7");
+  });
+
+  it("carries no detail on a refusal whose code is the whole answer", () => {
+    const store = openStore();
+    expect(submit(store, 1).ok).toBe(true);
+
+    const outcome = send(store, envelope("review.submit", 99, submitPayload(2), "cmd-stale-no-detail"));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_EXPECTED_VERSION_STALE");
+    expect(outcome.detail).toBeNull();
+    let raised: unknown;
+    try { decisionOf(outcome); } catch (error) { raised = error; }
+    expect(raised).toMatchObject({ code: "REVIEW_EXPECTED_VERSION_STALE", detail: "REVIEW_EXPECTED_VERSION_STALE" });
   });
 
   it("refuses a stale expected version at the daemon prerequisite gate", () => {

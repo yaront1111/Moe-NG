@@ -102,6 +102,11 @@ export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
     "the reviewer calibration slice (moe-reviewer-calibration/1) an operator installs with policy.install",
   "verifier-policy":
     "the host verifier policy slice (moe-verifier-policy/1) an operator installs with policy.install",
+  // affordance-read.ts - the daemon could not READ the verifier's standing slices at all, so it
+  // names the failed read instead of the slices: telling the operator to install what may well
+  // be installed already would send them to a re-install that cannot clear the stall.
+  "verifier-authority-unreadable":
+    "a readable verifier authority — the daemon could not read the installed slices, so reinstalling them will not help",
   // affordance-read.ts:418 and its surfaceMissing arm - nothing is bound for the environment,
   // so a deploy has no host to reach. Phrased as the ABSENCE rather than as the command kind:
   // the daemon reports the token "deployment.set_target", and an operator told "STILL NEEDS

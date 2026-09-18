@@ -12,9 +12,11 @@
  * — service imports settlement, never the reverse.
  */
 
+import { describeThrown } from "@moe/contracts";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
+import type { FoundationCaptureFaultObserver } from "./foundation-capture-fault-report.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { applyProviderUsageToBudget } from "../budget/budget-settlement-application.js";
 import { recordAttemptRelease } from "./attempt-release-disposition.js";
@@ -51,12 +53,24 @@ export function durableActivation(
     ? record : refuseLocal("FOUNDATION_ATTEMPT_BINDING_MISMATCH");
 }
 
-/** Snapshot capture answers without awaiting untrusted non-native thenables. */
-async function contained(call: () => unknown): Promise<unknown> {
+/**
+ * Snapshot capture answers without awaiting untrusted non-native thenables. A throw answers
+ * null — no observation — and is handed to the observer, described, inside its own fence.
+ */
+export async function containCaptureAnswer(
+  call: () => unknown, observe: FoundationCaptureFaultObserver | undefined,
+): Promise<unknown> {
   try {
     const pending = call();
     return snapshotFoundationValue(pending instanceof Promise ? await pending : pending);
-  } catch { return null; }
+  } catch (error) {
+    try {
+      observe?.(describeThrown(error));
+    } catch {
+      // The null answer is the contract; a broken observer does not get to change it.
+    }
+    return null;
+  }
 }
 
 /** Only a proven settle earns the unchanged resumable release reason. */
@@ -99,7 +113,7 @@ export function createFoundationAttemptSettlement(deps: FoundationAttemptDeps) {
     input: Record<string, unknown>, observation: unknown, registration: unknown,
     prepared: PreparedCapture, decidedAt: string,
   ): Promise<FoundationAttemptOutcome> {
-    const answer = await contained(() => deps.captureResult({
+    const answer = await containCaptureAnswer(() => deps.captureResult({
       attemptId: record.attempt.attemptId, baseIdentity: input["baseIdentity"] as string,
       captureRef: prepared.captureRef, nodeKey: bound.nodeKey, observation,
       // THE PROOF TRAVELS LEXICALLY TOO, and it has to: it is not a field of the
@@ -108,7 +122,7 @@ export function createFoundationAttemptSettlement(deps: FoundationAttemptDeps) {
       // `@moe/runner` so no consumer may mint one. Like `captureRef` it comes from
       // the preparation THIS dispatch made, never from anything a caller sent.
       proof: prepared.proof, sessionId: bound.sessionId,
-    }));
+    }), deps.onCaptureFault);
     // THE AUTHORITY'S SEALED INPUT, not the caller's proposal. `input` here is
     // `buildInputManifest` over the entries the REQUEST proposed, and a request
     // may lawfully propose a subset — `entriesAgree` checks each proposed entry

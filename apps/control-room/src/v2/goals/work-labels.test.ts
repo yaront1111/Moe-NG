@@ -106,8 +106,8 @@ describe("work-labels mirrors the daemon's emitted command kinds", () => {
     // below; this one stays because two independently written rosters disagreeing
     // is a louder signal than either alone.
     expect(new Set(Object.keys(MISSING_TOKENS))).toEqual(new Set([
-      "escalation", "replan", "verification", "verifier-calibration", "verifier-policy",
-      "deployment.set_target",
+      "escalation", "replan", "verification", "verifier-authority-unreadable",
+      "verifier-calibration", "verifier-policy", "deployment.set_target",
     ]));
   });
 });
@@ -238,9 +238,13 @@ function missingFieldTokens(source: string): readonly string[] {
     .flatMap((body) => [...body.matchAll(/"([^"]+)"/gu)].map((hit) => hit[1] ?? ""));
 }
 
-/** Quoted literals inside the verification-prerequisite array the surface freezes. */
+/**
+ * Quoted literals inside the verification prerequisites the surface freezes. The frozen value
+ * is a conditional — the readable arm lists the absent slices, the unreadable arm names the
+ * failed read — so the scan takes the whole freeze argument, both arms, not one array literal.
+ */
 function verificationTokens(source: string): readonly string[] {
-  const block = /verificationMissing = Object\.freeze\(\[([\s\S]*?)\]\);/u.exec(source);
+  const block = /verificationMissing = Object\.freeze\(([\s\S]*?)\);/u.exec(source);
   if (block === null) throw new Error("verification token block not found in affordance-read.ts");
   return [...(block[1] ?? "").matchAll(/"([^"]+)"/gu)].map((hit) => hit[1] ?? "");
 }
@@ -277,6 +281,8 @@ describe("every prerequisite token the daemon emits has a reading, and every rea
     // quietly agreeing with a map that lost an entry.
     expect(missingFieldTokens(AFFORDANCE_READ)).toContain("deployment.set_target");
     expect(verificationTokens(AFFORDANCE_READ).length).toBeGreaterThan(0);
+    // Both arms of the verification conditional are reached, not only the readable one.
+    expect(verificationTokens(AFFORDANCE_READ)).toContain("verifier-authority-unreadable");
     expect(tokenPrefixes(AFFORDANCE_READ).length).toBeGreaterThan(0);
   });
 
@@ -286,8 +292,8 @@ describe("every prerequisite token the daemon emits has a reading, and every rea
     ]);
     // Independently spelled, so a scanner that drifted cannot quietly agree with itself.
     expect(emitted).toEqual(new Set([
-      "escalation", "replan", "verification", "verifier-calibration", "verifier-policy",
-      "deployment.set_target",
+      "escalation", "replan", "verification", "verifier-authority-unreadable",
+      "verifier-calibration", "verifier-policy", "deployment.set_target",
     ]));
     // DIRECTION 1 — every emitted token has a reading that is not the raw token.
     for (const token of emitted) {

@@ -24,8 +24,11 @@ import { closeAllDaemonSessions } from "./http-shutdown.js";
 import { createHttpAdapterLifecycle, settleHttpResponseOnClose } from "./http-adapter-lifecycle.js";
 import { trackHttpInflightRequests } from "./http-inflight-requests.js";
 import type { HttpInflightRequests } from "./http-inflight-requests.js";
+import type { McpDispatchFaultObserver } from "../dispatch-fault.js";
+import type { McpSessionFaultObserver } from "../session-fault.js";
 import { createHttpMcpServer, httpListedTools } from "./http-tool-bridge.js";
 import type { HttpDispatchPort } from "./http-tool-bridge.js";
+import type { StdioPayloadPropertyOverlay } from "../stdio/stdio-tool-schemas.js";
 
 /**
  * Official MCP Streamable HTTP adapter over the same generated surface the stdio adapter
@@ -70,6 +73,16 @@ export interface HttpAdapterOptions {
   readonly enableJsonResponse?: boolean;
   /** Clock for idle bookkeeping, epoch milliseconds. Injectable so reaping is testable. */
   readonly now?: () => number;
+  /**
+   * Host-side disclosure of a dispatch port that THROWS inside a tool call. The client still
+   * receives exactly `UNKNOWN_ERROR`; the throw's message, errno code and stack go here and
+   * nowhere else. Absent means the fault is contained silently, as it always was.
+   */
+  readonly onDispatchFault?: McpDispatchFaultObserver;
+  /** Host-side disclosure of a session port that THROWS while validating a bearer. */
+  readonly onSessionFault?: McpSessionFaultObserver;
+  /** Payload members the host has typed, per kind; same rule as the stdio server's. */
+  readonly payloadProperties?: StdioPayloadPropertyOverlay;
   readonly serverName?: string;
   readonly sessionIdFactory?: () => string;
   /** Milliseconds a session may sit idle before the next initialize reaps it. */
@@ -167,7 +180,7 @@ async function openSessionTransport(
   signal: AbortSignal,
 ): Promise<OpenedSession> {
   const server = createHttpMcpServer(
-    options.dispatchPort, options.serverName ?? "moe-runtime", listedTools,
+    options.dispatchPort, options.serverName ?? "moe-runtime", listedTools, options.onDispatchFault,
   );
   const latch = createSessionCloseLatch();
   const origin = request.headers.get("origin");
@@ -224,7 +237,7 @@ async function openSessionTransport(
 export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapter {
   // Resolved eagerly so an unknown or empty allowlist refuses at construction, not on
   // the first request a client makes.
-  const listedTools = httpListedTools(options.toolAllowlist);
+  const listedTools = httpListedTools(options.toolAllowlist, options.payloadProperties);
   const registry = createHttpSessionRegistry<SessionAttachment>();
   const lifecycle = createHttpAdapterLifecycle(async () => {
     await closeAllDaemonSessions(registry, options.sessionPort, registry.entries());
@@ -260,7 +273,10 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
     const rebinding = loopbackRefusal(request);
     if (rebinding !== undefined) return rebinding;
 
-    const screened = await screenRequest({ port: options.sessionPort, registry, request });
+    const screened = await screenRequest({
+      ...(options.onSessionFault === undefined ? {} : { observe: options.onSessionFault }),
+      port: options.sessionPort, registry, request,
+    });
     if (lifecycle.signal.aborted) return closed();
     if (screened.kind === "refused") return errorResponse(screened.error);
     if (screened.kind === "unknown-session") {

@@ -90,8 +90,11 @@ durable fact and consumes the verdict. Its one job is to make a reviewer's autho
   `resultSha256`, `sourceLineageDigest`, `sourceRound` and `unsuccessfulRounds`, and requires
   `decisionVersion > sourceAggregateVersion`. `reviewContinuationMatches` lets exactly one append
   onto the lineage the human saw; `reviewContinuationAccepts` re-derives the pre-approval lineage
-  digest and refuses if any *unattributed* record sits past `sourceRound`. It suppresses
-  escalation for that one clean round only — rejection history is never reset.
+  digest and refuses only if an *unattributed CRITICAL/MAJOR* record sits past `sourceRound`; a
+  MINOR own note or an attributed record on the continued round does not spend the grant (UnAI
+  2026-09-18: with "any unattributed record" the continuation could never rescue an all-MINOR
+  round, so "Allow one more attempt" bought nothing and the operator looped on it). It suppresses
+  escalation for that one round only — rejection history is never reset.
 
 ## Gotchas
 

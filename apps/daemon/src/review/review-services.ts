@@ -1,17 +1,15 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
 import {
-  REVIEW_FINDING_SEVERITIES,
-  REVIEW_FINDING_SUBJECT_KINDS,
   REVIEW_ROUND_ABSOLUTE_CEILING,
   buildReviewPackage,
   recordReviewRound,
 } from "@moe/review";
-import type { ReviewFinding, ReviewPackageItemInput } from "@moe/review";
+import type { ReviewPackageItemInput } from "@moe/review";
 import type { SqliteEventStore } from "@moe/store";
 
 import { acceptOutput, decideEscalation } from "./review-acceptance.js";
-import { decodeReviewRequestBytes, isPlainJsonObject } from "./review-contracts.js";
+import { decodeReviewRequestBytes } from "./review-contracts.js";
 import type { ReviewRequest } from "./review-contracts.js";
 import { classifyReplanDelta } from "./review-delta.js";
 import { findingAttributionsValid } from "./review-finding-attribution.js";
@@ -23,9 +21,14 @@ import {
   readReviewLedger,
   refuse,
   refuseFromKernel,
+  refuseInvalidPayload,
   replayOf,
 } from "./review-ledger.js";
 import type { CommandHandler, HandlerContext, HandlerTable, ReviewOutcome } from "./review-ledger.js";
+import {
+  arrayDetail, firstDetail, parseFindings, parseItems, positiveIntegerDetail, refDetail,
+  unexpectedKeysDetail,
+} from "./review-payload-shape.js";
 import { boundPackageItems } from "./review-round-items.js";
 import type { PreparedReviewSubmission } from "./review-submission-package.js";
 import { reviewContinuationForSubmission } from "./review-continuation.js";
@@ -45,80 +48,10 @@ import type { ReviewVerifierFailureSource } from "./review-verifier-failure.js";
  * shows which of the four layers answered.
  */
 
-const SEVERITIES: ReadonlySet<string> = new Set<string>(REVIEW_FINDING_SEVERITIES);
-const SUBJECT_KINDS: ReadonlySet<string> = new Set<string>(REVIEW_FINDING_SUBJECT_KINDS);
-
 const encoder = new TextEncoder();
 
-/**
- * An attribution names another node of the reporter's plan: exactly `nodeKey` and
- * `criterionIds`. Anything else is not an attribution, and silently dropping it would charge the
- * reporter for a finding it said it does not own - so the whole payload refuses instead.
- */
-function parseAttribution(value: JsonValue): ReviewFinding["attributedTo"] | null {
-  if (!isPlainJsonObject(value)) return null;
-  const nodeKey = value["nodeKey"];
-  const criterionIds = value["criterionIds"];
-  if (Object.keys(value).length !== 2 || typeof nodeKey !== "string" || !Array.isArray(criterionIds)
-    || !criterionIds.every((entry) => typeof entry === "string")) return null;
-  return { criterionIds: criterionIds as string[], nodeKey };
-}
-
-/**
- * Shape only, against the KERNEL'S OWN vocabularies rather than a local copy of them. A finding
- * must name a typed subject with a non-empty locator, which is what makes it a link to a
- * required change rather than free prose.
- */
-function parseFinding(value: JsonValue): ReviewFinding | undefined {
-  if (!isPlainJsonObject(value)) return undefined;
-  const attribution = value["attributedTo"] === undefined ? undefined : parseAttribution(value["attributedTo"]);
-  if (attribution === null) return undefined;
-  const subject = value["subject"];
-  const detail = value["detail"];
-  const ruleId = value["ruleId"];
-  const severity = value["severity"];
-  if (!isPlainJsonObject(subject)) return undefined;
-  const kind = subject["kind"];
-  const locator = subject["locator"];
-  if (typeof detail !== "string" || typeof ruleId !== "string" || ruleId.length === 0) {
-    return undefined;
-  }
-  if (typeof severity !== "string" || !SEVERITIES.has(severity)) return undefined;
-  if (typeof kind !== "string" || !SUBJECT_KINDS.has(kind)) return undefined;
-  if (typeof locator !== "string" || locator.length === 0) return undefined;
-  return {
-    ...(attribution === undefined ? {} : { attributedTo: attribution }),
-    detail,
-    ruleId,
-    severity,
-    subject: { kind, locator },
-  } as ReviewFinding;
-}
-
-function parseFindings(values: readonly JsonValue[]): readonly ReviewFinding[] | undefined {
-  const parsed: ReviewFinding[] = [];
-  for (const value of values) {
-    const finding = parseFinding(value);
-    if (finding === undefined) return undefined;
-    parsed.push(finding);
-  }
-  return parsed;
-}
-
-function parseItems(values: readonly JsonValue[]): readonly ReviewPackageItemInput[] | undefined {
-  const parsed: ReviewPackageItemInput[] = [];
-  for (const value of values) {
-    if (!isPlainJsonObject(value)) return undefined;
-    const digest = value["digest"];
-    const kind = value["kind"];
-    const locator = value["locator"];
-    if (typeof digest !== "string" || typeof kind !== "string" || typeof locator !== "string") {
-      return undefined;
-    }
-    parsed.push({ digest, kind, locator });
-  }
-  return parsed;
-}
+/** The exact keys a round may name; anything else refuses before a field is read. */
+const SUBMIT_PAYLOAD_KEYS = Object.freeze(["findings", "packageItems", "round", "subjectRef"] as const);
 
 function positiveInteger(value: JsonValue | undefined): number | null {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) return null;
@@ -132,6 +65,10 @@ function positiveInteger(value: JsonValue | undefined): number | null {
  * bindable evidence is refused by the kernel's PACKAGE layer and nothing is written. The built
  * package's `reviewInputDigest` is stored alongside the lineage, which is what makes each
  * recorded finding permanently attributable to the exact evidence it was raised against.
+ *
+ * Every shape refusal names its field and the JSON type it wanted (`review-payload-shape.ts`).
+ * The typed reads below stay the authority — `"4"` is still not a round — the detail only
+ * says so, because a bare code sent three seats bisecting the payload by trial (2026-09-18).
  */
 const submitRound: CommandHandler = (context): ReviewOutcome => {
   const { ledger, request, store } = context;
@@ -139,18 +76,25 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   const itemValues = payloadArray(request.payload, "packageItems");
   const subjectRef = payloadRef(request.payload, "subjectRef");
   const round = positiveInteger(request.payload["round"]);
-  if (Object.keys(request.payload).some((key) => !["findings", "packageItems", "round", "subjectRef"].includes(key))) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  const shape = firstDetail(
+    unexpectedKeysDetail(request.payload, SUBMIT_PAYLOAD_KEYS),
+    arrayDetail(request.payload, "findings"),
+    arrayDetail(request.payload, "packageItems"),
+    refDetail(request.payload, "subjectRef"),
+    positiveIntegerDetail(request.payload, "round"),
+  );
+  if (shape !== null || findingValues === null || itemValues === null || subjectRef === null || round === null) {
+    return refuseInvalidPayload(request.kind, shape ?? "payload shape invalid");
   }
-  if (findingValues === null || itemValues === null || subjectRef === null || round === null) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
-  }
-  const findings = parseFindings(findingValues);
+  const parsedFindings = parseFindings(findingValues);
+  if (!parsedFindings.ok) return refuseInvalidPayload(request.kind, parsedFindings.detail);
+  const findings = parsedFindings.value;
   const prepared = itemValues.length === 0 ? context.preparedSubmission : undefined;
-  const items = prepared?.items ?? parseItems(itemValues);
-  if (findings === undefined || items === undefined) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
-  }
+  const parsedItems = prepared === undefined
+    ? parseItems(itemValues)
+    : { ok: true as const, value: prepared.items };
+  if (!parsedItems.ok) return refuseInvalidPayload(request.kind, parsedItems.detail);
+  const items: readonly ReviewPackageItemInput[] = parsedItems.value;
   // Before package preparation, so the submission admission refuses without capturing Git.
   const attributions = findingAttributionsValid(store, request.projectId, subjectRef, findings);
   // A plan the store could not serve is a store fault, not an accusation about the findings.
@@ -265,7 +209,9 @@ export function runReviewCommand(
 
   const subjectRef = payloadRef(request.payload, "subjectRef");
   if (subjectRef === null) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+    return refuseInvalidPayload(
+      request.kind, refDetail(request.payload, "subjectRef") ?? "subjectRef missing",
+    );
   }
 
   const ledger = readReviewLedger(store, request.projectId, subjectRef);

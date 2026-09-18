@@ -432,7 +432,7 @@ it("puts no credential, connection string or host path on the wire, on any path"
  * reaching the listener as a half-built port that would throw on the first request.
  */
 it("refuses a backups factory that is not callable or answers no read method", () => {
-  const invalid = { failure: "INVALID", ok: false };
+  const invalid = { failure: "INVALID", ok: false, port: "backupReads" };
   expect(resolveOptionalDaemonPorts({ backupReads: 7 } as unknown as OptionalDaemonPortProvider))
     .toEqual(invalid);
   expect(resolveOptionalDaemonPorts(

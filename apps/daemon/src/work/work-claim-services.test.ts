@@ -335,6 +335,124 @@ describe("runWorkClaimCommand", () => {
 });
 
 /**
+ * EVERY REFUSAL SAYS WHY. Live (UnAI 2026-09-18, node 10, seat 87c543be): a seat that had
+ * outlived its claim tried `work.renew {workItemId}` and `work.claim {workItemId}`, read
+ * `WORK_CLAIM_PAYLOAD_INVALID` with no detail, tried `work.release` and read
+ * `WORK_CLAIM_NOT_FOUND`, and stopped — a whole attempt lost because nothing named the key it
+ * had left out. The codes stay exactly what they were; the detail is graded verbatim so a
+ * paraphrase that drops the key name or the shape reds here.
+ */
+describe("every work.* refusal names the missing key, its shape, or the holder", () => {
+  const EXPIRES_SHAPE = "expiresAt must be an ISO-8601 UTC instant with millisecond precision, "
+    + "like 2026-09-18T12:00:00.000Z, later than now";
+
+  it("work.renew with only {workItemId}: the live shape, names expiresAt as missing", () => {
+    const outcome = run("work.renew", "agent-a", { workItemId: ITEM }, 3);
+    expect(outcome).toMatchObject({
+      code: "WORK_CLAIM_PAYLOAD_INVALID", ok: false, refusedBy: "DAEMON_INGRESS",
+      detail: `work.renew takes exactly {expiresAt, workItemId}; ${EXPIRES_SHAPE} (missing)`,
+    });
+  });
+
+  it("work.claim with only {workItemId} names expiresAt as missing", () => {
+    expect(run("work.claim", "agent-a", { workItemId: "detail-claim-missing" })).toMatchObject({
+      code: "WORK_CLAIM_PAYLOAD_INVALID",
+      detail: `work.claim takes exactly {expiresAt, workItemId}; ${EXPIRES_SHAPE} (missing)`,
+    });
+  });
+
+  it("a malformed expiresAt is quoted back, bounded", () => {
+    expect(run("work.claim", "agent-a", { expiresAt: "tomorrow", workItemId: "detail-claim-shape" }))
+      .toMatchObject({
+        code: "WORK_CLAIM_PAYLOAD_INVALID",
+        detail: `work.claim takes exactly {expiresAt, workItemId}; ${EXPIRES_SHAPE} (malformed: got "tomorrow")`,
+      });
+    // A date without milliseconds is the most common near-miss; the shape line shows the fix.
+    expect(run("work.renew", "agent-a", { expiresAt: "2026-08-09T14:00:00Z", workItemId: ITEM }, 3))
+      .toMatchObject({
+        detail: `work.renew takes exactly {expiresAt, workItemId}; ${EXPIRES_SHAPE} (malformed: got "2026-08-09T14:00:00Z")`,
+      });
+    const long = "x".repeat(200);
+    const bounded = run("work.claim", "agent-a", { expiresAt: long, workItemId: "detail-claim-long" });
+    if (bounded.ok) throw new Error("expected refusal");
+    expect(bounded.detail).toContain(`(malformed: got "${"x".repeat(48)}…")`);
+    expect(bounded.detail).not.toContain("x".repeat(49));
+  });
+
+  it("a malformed workItemId names its own key, and both issues list in key order", () => {
+    expect(run("work.claim", "agent-a", { expiresAt: LATER, workItemId: "" })).toMatchObject({
+      code: "WORK_CLAIM_PAYLOAD_INVALID",
+      detail: 'work.claim takes exactly {expiresAt, workItemId}; workItemId must be a non-empty string (malformed: got "")',
+    });
+    expect(run("work.renew", "agent-a", { expiresAt: 42, workItemId: 7 }, 3)).toMatchObject({
+      detail: `work.renew takes exactly {expiresAt, workItemId}; ${EXPIRES_SHAPE} (malformed: got a number); `
+        + "workItemId must be a non-empty string (malformed: got a number)",
+    });
+    expect(run("work.release", "agent-a", {}, 3)).toMatchObject({
+      code: "WORK_CLAIM_PAYLOAD_INVALID",
+      detail: "work.release takes exactly {workItemId}; workItemId must be a non-empty string (missing)",
+    });
+    expect(run("work.release", "agent-a", { workItemId: null }, 3)).toMatchObject({
+      detail: "work.release takes exactly {workItemId}; workItemId must be a non-empty string (malformed: got null)",
+    });
+  });
+
+  it("WORK_CLAIM_NOT_FOUND tells never-claimed, released and expired apart", () => {
+    expect(run("work.release", "agent-a", { workItemId: "detail-never" })).toMatchObject({
+      code: "WORK_CLAIM_NOT_FOUND", refusedBy: "DAEMON_PREREQUISITE",
+      detail: 'work.release: "detail-never" has never been claimed',
+    });
+
+    const released = "detail-released";
+    expect(run("work.claim", "agent-a", { expiresAt: LATER, workItemId: released })).toMatchObject({ ok: true });
+    expect(run("work.release", "agent-a", { workItemId: released }, 1)).toMatchObject({ ok: true });
+    expect(run("work.renew", "agent-a", { expiresAt: LATER, workItemId: released }, 2)).toMatchObject({
+      code: "WORK_CLAIM_NOT_FOUND",
+      detail: 'work.renew: the claim on "detail-released" was already released (last held by agent-a)',
+    });
+
+    const expired = "detail-expired";
+    expect(run("work.claim", "agent-a", {
+      expiresAt: "2026-08-09T12:30:00.000Z", workItemId: expired,
+    })).toMatchObject({ ok: true });
+    expect(run("work.renew", "agent-a", { expiresAt: LATER, workItemId: expired }, 1, "2026-08-09T12:31:00.000Z"))
+      .toMatchObject({
+        code: "WORK_CLAIM_NOT_FOUND",
+        detail: 'work.renew: the claim on "detail-expired" held by agent-a expired at '
+          + "2026-08-09T12:30:00.000Z, before the daemon's 2026-08-09T12:31:00.000Z; a work.claim at "
+          + "expectedVersion = the item's claimAggregateVersion takes it again",
+      });
+  });
+
+  it("WORK_CLAIM_HELD and WORK_CLAIM_NOT_CLAIMANT name the holder and its horizon", () => {
+    const item = "detail-held";
+    expect(run("work.claim", "agent-a", { expiresAt: LATER, workItemId: item })).toMatchObject({ ok: true });
+    expect(run("work.claim", "agent-b", { expiresAt: LATER, workItemId: item }, 1)).toMatchObject({
+      code: "WORK_CLAIM_HELD",
+      detail: `work.claim: "${item}" is held by agent-a until ${LATER}`,
+    });
+    expect(run("work.renew", "agent-b", { expiresAt: LATER, workItemId: item }, 1)).toMatchObject({
+      code: "WORK_CLAIM_NOT_CLAIMANT",
+      detail: `work.renew: "${item}" is held by agent-a until ${LATER}, not by agent-b; only the holder renews its own claim`,
+    });
+    // agent-a's seat was opened live earlier in this file, so the release is refused too.
+    expect(run("work.release", "agent-b", { workItemId: item }, 1)).toMatchObject({
+      code: "WORK_CLAIM_NOT_CLAIMANT",
+      detail: `work.release: "${item}" is held by agent-a until ${LATER}, not by agent-b; `
+        + "the holder's seat is live (or its liveness unreadable), so only the holder releases it",
+    });
+  });
+
+  it("carries no detail where the code is the whole story, so the wire keeps the bare code", () => {
+    const item = "detail-reused";
+    expect(run("work.claim", "agent-a", { expiresAt: LATER, workItemId: item }, 0, undefined, "cmd-detail-reused"))
+      .toMatchObject({ ok: true });
+    expect(run("work.release", "agent-a", { workItemId: item }, 1, undefined, "cmd-detail-reused"))
+      .toMatchObject({ code: "WORK_CLAIM_COMMAND_ID_REUSED", detail: null, ok: false });
+  });
+});
+
+/**
  * A replay must PROVE same bytes before it echoes the stored decision. The
  * decision key is {commandId, principalId, projectId} — covering neither the
  * kind nor the payload — and `replayOf` answers before any store write, so

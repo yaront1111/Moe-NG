@@ -36,6 +36,13 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
   // A waiter is told WHO holds the repository and why (addendum 2026-09-15), never just BUSY.
   const busyBy = (handle: RepositoryExecutionHandle): RepositoryDeliveryRefusal => deliveryRefusal(
     "REPOSITORY_EXECUTION_BUSY", config.describeHolder?.(handle.owner.nodeRef, handle.reservation.phase));
+  // A FREE repository is left free for an approved publish that has not held it yet; see
+  // `RepositoryDeliveryConfig.publishWaiting`. Read only when nothing holds the repository.
+  const yieldToPublish = (): RepositoryDeliveryRefusal | null => {
+    const goalId = config.publishWaiting?.() ?? null;
+    return goalId === null ? null
+      : deliveryRefusal("REPOSITORY_EXECUTION_BUSY", `an approved publish of ${goalId} is waiting for the repository`);
+  };
   /**
    * Keeps what this controller just proved closed, for exactly the state it proved it in
    * (addendum 2026-09-15). A restarted controller relies on it only while that state is untouched.
@@ -106,6 +113,8 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     if (!read.ok) return "layer" in read ? read : deliveryRefusal(read.code);
     let handle = read.handle;
     if (handle === null) {
+      const yielded = yieldToPublish();
+      if (yielded !== null) return yielded;
       const acquired = config.port.acquire(workspace, { projectId: config.projectId, nodeRef,
         ownershipToken: randomBytes(32).toString("hex"), storeId: config.storeId }, config.controller);
       if (!acquired.ok) return deliveryRefusal(acquired.code);
@@ -299,7 +308,8 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
   const admission = (workspace: string, nodeRef: string): RepositoryDeliveryRefusal | null => {
     const read = config.port.readOwned(workspace, config.storeId, config.projectId);
     if (!read.ok) return deliveryRefusal(read.code);
-    return read.handle === null || read.handle.owner.nodeRef === nodeRef ? null : busyBy(read.handle);
+    if (read.handle === null) return yieldToPublish();
+    return read.handle.owner.nodeRef === nodeRef ? null : busyBy(read.handle);
   };
   return Object.freeze({ start, advance, admission });
 }

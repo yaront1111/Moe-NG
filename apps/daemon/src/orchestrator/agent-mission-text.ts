@@ -74,6 +74,28 @@ function readFacts(
 }
 
 /**
+ * WHO TENDS THE CLAIM, stated once in every brief right after the horizon it names.
+ *
+ * A live seat (UnAI 2026-09-18, node 10) read "until <iso>" as its deadline, worked past it,
+ * and when its submit was refused REVIEW_SUBMISSION_CLAIM_REQUIRED it tried work_renew with
+ * {"workItemId"} alone — the only shape the brief had ever shown it — and was refused
+ * WORK_CLAIM_PAYLOAD_INVALID. The wrapper now renews the claim under the seat's own bearer for
+ * as long as the process lives (agent-claim-renewal.ts), and the brief says so, and shows the
+ * exact renew payload for the case where a seat must do it itself.
+ */
+function claimRenewalFacts(workItemId: string): readonly string[] {
+  return [
+    "That expiry is a floor, not your deadline: the wrapper that spawned you renews the claim",
+    "on your behalf, under your own session, every few minutes for as long as your process runs,",
+    "so a long task never loses it. If you ever must renew it yourself, work_renew takes exactly",
+    `{"expiresAt": "<ISO-8601 UTC instant with millisecond precision, later than now>",`,
+    `"workItemId": "${workItemId}"} with targetAggregateId "${workItemId}" and expectedVersion =`,
+    "the claimAggregateVersion work_get_context shows; a payload of only {\"workItemId\"} is",
+    "refused WORK_CLAIM_PAYLOAD_INVALID.",
+  ];
+}
+
+/**
  * THE PRD READ PROTOCOL, ONE DEFINITION, shared verbatim by every brief that pages the PRD.
  *
  * Lifted out of `compilerMission` byte-identically when the design brief needed the same
@@ -100,7 +122,8 @@ function prdPaging(goal: string): readonly string[] {
  */
 function releaseAndRefuse(workItemId: string, projectId: string | null): readonly string[] {
   return [
-    "Renew your claim with work_renew if you need longer, and finish by calling",
+    "Your claim is renewed for you while you run (the work_renew shape above is for the rare",
+    "case you must do it yourself), and you finish by calling",
     `work_release with payload {"workItemId": "${workItemId}"}, targetAggregateId`,
     `"${workItemId}" and expectedVersion = the claimAggregateVersion your step shows in`,
     "work_get_context (re-read it right before releasing). If that re-read answers",
@@ -123,7 +146,9 @@ export function codeMission(
 ): string {
   const lines = [
     `You are a moe-next coding agent. You hold the durable claim on code node "${nodeRef}"`,
-    `(work item "${workItemId}") until ${expiresAt}. TASK — ${brief.title}:`,
+    `(work item "${workItemId}") until ${expiresAt}.`,
+    ...claimRenewalFacts(workItemId),
+    `TASK — ${brief.title}:`,
     brief.instructions,
     ...nodeDesignLines(design),
     ...(nodeRef.startsWith("node:v1:") ? [
@@ -181,6 +206,7 @@ export function compilerMission(
   const shared = [
     `You are a moe-next PLANNING agent. You hold the durable claim on work item`,
     `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
+    ...claimRenewalFacts(workItemId),
     `First call work_get_context and find the daemon's offered command for your step.`,
     `The product authority is the PRD text and, once approved, the contract.`,
     ...prdPaging(goal),
@@ -297,6 +323,7 @@ export function designMission(
   return [
     `You are a moe-next DESIGN agent. You hold the durable claim on work item`,
     `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
+    ...claimRenewalFacts(workItemId),
     `First call work_get_context and find the daemon's offered command for your step.`,
     "The product authority is the PRD text and the APPROVED Gate 1 contract.",
     ...CONTRACT_READ_MISSION_LINES,
@@ -338,11 +365,12 @@ export function mission(
   const lines = [
     `You are a moe-next agent. You hold the durable claim on work item "${workItemId}"`,
     `(command kind ${kind}) until ${expiresAt}.`,
+    ...claimRenewalFacts(workItemId),
     "Use the moe-next MCP tools: first call work_get_context to see the board and find",
     `the daemon's offered command for your step (commandKind ${kind}); then call the`,
     `${kind.replaceAll(".", "_")} tool passing EXACTLY the offer's commandId,`,
     "expectedVersion and targetAggregateId plus a correlationId and the payload.",
-    "Renew your claim with work_renew if you need longer, and finish by calling",
+    "Your claim is renewed for you while you run, and you finish by calling",
     `work_release with payload {"workItemId": "${workItemId}"}. Every refusal carries`,
     "a stable reason code — read it, correct the request, never work around a refusal,",
     "and report what the daemon actually answered.",

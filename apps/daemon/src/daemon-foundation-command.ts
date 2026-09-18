@@ -12,6 +12,7 @@ import { refuseLocal } from "./work/foundation-attempt-contracts.js";
 import { createFoundationAttemptService } from "./work/foundation-attempt-service.js";
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import type { FoundationCaptureFaultObserver } from "./work/foundation-capture-fault-report.js";
 import { createFoundationCaptureProducer } from "./work/foundation-capture-producer.js";
 import { deriveFoundationDispatchFacts } from "./work/foundation-dispatch-derivation.js";
 import { createFoundationLaunchCompletionAuthority } from
@@ -66,6 +67,8 @@ export interface FoundationCommandOptions {
   /** The prepare-before-launch workspace authority, built once at daemon start
    *  and passed straight through: this module composes, it never decides. */
   readonly lifecycle: FoundationCaptureLifecycle;
+  /** Host-side disclosure of a capture producer that THREW; absent means silent. */
+  readonly onCaptureFault?: FoundationCaptureFaultObserver;
   /** HOST-SCOPED daemon-process configuration, read at the composition root and passed
    *  straight down RAW. Absent is a valid state and is NOT substituted here: the runtime
    *  producer refuses an unconfigured or non-absolute root under its own code, so an
@@ -135,7 +138,9 @@ export function createFoundationDispatchHandler(
       ...(options.pinRoot === undefined ? {} : { pinRoot: options.pinRoot }),
       store: options.store,
     }),
-    context: options.contextSeal, lifecycle: options.lifecycle, store: options.store,
+    context: options.contextSeal, lifecycle: options.lifecycle,
+    ...(options.onCaptureFault === undefined ? {} : { onCaptureFault: options.onCaptureFault }),
+    store: options.store,
   });
 
   return async ({ envelope, principal }): Promise<DurableDecision> => {

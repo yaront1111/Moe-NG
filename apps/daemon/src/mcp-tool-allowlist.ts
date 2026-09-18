@@ -1,4 +1,8 @@
-import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import type { StdioPayloadPropertyOverlay, StdioPropertySchema } from "@moe/mcp";
+
+import {
+  OPERATOR_PRINCIPAL_KINDS, PAYLOAD_INTEGER_KEYS, PAYLOAD_KEYS,
+} from "./daemon-command-vocabulary.js";
 
 /**
  * The tools this daemon may honestly advertise over MCP.
@@ -108,4 +112,28 @@ const WIRED_KINDS: readonly string[] = Object.freeze([
  */
 export function wiredMcpToolKinds(): readonly string[] {
   return WIRED_KINDS;
+}
+
+/**
+ * The typed payload members both MCP entries advertise, DERIVED from `PAYLOAD_INTEGER_KEYS`
+ * for the kinds this roster carries and nothing else. Filtering by the roster is what keeps
+ * `@moe/mcp`'s overlay check strict: `graph.supersede` is typed in the table and operator-only
+ * here, and an overlay naming it would refuse at construction (MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND)
+ * rather than quietly advertising a member of a tool that is not there.
+ */
+const WIRED_PAYLOAD_PROPERTIES: StdioPayloadPropertyOverlay = Object.freeze(Object.fromEntries(
+  Object.entries(PAYLOAD_INTEGER_KEYS)
+    .filter(([kind]) => WIRED_KINDS.includes(kind))
+    .map(([kind, members]) => [kind, Object.freeze(Object.fromEntries(
+      Object.entries(members).map(([key, spec]): [string, StdioPropertySchema] => [key, Object.freeze({
+        description: spec.description,
+        maximum: Number.MAX_SAFE_INTEGER,
+        minimum: spec.minimum,
+        type: "integer" as const,
+      })]),
+    ))]),
+));
+
+export function wiredMcpPayloadProperties(): StdioPayloadPropertyOverlay {
+  return WIRED_PAYLOAD_PROPERTIES;
 }

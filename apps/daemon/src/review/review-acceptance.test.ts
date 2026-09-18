@@ -273,7 +273,42 @@ describe("acceptance consumes one exact daemon verifier receipt (DoD 6)", () => 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
     expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    // The refusal names every stray field, so the caller does not bisect five of them.
+    expect(outcome.detail).toBe(
+      "payload must have exactly receiptId, subjectRef; unexpected: \"calibration\", \"packageItems\", \"policy\", \"proof\", \"reviewer\"",
+    );
     expect(decisionCount(store)).toBe(before);
+  });
+
+  it("names a decision outside the escalation vocabulary, with what arrived", () => {
+    const store = openStore();
+    driveRounds(store, REVIEW_ESCALATION_ROUND_LIMIT);
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope(
+      "escalation.decide", REVIEW_ESCALATION_ROUND_LIMIT, escalationPayload({ decision: "MAYBE" }),
+    ));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    expect(outcome.detail).toBe('decision must be one of ALLOW_MORE_ATTEMPTS, REPLAN, got string "MAYBE"');
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("names guidance sent with a REPLAN decision as the reason, not the guidance text", () => {
+    const store = openStore();
+    driveRounds(store, REVIEW_ESCALATION_ROUND_LIMIT);
+
+    const outcome = send(store, envelope("escalation.decide", REVIEW_ESCALATION_ROUND_LIMIT,
+      escalationPayload({ decision: "REPLAN", implementationGuidance: "try harder" })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
+    expect(outcome.detail).toBe("implementationGuidance is admitted only with decision ALLOW_MORE_ATTEMPTS, got REPLAN");
   });
 
   it("refuses a receipt after a newer clean round wins the aggregate", () => {

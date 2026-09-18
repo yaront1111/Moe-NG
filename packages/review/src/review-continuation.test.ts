@@ -89,3 +89,29 @@ it("requires independent passed proof and policy even for a bound clean continua
   expect(qualifyReviewAcceptance({ ...input, policy: { ...input.policy, facts: [] } }))
     .toMatchObject({ ok: false, code: "ACCEPTANCE_POLICY_REFUSED" });
 });
+
+/**
+ * The UnAI 2026-09-18 shape at the acceptance gate: three blocking rounds, the operator's
+ * continuation, then a round whose only own finding is an informational MINOR note. The
+ * kernel routes it ACCEPT (review-findings.ts), and acceptance must be able to spend the
+ * continuation on it — before this arm, `reviewContinuationAccepts` refused any own record
+ * past the source round regardless of severity, so the verifier's PASSED proof was thrown
+ * away as REVIEW_CONTINUATION_INVALID and the card's "Allow one more attempt" bought nothing.
+ * DRILL: dropping the `severity !== "MINOR"` clause reds this arm and leaves the MAJOR arm green.
+ */
+it("lets acceptance spend the continuation when the continued round carries only a MINOR note", () => {
+  const prior = exhausted();
+  const use = continuation(prior);
+  const minor = recordContinued(prior, { round: 5, findings: [{ detail: "migration digest changed; re-provision",
+    ruleId: "applied-migration-digest-changed", severity: "MINOR", subject: { kind: "CRITERION", locator: "criterion:migrations" } }] }, use);
+  if (!minor.ok) throw new Error(minor.code);
+  expect(minor.value.routing.route).toBe("ACCEPT");
+  expect(minor.value.lineage.unsuccessfulRounds).toBe(3);
+  expect(qualifyReviewAcceptance({ ...acceptance(minor.value.lineage), continuation: use })).toMatchObject({ ok: true });
+  // A MAJOR own finding on the continued round still exhausts it at both gates.
+  const major = recordContinued(prior, { round: 5, findings: [{ detail: "still missing",
+    ruleId: "still-missing", severity: "MAJOR", subject: { kind: "NODE", locator: "node-a" } }] }, use);
+  if (!major.ok) throw new Error(major.code);
+  expect(qualifyReviewAcceptance({ ...acceptance(major.value.lineage), continuation: use }))
+    .toMatchObject({ code: "REVIEW_CONTINUATION_INVALID", layer: "FINDINGS", ok: false });
+});

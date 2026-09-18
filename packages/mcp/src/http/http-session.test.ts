@@ -23,6 +23,7 @@ import type {
   HttpSessionPort,
   HttpSessionRegistry,
 } from "./http-session.js";
+import type { McpSessionFault } from "../session-fault.js";
 
 const BEARER_A = "bearer-A-DO-NOT-LOG-3f9c1e77aa";
 const BEARER_B = "bearer-B-DO-NOT-LOG-812de40cbb";
@@ -175,6 +176,60 @@ describe("http session screening — port verdicts", () => {
     const serialized = JSON.stringify(outcome);
     expect(serialized).not.toContain(THROWN_SECRET);
     expect(serialized).not.toContain(BEARER_A);
+  });
+
+  it("reports the port's throw to the observer, host-side, beside the unchanged refusal", async () => {
+    // Until this the containment above was the whole story: a locked credential store refused
+    // every request on the endpoint, 500 after 500, and the daemon's log said nothing.
+    const faults: McpSessionFault[] = [];
+    const port: HttpSessionPort = {
+      bindSession(): void {},
+      closeSession(): void {},
+      validateBearer(): never {
+        throw Object.assign(new Error(THROWN_SECRET), { code: "SQLITE_BUSY" });
+      },
+    };
+    const outcome = await screenRequest<Attachment>({
+      observe: (fault) => { faults.push(fault); },
+      port,
+      registry: createHttpSessionRegistry<Attachment>(),
+      request: request({ authorization: `Bearer ${BEARER_A}` }),
+    });
+    expect(outcome.kind === "refused" ? outcome.error.code : outcome.kind).toBe("UNKNOWN_ERROR");
+    expect(faults).toHaveLength(1);
+    expect(faults[0]).toMatchObject({
+      stage: "validate-bearer",
+      thrown: { code: "SQLITE_BUSY", message: THROWN_SECRET, name: "Error" },
+      transport: "http",
+    });
+    // The throw's message goes to the host and nowhere near the wire.
+    expect(JSON.stringify(outcome)).not.toContain(THROWN_SECRET);
+  });
+
+  it("reports nothing for a refusal the port RETURNED, and still refuses UNKNOWN_ERROR when the observer throws", async () => {
+    const faults: McpSessionFault[] = [];
+    const refusing = createRecordingSessionPort({});
+    const refused = await screenRequest<Attachment>({
+      observe: (fault) => { faults.push(fault); },
+      port: refusing,
+      registry: createHttpSessionRegistry<Attachment>(),
+      request: request({ authorization: `Bearer ${BEARER_A}` }),
+    });
+    expect(refused.kind === "refused" ? refused.error.code : refused.kind).toBe("AUTHENTICATION_FAILED");
+    expect(faults).toEqual([]);
+
+    const throwing: HttpSessionPort = {
+      bindSession(): void {},
+      closeSession(): void {},
+      validateBearer(): never { throw new Error(THROWN_SECRET); },
+    };
+    const contained = await screenRequest<Attachment>({
+      observe: () => { throw new Error("diagnostics sink is closed"); },
+      port: throwing,
+      registry: createHttpSessionRegistry<Attachment>(),
+      request: request({ authorization: `Bearer ${BEARER_A}` }),
+    });
+    expect(contained.kind === "refused" ? contained.error.code : contained.kind).toBe("UNKNOWN_ERROR");
   });
 
   it("accepts a valid bearer with no session header and reports no bound entry", async () => {

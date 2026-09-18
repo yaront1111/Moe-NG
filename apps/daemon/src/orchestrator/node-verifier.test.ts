@@ -1,3 +1,4 @@
+import { VERIFIER_FAILURE_TAIL_UNITS } from "./node-verifier-failure.js";
 import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -306,8 +307,8 @@ describe("createNodeVerifier", () => {
     expect(ledger.accepted?.verifierReceiptSha256).toBe(receipt.receiptSha256);
   });
 
-  it("records a failure round whose 600-unit tail cut lands inside a surrogate pair", async () => {
-    // The failure detail is the last 600 UTF-16 code units of the capture. Cut
+  it("records a failure round whose tail cut lands inside a surrogate pair", async () => {
+    // The failure detail is the last VERIFIER_FAILURE_TAIL_UNITS UTF-16 code units of the capture. Cut
     // there, an astral character straddling the boundary leaves a lone low
     // surrogate at the head of the tail; review.submit's decoder refuses the
     // whole envelope (JSON_UNICODE_INVALID), no round lands, and the node is
@@ -315,13 +316,14 @@ describe("createNodeVerifier", () => {
     // is not disturbed and nothing here depends on it.
     const SPLIT_NODE = "node-verify-split";
     seedCleanRound(SPLIT_NODE, "seed-clean-round-split");
-    // "a", U+1F525 (two code units), then 599 x "b": 602 units, so the cut
+    // "a", U+1F525 (two code units), then TAIL-1 x "b": TAIL+2 units, so the cut
     // opens exactly on the low half. Built from the code point, not pasted, so
     // the source stays ASCII and the boundary arithmetic is visible.
-    const output = `a${String.fromCodePoint(0x1f525)}${"b".repeat(599)}`;
-    expect(output.length).toBe(602);
+    const TAIL = VERIFIER_FAILURE_TAIL_UNITS;
+    const output = `a${String.fromCodePoint(0x1f525)}${"b".repeat(TAIL - 1)}`;
+    expect(output.length).toBe(TAIL + 2);
     // The fixture's own positive control: the naive cut really does split.
-    expect(output.slice(-600).isWellFormed()).toBe(false);
+    expect(output.slice(-TAIL).isWellFormed()).toBe(false);
     const sha = createHash("sha256").update(output, "utf8").digest("hex");
     const capture: VerifierRunCapture = {
       byteCount: Buffer.byteLength(output, "utf8"), exitCode: 1, output, sha256: sha,

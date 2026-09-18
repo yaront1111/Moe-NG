@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { describeThrown } from "@moe/contracts";
+import type { DiagnosticThrown } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 export const DEFAULT_SCHEDULE_INTERVAL_MS = 60_000;
 export type ScheduleCallback = (signal: AbortSignal) => void | Promise<void>;
@@ -6,12 +8,24 @@ export interface ScheduleTimer {
   set(tick: () => void, intervalMs: number): unknown;
   clear(handle: unknown): void;
 }
+/**
+ * A refusal as the HOST sees it. The notice a consumer reads back (`refusals()`) carries the
+ * code alone by contract — never an exception, output or payload — so the throw behind a
+ * failed tick, timer, store write or resolver travels only here, to the diagnostics plane.
+ */
+export interface ScheduleFault {
+  readonly code: ScheduleCode;
+  readonly id: string | null;
+  readonly thrown: DiagnosticThrown | null;
+}
 export interface ScheduleConfig {
   readonly store: Pick<SqliteEventStore, "commit" | "readEvents">;
   readonly projectId: string;
   readonly now?: () => number;
   readonly timer?: ScheduleTimer;
   readonly resolve?: (id: string) => ScheduleCallback | null;
+  /** Host-side disclosure of every refusal, with the throw when there was one; absent means silent. */
+  readonly onFault?: (fault: ScheduleFault) => void;
 }
 type ScheduleCode = "SCHEDULE_INPUT_INVALID" | "SCHEDULE_RELEASED" | "SCHEDULE_CALLBACK_FAILED"
   | "SCHEDULE_TARGET_UNRESOLVED" | "SCHEDULE_RECORD_INVALID" | "SCHEDULE_TIMER_FAILED"
@@ -53,10 +67,14 @@ export class DurableSchedule {
     this.rebuild(config.resolve ?? (() => null));
   }
 
-  private refuse(id: string | null, code: ScheduleCode): ScheduleRefusal {
+  private refuse(id: string | null, code: ScheduleCode, error?: unknown): ScheduleRefusal {
     // Never retain callback exceptions, output, credentials or consumer payloads.
     const result = Object.freeze({ ok: false, id, code, layer: "DAEMON_INGRESS" } as const);
     this.notices.set(id, result);
+    // The throw goes to the host and nowhere else; a broken observer changes no refusal.
+    try {
+      this.config.onFault?.({ code, id, thrown: error === undefined ? null : describeThrown(error) });
+    } catch { /* the notice above is the contract */ }
     return result;
   }
   refusals(): readonly ScheduleRefusal[] { return Object.freeze([...this.notices.values()]); }
@@ -67,7 +85,7 @@ export class DurableSchedule {
     const controller = new AbortController();
     this.running.set(id, controller);
     try { await arm.callback(controller.signal); }
-    catch { this.refuse(id, "SCHEDULE_CALLBACK_FAILED"); }
+    catch (error) { this.refuse(id, "SCHEDULE_CALLBACK_FAILED", error); }
     finally { this.running.delete(id); }
   }
 
@@ -82,7 +100,7 @@ export class DurableSchedule {
       this.arms.set(id, { handle, intervalMs, callback });
       this.notices.delete(id);
       return OK;
-    } catch { return this.refuse(id, "SCHEDULE_TIMER_FAILED"); }
+    } catch (error) { return this.refuse(id, "SCHEDULE_TIMER_FAILED", error); }
   }
 
   register(id: string, callback: ScheduleCallback, intervalMs = DEFAULT_SCHEDULE_INTERVAL_MS): ScheduleResult {
@@ -91,7 +109,7 @@ export class DurableSchedule {
       || typeof callback !== "function" || !validInterval(intervalMs)) return this.refuse(null, "SCHEDULE_INPUT_INVALID");
     try {
       if (this.read().get(id) !== intervalMs) this.persist(id, intervalMs);
-    } catch { return this.refuse(id, "SCHEDULE_STORE_FAILED"); }
+    } catch (error) { return this.refuse(id, "SCHEDULE_STORE_FAILED", error); }
     return this.arm(id, callback, intervalMs);
   }
 
@@ -132,13 +150,14 @@ export class DurableSchedule {
     if (this.released) { this.refuse(null, "SCHEDULE_RELEASED"); return this.refusals(); }
     let current: Map<string, number>;
     try { current = this.read(); }
-    catch { current = new Map(); this.refuse(null, "SCHEDULE_STORE_FAILED"); }
+    catch (error) { current = new Map(); this.refuse(null, "SCHEDULE_STORE_FAILED", error); }
     for (const id of this.arms.keys()) if (!current.has(id)) this.drop(id);
     for (const [id, intervalMs] of current) {
       let callback: ScheduleCallback | null;
-      try { callback = resolve(id); } catch { callback = null; }
+      let resolution: unknown;
+      try { callback = resolve(id); } catch (error) { callback = null; resolution = error; }
       if (typeof callback !== "function") {
-        this.drop(id); this.refuse(id, "SCHEDULE_TARGET_UNRESOLVED");
+        this.drop(id); this.refuse(id, "SCHEDULE_TARGET_UNRESOLVED", resolution);
       } else { this.arm(id, callback, intervalMs); }
     }
     return this.refusals();

@@ -1,6 +1,9 @@
 import { createRuntimeError } from "@moe/contracts";
 import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 
+import { commandKindOf, discloseFaultFrame, rememberFaultFrame } from "./mcp-fault-frame.js";
+import type { McpFaultFrame } from "./mcp-fault-frame.js";
+
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { ProductContractReadPort } from "./product-contract/product-contract-read-port.js";
@@ -80,6 +83,8 @@ export interface McpDispatchPortConfig {
   readonly commandAuthorityPlane?: CommandAuthorityPlanePort | undefined;
   /** The daemon's committed subscription seam — the provider's, folded on read. */
   readonly subscriptions: SubscriptionPort;
+  /** Host-side disclosure of a fault frame answered to a seat; absent means silent, as before. */
+  readonly onFaultFrame?: ((frame: McpFaultFrame) => void) | undefined;
 }
 
 /**
@@ -93,9 +98,12 @@ const V2_UNAVAILABLE_STATUS = 503;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+/** A frame that reports the daemon's own fault is remembered against its bytes (mcp-fault-frame.ts). */
 function bytesOf(value: unknown): Uint8Array {
-  return encoder.encode(JSON.stringify(value));
+  return rememberFaultFrame(value, encoder.encode(JSON.stringify(value)));
 }
+
+export type { McpFaultFrame } from "./mcp-fault-frame.js";
 
 type CommandPlaneResolution =
   | { readonly deps: CommandAdapterDeps; readonly ok: true }
@@ -326,6 +334,8 @@ export function servedMcpQueryKinds(): readonly string[] {
 }
 
 export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispatchPort {
+  const disclosed = (bytes: Uint8Array, surface: McpFaultFrame["surface"], kind: string | null): Uint8Array =>
+    discloseFaultFrame(config.onFaultFrame, bytes, surface, kind);
   return Object.freeze({
     authenticate: (credential: string, _toolKind: string) => {
       const verdict = authenticatorOf(config.deps).authenticate(credential);
@@ -345,12 +355,12 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
       // envelope field can select it; the MCP adapter has already authenticated
       // the caller by the time this runs (the port's own call-sequence contract).
       const plane = resolveCommandPlane(config);
-      if (!plane.ok) return bytesOf(plane.refusal);
-      return bytesOf(await handleAsyncCommandRequest(plane.deps, {
+      if (!plane.ok) return disclosed(bytesOf(plane.refusal), "command", commandKindOf(bytes));
+      return disclosed(bytesOf(await handleAsyncCommandRequest(plane.deps, {
         body: bytes,
         credential: context?.credential ?? config.fallbackCredential ?? null,
         protocolVersion: WIRE_PROTOCOL_VERSION,
-      }, context === undefined ? "MCP_STDIO" : "MCP_HTTP"));
+      }, context === undefined ? "MCP_STDIO" : "MCP_HTTP")), "command", commandKindOf(bytes));
     },
     // THE CONTEXT PARAMETER IS ADDITIVE, exactly as `dispatchCommandBytes`
     // already carries one: `StdioDispatchPort` declares
@@ -378,7 +388,9 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
       const handler = typeof kind === "string" && Object.hasOwn(QUERY_HANDLERS, kind)
         ? QUERY_HANDLERS[kind]
         : undefined;
-      return handler === undefined ? queryRefusal() : handler(envelope, context, config);
+      return handler === undefined
+        ? queryRefusal()
+        : disclosed(handler(envelope, context, config), "query", kind as string);
     },
   });
 }

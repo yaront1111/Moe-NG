@@ -15,6 +15,7 @@ import { REPOSITORY_DELIVERY_REFUSAL_CODES } from "./repository-delivery-contrac
 import type { RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
 import type { SPAWN_INVOCATION_LAYER, SpawnInvocationRefusalCode } from "./agent-spawn-invocation.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
+import type { SeatActivityProbe } from "./seat-liveness-probe.js";
 
 /** Everything the spawner touches outside its own arguments, injectable for tests. */
 export interface AgentSpawnerOptions {
@@ -29,10 +30,30 @@ export interface AgentSpawnerOptions {
   /** INJECTED monotonic-ish instant source for the quiet notice; production uses `Date.now`. */
   readonly now?: () => number;
   /**
-   * How often a LIVE seat that has printed nothing reports its silence. 0 turns the notice off
-   * and restores the old behaviour, where a hung seat was observed only at its 30-minute timeout.
+   * How often a LIVE seat that has printed nothing for a whole interval says so, and the cadence
+   * of the liveness tick (probe + silence verdict) while it is on. 0 turns the NOTICE off only:
+   * the tick then runs at the default cadence (60 s, never slower than `silenceMs`), so the
+   * silence kill is unaffected. Only the notice is optional; hang detection is not.
    */
   readonly quietNoticeMs?: number;
+  /**
+   * What the wrapper can see of a seat that prints nothing: its descendants and the tree's CPU
+   * time. Absent, silence is judged on output alone and every notice says so. A probe that
+   * answers `{ ok: false, reason }` (or throws) grants no liveness for that tick; the reason
+   * reaches the notice and the kill line, and `warn` is called once per seat on the first
+   * failure. Production hands over `createSeatActivityProbe(process.platform)`; a test, a fake.
+   */
+  readonly probeActivity?: SeatActivityProbe | undefined;
+  /**
+   * Kill a seat that has shown NO ACTIVITY (no output, no tool child, flat CPU) for this long:
+   * the hang detector. Distinct from `timeoutMs`, the absolute cap behind it.
+   */
+  readonly silenceMs?: number;
+  /**
+   * Warning-level lines (today: the first liveness-probe failure of a seat). The wrapper tees
+   * these at "warn" so a broken probe is visible before it kills anything; absent, `log`.
+   */
+  readonly warn?: ((line: string) => void) | undefined;
   /** Fatal containment failures halt the owning runtime; they are never ordinary agent exits. */
   readonly onFatalContainment?: ((error: AgentProcessContainmentError) => void) | undefined;
   /**
@@ -45,7 +66,12 @@ export interface AgentSpawnerOptions {
     readonly stdout: NodeJS.WritableStream;
   };
   readonly spawn?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
-  /** Hard lifetime for one agent process; a hung agent is killed and its slot freed. */
+  /**
+   * The ABSOLUTE cap on one agent process: killed at this age whatever it is doing, and the kill
+   * line names the last activity seen. This is the backstop for a provably ACTIVE seat that
+   * still does not finish (a tool loop that never converges). A HUNG agent is not this timer's
+   * job: `silenceMs` kills it, far sooner, on no output, no tool child and flat CPU.
+   */
   readonly timeoutMs?: number;
   /** Platform override for the kill strategy (win32 needs a tree kill). */
   readonly platform?: NodeJS.Platform;

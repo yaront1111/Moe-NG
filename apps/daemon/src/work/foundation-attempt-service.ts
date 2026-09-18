@@ -18,6 +18,7 @@ import type {
   FoundationAttemptBound, FoundationAttemptRefused,
   FoundationLaunchTemplateCompletionAuthority, FoundationLaunchTemplateCompletionRefused,
 } from "./foundation-attempt-contracts.js";
+import type { FoundationCaptureFaultObserver } from "./foundation-capture-fault-report.js";
 import type { FoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
 import type { FoundationContextSealPort } from "./foundation-context-record.js";
 import type { FoundationAttemptProviderRun } from "./foundation-attempt-provider-port.js";
@@ -40,6 +41,12 @@ export interface FoundationAttemptDeps {
   readonly context: FoundationContextSealPort;
   readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
   readonly lifecycle: FoundationCaptureLifecycle;
+  /**
+   * Host-side disclosure of `captureResult` THROWING. The settlement still answers UNPROVEN
+   * — a throw is no observation — and reports the throw here, so a dead capture is told apart
+   * from a provider run that produced nothing. Absent means silent, as before.
+   */
+  readonly onCaptureFault?: FoundationCaptureFaultObserver;
   readonly store: SqliteEventStore;
 }
 

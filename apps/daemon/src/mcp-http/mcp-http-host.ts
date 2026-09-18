@@ -2,14 +2,15 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 
 import { createHttpMcpAdapter } from "@moe/mcp";
-import type { HttpMcpAdapter } from "@moe/mcp";
+import type { HttpMcpAdapter, McpDispatchFaultObserver, McpSessionFaultObserver } from "@moe/mcp";
 
 import { describeBindFailure } from "../http/bind-failure-detail.js";
 import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
-import { wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
+import type { McpFaultFrame } from "../mcp-fault-frame.js";
+import { wiredMcpPayloadProperties, wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import type { DesignReadPort } from "../mcp-design-read-query.js";
@@ -54,6 +55,15 @@ export interface McpHttpHostOptions {
   /** JSON bodies instead of SSE frames. Deterministic; the parity fixtures use it. */
   readonly enableJsonResponse?: boolean;
   readonly host?: string;
+  /**
+   * Host-side disclosure of a tool call that THREW inside the dispatch. The seat still receives
+   * exactly `UNKNOWN_ERROR`; the throw goes here. Absent means contained silently, as before.
+   */
+  readonly onDispatchFault?: McpDispatchFaultObserver;
+  /** Host-side disclosure of the session screen's port THROWING while validating a bearer. */
+  readonly onSessionFault?: McpSessionFaultObserver;
+  /** Host-side disclosure of a fault frame ANSWERED to a seat (the seat sees only the code). */
+  readonly onFaultFrame?: (frame: McpFaultFrame) => void;
   readonly port?: number;
   /** The daemon's committed subscription seam, handed through to the dispatch port. */
   readonly subscriptions: SubscriptionPort;
@@ -151,6 +161,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
     adapter ??= createHttpMcpAdapter({
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
+        ...(options.onFaultFrame === undefined ? {} : { onFaultFrame: options.onFaultFrame }),
         commandAuthorityPlane: options.commandAuthorityPlane,
         contract: options.contract,
         deps: options.deps,
@@ -163,6 +174,10 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
       ...(options.enableJsonResponse === undefined
         ? {}
         : { enableJsonResponse: options.enableJsonResponse }),
+      ...(options.onDispatchFault === undefined ? {} : { onDispatchFault: options.onDispatchFault }),
+      ...(options.onSessionFault === undefined ? {} : { onSessionFault: options.onSessionFault }),
+      // Same typed payload members as the stdio entry, from the same derivation.
+      payloadProperties: wiredMcpPayloadProperties(),
       sessionPort: createMcpHttpSessionPort(options.deps.authenticator),
       serverName: "moe-next",
       // Same roster as the stdio entry, from the same derivation.

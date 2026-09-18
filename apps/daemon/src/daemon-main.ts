@@ -4,6 +4,10 @@ import { pathToFileURL } from "node:url";
 
 import { flag } from "./argv-flag.js";
 import { isDependencyProvider, refuseEntry, startDaemon } from "./daemon-entry.js";
+import { teeDiagnosticLine } from "./diagnostics/diagnostic-line-tee.js";
+import { diagnosticProjectRoot } from "./diagnostics/diagnostic-project-root.js";
+import { sharedDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
+import { credentialValues } from "./orchestrator/credential-scrub.js";
 import type {
   DaemonDependencyProvider, DaemonEntryRefused, DaemonPairingApprovalResult, ShutdownResult,
 } from "./daemon-entry.js";
@@ -213,7 +217,22 @@ const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
   const argv = process.argv.slice(2);
   const privatePipe = argv.includes("--operator-stdin");
+  // THE DIAGNOSTIC PLANE, as the wrapper and the stack host build it: every line this daemon
+  // prints — a refused start naming its seam, LISTENER_REFUSED, the boot sweep's throw — also
+  // lands under the project's own .moe/logs, where it survives a supervisor that discards
+  // stdout. The store path names the project; a daemon started without one logs beside cwd.
+  // SHARED with the dependency provider this bin loads by path, which reports on the same plane.
+  const diagnostics = sharedDiagnosticRuntime({
+    env: process.env,
+    projectRoot: diagnosticProjectRoot(process.env["MOE_STORE_PATH"] ?? "", process.cwd()),
+    secrets: credentialValues(process.env),
+  });
   process.exitCode = await runDaemonMain(argv, {
+    log: teeDiagnosticLine({
+      emitter: diagnostics.emitterFor("daemon"),
+      event: "DAEMON_LINE",
+      write: (line) => { process.stdout.write(`${line}\n`); },
+    }),
     ...(process.stdin.isTTY === true || privatePipe ? { operatorInput: process.stdin } : {}),
     onStarted: (shutdown) => {
       // Closed on every exit path. A surviving handle keeps its port and
@@ -221,10 +240,15 @@ if (meta.main === true) {
       // signal NAME travels into the shutdown receipt, so a supervisor reading
       // stdout can tell an operator stop from a supervisor kill.
       const stop = (trigger: "SIGINT" | "SIGTERM") => (): void => {
-        void shutdown(trigger).then(() => process.exit(0));
+        void shutdown(trigger).then(() => {
+          diagnostics.close();
+          process.exit(0);
+        });
       };
       process.once("SIGINT", stop("SIGINT"));
       process.once("SIGTERM", stop("SIGTERM"));
     },
   });
+  // A refused start returns here; a started daemon returns 0 and runs until a signal above.
+  if (process.exitCode !== 0) diagnostics.close();
 }

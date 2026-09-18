@@ -11,7 +11,7 @@ it.each([undefined, null, "", " ", 7, {}, []])(
         mint: () => ({ code: "unused", ok: false }),
       }) as never,
     });
-    expect(result).toEqual({ failure: "INVALID", ok: false });
+    expect(result).toEqual({ failure: "INVALID", ok: false, port: "sessionHandshake" });
   },
 );
 
@@ -38,7 +38,7 @@ it("resolves the Product Contract /2 current reader once and rejects malformed p
   expect(calls.count).toBe(1);
   expect(resolveOptionalDaemonPorts({
     productContractV2Current: () => ({ boundProjectId: "project-bound" }) as never,
-  })).toEqual({ failure: "INVALID", ok: false });
+  })).toEqual({ failure: "INVALID", ok: false, port: "productContractV2Current" });
 });
 
 it("resolves the Product Contract /2 pending reader once and rejects malformed ports", () => {
@@ -51,5 +51,5 @@ it("resolves the Product Contract /2 pending reader once and rejects malformed p
   expect(calls.count).toBe(1);
   expect(resolveOptionalDaemonPorts({
     productContractV2Pending: () => ({ boundProjectId: "project-bound" }) as never,
-  })).toEqual({ failure: "INVALID", ok: false });
+  })).toEqual({ failure: "INVALID", ok: false, port: "productContractV2Pending" });
 });
