@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:02:52.886Z",
-  "updatedAt": "2026-09-18T20:51:21.580Z",
+  "updatedAt": "2026-09-18T20:51:59.444Z",
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -268,6 +268,21 @@
       "treeId": "060ee9d53283088f699b4527099b4d0116ddad92",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "6e7d910f148c0fd79f70d3ea0e12e918f18c55db",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T20:41:53Z",
+      "paths": [
+        ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T20:51:59.444Z",
+      "treeId": "ea31714a75afe5056b374f1a9adceed99d200822",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -282,14 +297,15 @@
     "apps/daemon/src/orchestrator/node-publisher.test.ts",
     "apps/daemon/CLAUDE.md",
     ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
-    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json",
+    ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-952c612b@2026-09-18T20:13:47Z",
-    "at": "2026-09-18T20:40:55.413Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-18T20:41:53Z",
+    "at": "2026-09-18T20:51:59.444Z"
   },
   "reviewStartedAt": "2026-09-18T20:40:37.458Z",
   "verification": {
