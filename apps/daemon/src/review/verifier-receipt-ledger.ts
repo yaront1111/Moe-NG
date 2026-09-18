@@ -29,7 +29,14 @@ export type VerifierReceiptReadResult =
     readonly receiptSha256: string;
   }>
   | Readonly<{
-    readonly code: "VERIFIER_RECEIPT_INVALID" | "VERIFIER_RECEIPT_NOT_FOUND";
+    readonly code:
+      | "VERIFIER_RECEIPT_INVALID"
+      | "VERIFIER_RECEIPT_NOT_FOUND"
+      /** The decision could not be READ. Never INVALID: every other INVALID in this reader is
+       *  reached only after the decision was read and found wrong, so INVALID is otherwise a
+       *  pure claim about durable content, and a SQLITE_BUSY made it say "this receipt is
+       *  corrupt". */
+      | "VERIFIER_RECEIPT_UNREADABLE";
     readonly ok: false;
   }>;
 
@@ -95,7 +102,7 @@ export function readVerifierReceipt(
       projectId,
     });
   } catch {
-    return { code: "VERIFIER_RECEIPT_INVALID", ok: false };
+    return { code: "VERIFIER_RECEIPT_UNREADABLE", ok: false };
   }
   if (decision === null) return { code: "VERIFIER_RECEIPT_NOT_FOUND", ok: false };
   if (decision.effectDisposition !== "EFFECTS_COMMITTED"

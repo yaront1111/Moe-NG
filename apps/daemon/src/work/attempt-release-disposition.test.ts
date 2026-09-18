@@ -2133,6 +2133,42 @@ describe("attempt release disposition — a stale terminal read authorises nothi
     expectNoDurableRow(fixture);
   });
 
+  it("REFUSES under the fence's own code when the resource head cannot be re-read", () => {
+    // THE OTHER WAY THE RE-READ CAN DISAGREE. The arm above proves a head that MOVED refuses
+    // RESOURCES_UNPROVEN. A head that could not be READ used to take the same arm, because
+    // `resourceVersionMoved` treats null as moved — and `resourcesUnproven` is literally
+    // `!flags.resourcesTerminal`, so a SQLITE_BUSY on the second read stated as fact that this
+    // attempt's resource set is not terminal. `unreadableFenceHead` exists so the writer never
+    // borrows the terminality code for an unreadable stream; this arm pins that it does not.
+    const fixture = activated("fence-version-unreadable");
+    const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+    expect(produced.ok && [produced.effectsTerminal, produced.resourcesTerminal])
+      .toEqual([true, true]);
+    let reads = 0;
+    const flaky = new Proxy(fixture.store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "getAggregateVersion") return value.bind(base);
+        return (aggregateId: string): number => {
+          // The FIRST read of the resource head succeeds and is captured; the re-read under
+          // the guard is the one the store refuses.
+          if (aggregateId === RESOURCE_AGGREGATE && (reads += 1) === 2) {
+            throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+          }
+          return base.getAggregateVersion(aggregateId);
+        };
+      },
+    });
+    const outcome = recordAttemptRelease(flaky, fixture.bound, fixture.record, settledRequest());
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(refusalOf(outcome).code).toBe("ATTEMPT_RELEASE_FENCE_ROSTER_INEXACT");
+    expect(refusalOf(outcome).code).not.toBe("ATTEMPT_RELEASE_RESOURCES_UNPROVEN");
+    // Nothing was written: the guard is still the last statement before the commit.
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
   it("RELEASES over the SAME delegating store when nothing moves — the control", () => {
     // Without this, a proxy that broke every store call would produce the refusal
     // above for the wrong reason, and the arm would read as a pass.

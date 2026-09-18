@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SqliteEventStore } from "@moe/store";
 
+import { NodeBriefUnreadableError } from "./agent-spawn-contract.js";
 import {
   COMPILED_NODE_SOURCE_UNREADABLE, createCompiledNodeSource,
 } from "./compiled-node-source.js";
@@ -58,6 +59,9 @@ describe("a compiled node source whose durable read fails", () => {
   it("refuses a mission by name instead of reporting the brief as missing", () => {
     const source = sourceWith(() => { throw new Error("SQLITE_BUSY"); });
 
+    // The CLASS, not just the message: the wrapper matches `instanceof` to keep this off the
+    // path that records a never-cleared setup failure. A plain Error here would latch the fleet.
+    expect(() => source.mission("node:v1:abc")).toThrow(NodeBriefUnreadableError);
     expect(() => source.mission("node:v1:abc")).toThrow(COMPILED_NODE_SOURCE_UNREADABLE);
   });
 

@@ -43,13 +43,26 @@ export function readPlanOwnership(store: SqliteEventStore, projectId: string, su
   return null;
 }
 
+/**
+ * The plan could not be READ. Kept apart from `false`: `false` refuses
+ * REVIEW_FINDING_ATTRIBUTION_INVALID, which tells the reviewer their findings name work the
+ * reporter's plan does not own — that they tried to launder a failure onto a sibling. A store
+ * fault reading the compiled graph is not evidence of that, and the accusation sent them to fix
+ * findings that were fine.
+ */
+export const FINDING_ATTRIBUTION_UNREADABLE = Symbol("REVIEW_FINDING_ATTRIBUTION_UNREADABLE");
+
 export function findingAttributionsValid(
   store: SqliteEventStore, projectId: string, subjectRef: string, findings: readonly ReviewFinding[],
-): boolean {
+): boolean | typeof FINDING_ATTRIBUTION_UNREADABLE {
   const attributed = findings.filter((finding) => finding.attributedTo !== undefined);
   if (attributed.length === 0) return true;
   let plan: PlanOwnership | null;
-  try { plan = readPlanOwnership(store, projectId, subjectRef); } catch { return false; }
+  try {
+    plan = readPlanOwnership(store, projectId, subjectRef);
+  } catch {
+    return FINDING_ATTRIBUTION_UNREADABLE;
+  }
   if (plan === null) return false;
   const { nodeKey: reporter, nodeKeys, owners } = plan;
   return attributed.every(({ attributedTo, subject }) => {

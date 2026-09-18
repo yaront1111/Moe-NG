@@ -112,6 +112,9 @@ export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "REVIEW_COMMAND_ID_SPENT",
   "REVIEW_EXPECTED_VERSION_STALE",
   "REVIEW_FINDING_ATTRIBUTION_INVALID",
+  // The reporter's sealed plan could not be READ, so ownership could not be checked at all.
+  // Never INVALID: that code accuses the reviewer of naming work their plan does not own.
+  "REVIEW_FINDING_ATTRIBUTION_UNREADABLE",
   "REVIEW_LINEAGE_UNREADABLE",
   "REVIEW_ESCALATION_NOT_REACHED",
   "REVIEW_REPLAN_WITHOUT_ROUND",
@@ -123,6 +126,10 @@ export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "REVIEW_VERIFIER_RECEIPT_INVALID",
   "REVIEW_VERIFIER_RECEIPT_NOT_FOUND",
   "REVIEW_VERIFIER_RECEIPT_STALE",
+  // The receipt's decision could not be READ. Kept apart from INVALID, which tells the operator
+  // the stored receipt is corrupt, and from NOT_FOUND, which tells them it was never written:
+  // an acceptance refused on a store fault must send them to the store, not to the verifier.
+  "REVIEW_VERIFIER_RECEIPT_UNREADABLE",
 ] as const);
 
 export type ReviewPrerequisiteRefusalCode = (typeof REVIEW_PREREQUISITE_REFUSAL_CODES)[number];

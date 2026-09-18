@@ -1,6 +1,6 @@
 /**
  * HOSTILE COVERAGE — the PROVIDER LAUNCH, RENDER, TELEMETRY AND USAGE group of the
- * runtime-provider axis. Eight of the roster's thirty-one entries; the partition is declared in
+ * runtime-provider axis. Eight of the roster's thirty-three entries; the partition is declared in
  * `runtime-provider-invariants.ts` and its union is checked against the roster in the evidence file.
  *
  * THE TRAP THAT WOULD OTHERWISE MAKE HALF THIS FILE VACUOUS, measured at

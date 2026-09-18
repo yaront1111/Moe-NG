@@ -39,6 +39,11 @@ export const EXPANSION_RELEASE_AUTHORITY_CODES = Object.freeze([
   "EXPANSION_RELEASE_BOUNDARY_UNSAFE", "EXPANSION_RELEASE_RECEIPT_ABSENT",
   "EXPANSION_RELEASE_CURRENTNESS_MOVED", "EXPANSION_RELEASE_EVIDENCE_CONFLICT",
   "EXPANSION_RELEASE_EVIDENCE_MALFORMED",
+  // The release stream could not be READ, at either the captured version or the currentness
+  // re-read. `releaseVersion` has always drawn the line — "null is an unreadable stream, never a
+  // version that merely differs" — and its one caller folded both into CURRENTNESS_MOVED, a
+  // claim that a second writer advanced the row. A SQLITE_BUSY proves nothing of the kind.
+  "EXPANSION_RELEASE_EVIDENCE_UNREADABLE",
 ] as const);
 export type ExpansionReleaseAuthorityCode = (typeof EXPANSION_RELEASE_AUTHORITY_CODES)[number];
 export type ExpansionReleaseAuthorityLayer = typeof LAYER;
@@ -275,7 +280,13 @@ export function readCurrentExpansionRelease(
   if (isRefused(handoff)) return handoff;
   // THE LAST READ BEFORE THE ANSWER. Evidence composed across a release aggregate
   // that moved under it vouches for a row that no longer stands.
-  if (version === null || releaseVersion(store, aggregateId) !== version) {
+  const current = releaseVersion(store, aggregateId);
+  // Unreadable on either side is the helper's null, and the helper's docstring says what it
+  // means. Only two READ versions that differ are evidence that something moved.
+  if (version === null || current === null) {
+    return refuseExpansionRelease("EXPANSION_RELEASE_EVIDENCE_UNREADABLE", "UNKNOWN");
+  }
+  if (current !== version) {
     return refuseExpansionRelease("EXPANSION_RELEASE_CURRENTNESS_MOVED", "UNKNOWN");
   }
   return compose(admitted, facts, terminal, boundary, handoff);

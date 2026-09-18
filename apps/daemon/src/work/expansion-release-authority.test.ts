@@ -120,9 +120,11 @@ function ask(storePath: string, request: unknown): unknown {
 }
 
 describe("expansion release authority (task-e62e3828) — the query selects and nothing else", () => {
-  it("declares nine codes, all under one prefix", () => {
-    expect([...EXPANSION_RELEASE_AUTHORITY_CODES]).toHaveLength(9);
-    expect(new Set(EXPANSION_RELEASE_AUTHORITY_CODES).size).toBe(9);
+  it("declares ten codes, all under one prefix", () => {
+    // 9 -> 10 for EVIDENCE_UNREADABLE: an unreadable release stream used to answer
+    // CURRENTNESS_MOVED, a claim about a second writer that a store fault proves nothing about.
+    expect([...EXPANSION_RELEASE_AUTHORITY_CODES]).toHaveLength(10);
+    expect(new Set(EXPANSION_RELEASE_AUTHORITY_CODES).size).toBe(10);
     for (const code of EXPANSION_RELEASE_AUTHORITY_CODES) {
       expect(code.startsWith("EXPANSION_RELEASE_")).toBe(true);
     }
@@ -299,6 +301,20 @@ const LOCAL_FAULTS: Readonly<Record<string, Fault>> = {
       return events;
     } };
   },
+  EXPANSION_RELEASE_EVIDENCE_UNREADABLE: (store) => {
+    // The FIRST read of the release aggregate is `releaseVersion`'s capture, made before the
+    // record reader touches it — so throwing there is deterministic, and every later read
+    // (the record reader, which answers its own unreadable code, and the currentness re-read)
+    // proceeds normally. The guard then sees a null captured version against a real current
+    // one, which used to be reported as CURRENTNESS_MOVED.
+    let seen = 0;
+    return { readEvents: (id: string): readonly StoredEvent[] => {
+      if (id === RELEASE_AGGREGATE && (seen += 1) === 1) {
+        throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+      }
+      return store.readEvents(id);
+    } };
+  },
   EXPANSION_RELEASE_EVIDENCE_CONFLICT: patchRelease(
     (body) => nested(body, "handoff", { journalDigest: FOREIGN_SHA })),
   EXPANSION_RELEASE_EVIDENCE_MALFORMED: patchRelease(
@@ -435,8 +451,8 @@ const ALL_CASES: readonly RosterCase[] = [...LOCAL_CASES, ...BINDING_CASES, ...U
 
 describe("expansion release authority (task-e62e3828) — one fault, one refusal", () => {
   it("generates one arm per declared member and no more", () => {
-    expect(EXPANSION_RELEASE_AUTHORITY_CODES).toHaveLength(9);
-    expect(LOCAL_CASES).toHaveLength(9);
+    expect(EXPANSION_RELEASE_AUTHORITY_CODES).toHaveLength(10);
+    expect(LOCAL_CASES).toHaveLength(10);
     expect(Object.isFrozen(EXPANSION_RELEASE_AUTHORITY_CODES)).toBe(true);
     expect(LOCAL_CASES.map((entry) => entry.code)).toEqual([...EXPANSION_RELEASE_AUTHORITY_CODES]);
     // The upstream tuple is SHARED with its writer: only six of its eight members
@@ -446,7 +462,7 @@ describe("expansion release authority (task-e62e3828) — one fault, one refusal
     expect(BINDING_CASES.length + BINDING_WRITER_ONLY.length)
       .toBe(RELEASE_HANDOFF_BINDING_CODES.length);
     for (const code of BINDING_WRITER_ONLY) expect(RELEASE_HANDOFF_BINDING_CODES).toContain(code);
-    expect(ALL_CASES).toHaveLength(21);
+    expect(ALL_CASES).toHaveLength(22);
   });
 
   it.each(ALL_CASES)("answers $label with the deciding layer and no evidence", async (entry) => {

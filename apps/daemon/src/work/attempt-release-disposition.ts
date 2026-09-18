@@ -275,7 +275,16 @@ export function recordAttemptRelease(
   // the decision below re-asserts the SAME version under the store's write lock, so
   // deleting this check would change which code answers and never whether the row
   // can land over a moved set.
-  if (resourceVersionMoved(resourceVersion, readAttemptResourceVersion(store, durable))) {
+  const currentResourceVersion = readAttemptResourceVersion(store, durable);
+  // AN UNREADABLE HEAD IS THE FENCE'S OWN FAULT, named 44 lines above for the other fence
+  // heads and named the same way here. It is not evidence that the set moved: `resourcesUnproven`
+  // is literally `!flags.resourcesTerminal`, so answering UNPROVEN for a read that never landed
+  // stated as fact that this attempt's resources are not terminal. `unreadableFenceHead` exists
+  // precisely so the writer never borrows the terminality code for an unreadable stream.
+  if (resourceVersion === null || currentResourceVersion === null) {
+    return refuseUnreadableFenceHead();
+  }
+  if (resourceVersionMoved(resourceVersion, currentResourceVersion)) {
     return refuseUnprovenResources();
   }
   // ONE DECISION: the release row plus every version its evidence was read at. A

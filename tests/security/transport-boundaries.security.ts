@@ -157,7 +157,10 @@ describe("transport axis — completeness against the roster and the no-admissio
     // (task-ba83b202); its three arms are in recent-workflow-transport-hostile-cases.ts.
     // 30 -> 29 on 2026-09-17: TIMELINE_REFUSAL_LAYERS retired with the v1 control-room UI; its
     // declaring module and its three arms in transport-hostile-cases.ts were deleted together.
-    expect(ROSTER_TRANSPORT).toHaveLength(29);
+    // 29 -> 30 on 2026-09-18 for NEW_PRODUCT_LAYER, the New Product card's browser half. It was
+    // exported and live the whole time; the roster's scanner accepted `.ts` only and never opened
+    // its declaring `.tsx`. Three arms in recent-workflow-transport-hostile-cases.ts.
+    expect(ROSTER_TRANSPORT).toHaveLength(30);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 
