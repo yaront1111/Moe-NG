@@ -69,7 +69,7 @@
   ],
   "planRevision": 8,
   "status": "WORKING",
-  "assignedWorkerId": "worker-e0435164",
+  "assignedWorkerId": "worker-07e6de2a",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -81,7 +81,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:10:28.284Z",
-  "updatedAt": "2026-09-18T19:37:54.238Z",
+  "updatedAt": "2026-09-18T20:13:50.159Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T19:22:29.745Z",
     "plannedStepCount": 4,
@@ -103,7 +103,18 @@
   },
   "planApprovedAt": "2026-09-18T19:27:21.913Z",
   "contextFetchedBy": [
-    "worker-e0435164"
+    "worker-e0435164",
+    "worker-07e6de2a"
   ],
-  "workStartedAt": "2026-09-18T19:28:28.702Z"
+  "workStartedAt": "2026-09-18T19:28:28.702Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-3 COMPLETED. Their bytes were swept at 20:06:32Z by a `git commit --amend` into 50d7a0a9 (mislabelled Moe-Task: task-8bc14883), merged + pushed as 20fa6949, so HEAD already carries them: runtime-vocabulary.ts, runtime-contract.test.ts, generated-client.ts, generated-coverage.test.ts, approve-plan.test.tsx, approve-plan-reject.test.tsx, plan-run-resolution.test.tsx.",
+      "whatRemains": "Step-4 (was IN_PROGRESS, nothing on disk for it). Then complete_task; name 50d7a0a9 as the carrier of steps 1-3 in completionSummary since this row's own commits list is empty.",
+      "pitfalls": "Verify step 1-3 bytes at HEAD with `git show 50d7a0a9 -- <file>` before re-doing anything; do not re-apply them.",
+      "releasedAt": "2026-09-18T20:13:42.593Z",
+      "releasedBy": "governor-f32726f9",
+      "reason": "Confirmed crash: worker-e0435164 silent since 20:03Z, fleet restarted (new seats ~20:08Z), human confirmed no task in flight. Downstream chain adeabf1f->2c3f878b->a47babf8 waits on this."
+    }
+  ]
 }
