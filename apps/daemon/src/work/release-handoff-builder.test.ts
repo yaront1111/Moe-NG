@@ -560,6 +560,48 @@ describe("release handoff builder — the horizon is aggregate-scoped (task-a20e
     });
   });
 
+  it("REFUSES SOURCE_UNREADABLE, not HORIZON_MOVED, when the re-read cannot land", () => {
+    // The arm above proves a watched aggregate that GREW refuses HORIZON_MOVED. A re-read that
+    // THREW took the same arm, because `captureCounts` answers null for both and the guard
+    // treated null as a move — so a SQLITE_BUSY stated, in the outer code and the upstream one,
+    // that a second writer advanced an aggregate under the build. The first read of the same
+    // aggregates already answers its own unreadable pair for the same fault; this pins that the
+    // re-read does too.
+    // SELF-CALIBRATED: the facts reader consults this aggregate several times before the
+    // horizon re-read, and each of those reads already answers its own unreadable code when it
+    // throws. Count the reads a clean build makes, then throw on the LAST one — which is the
+    // re-read, the only reader left once the facts are in hand.
+    let total = 0;
+    const calibrated = seededWorld("horizon-unreadable-calibrate");
+    const counting = interposing(calibrated.store, ARTIFACT_AGGREGATE, Number.POSITIVE_INFINITY,
+      () => undefined);
+    const probe = new Proxy(counting, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (key !== "readEvents" || typeof value !== "function") return value;
+        return (aggregateId: string): unknown => {
+          if (aggregateId === ARTIFACT_AGGREGATE) total += 1;
+          return (value as (id: string) => unknown)(aggregateId);
+        };
+      },
+    });
+    expect(buildReleaseHandoff(probe, calibrated.identity).ok).toBe(true);
+    expect(total).toBeGreaterThan(1);
+
+    const world = seededWorld("horizon-unreadable");
+    const raced = interposing(world.store, ARTIFACT_AGGREGATE, total, () => {
+      throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+    });
+    const built = buildReleaseHandoff(raced, world.identity);
+    expect(built.ok).toBe(false);
+    if (built.ok) throw new Error("unreachable");
+    expect(built.code).toBe("RELEASE_HANDOFF_SOURCE_UNREADABLE");
+    expect(built.upstream).toEqual({
+      code: "RELEASE_HANDOFF_HORIZON_UNREADABLE",
+      layer: "DAEMON_RELEASE_HANDOFF_CROSS_CHECK",
+    });
+  });
+
   it("BUILDS ANYWAY when an UNRELATED aggregate grows mid-build — the scope control", () => {
     // Without this arm a GLOBAL horizon check would satisfy the case above and would
     // then refuse nearly every release on a busy daemon: green in a quiet test, useless

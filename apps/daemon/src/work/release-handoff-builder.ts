@@ -116,7 +116,8 @@ function admitIdentity(value: unknown): ReleaseHandoffIdentity | null {
 }
 
 /** Row counts for exactly the aggregates this builder reads. An unreadable aggregate is
- *  not a stable one, so a throw is the same answer as a move. */
+ *  not a stable one, so a throw refuses the build just as a move does — but under its OWN
+ *  code at both call sites, never as evidence that something advanced. */
 function captureCounts(
   store: SqliteEventStore, aggregateIds: readonly string[],
 ): readonly number[] | null {
@@ -259,7 +260,15 @@ export function buildReleaseHandoff(
     (ref) => extendProviderHorizon(store, horizon, bound, identity, ref));
   if ("ok" in facts) return facts;
   const after = captureCounts(store, horizon.aggregateIds);
-  if (after === null || !countsAgree(horizon.counts, after)) {
+  // The re-read that could not land answers what the first read answers for the same fault,
+  // eleven lines up. Folding it into MOVED stated, in both the outer code and the upstream
+  // one, that an aggregate advanced under the build — a claim about a second writer that a
+  // SQLITE_BUSY proves nothing about.
+  if (after === null) {
+    return refuseHandoff("RELEASE_HANDOFF_SOURCE_UNREADABLE", null,
+      { code: "RELEASE_HANDOFF_HORIZON_UNREADABLE", layer: HANDOFF_CROSS_CHECK_LAYER });
+  }
+  if (!countsAgree(horizon.counts, after)) {
     return refuseHandoff("RELEASE_HANDOFF_SOURCE_HORIZON_MOVED", null,
       { code: "RELEASE_HANDOFF_AGGREGATE_MOVED", layer: HANDOFF_CROSS_CHECK_LAYER });
   }
