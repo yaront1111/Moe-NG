@@ -93,7 +93,13 @@ no way to obtain. The MCP transport authenticates by credential instead, and
 \`moe mcp\` reads \`moe.config.json\` itself — so NO credential belongs in the
 client config below. Point a client at it with:
 
-    {"mcpServers":{"moe-next":{"command":"moe","args":["mcp","C:\\\\work\\\\demo"]}}}
+    {"mcpServers":{"moe-next":{"command":"node","args":["C:\\\\moe\\\\apps\\\\daemon\\\\src\\\\cli\\\\moe-cli-main.ts","mcp","C:\\\\work\\\\demo"]}}}
+
+\`C:\\moe\` stands for the folder you unzipped and \`C:\\work\\demo\` for the
+project; both paths must be absolute, because the client starts \`node\` from a
+working directory of its own. That entry is the file \`moe.cmd\` runs, so this
+is still \`moe mcp\`. It is named directly because a client starts its command
+literally, and \`moe.cmd\` is on no PATH.
 
 That session can create goals — \`goal.create\`, and \`goal.create_with_source\`
 to bind a PRD — and read state through \`work.get_context\`, \`graph.get\`,

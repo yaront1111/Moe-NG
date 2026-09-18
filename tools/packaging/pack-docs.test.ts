@@ -1,13 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runSingleProjectMain } from "../../apps/daemon/src/projects/project-single-main.js";
 import type { ProjectSingleMainOptions } from "../../apps/daemon/src/projects/project-single-main.js";
-import { MOE_PS1, installDoc } from "./pack-docs.js";
+import { MOE_CMD, MOE_PS1, installDoc } from "./pack-docs.js";
 
 /**
  * The launcher this file emits is the FIRST thing an operator runs, and it runs before
@@ -122,6 +122,15 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
+/** The client config the doc says to paste, parsed the way a client parses it. */
+function recipe(doc: string): { readonly args: readonly string[]; readonly command: string } {
+  const line = doc.split("\n").find((text) => text.trim().startsWith(`{"mcpServers"`)) ?? "{}";
+  const config = JSON.parse(line) as {
+    mcpServers?: Record<string, { args: string[]; command: string }>;
+  };
+  return config.mcpServers?.["moe-next"] ?? { args: [], command: "" };
+}
+
 /** The single-project composer with doubles for everything that spawns or touches disk. */
 async function driveStart(
   overrides: Partial<ProjectSingleMainOptions> & { readonly assetRoot: string | null },
@@ -193,8 +202,20 @@ describe("INSTALL.md quotes the lines the packaged moe start prints", () => {
   it("documents the headless MCP path with the tools it actually serves", () => {
     expect(DOC).toContain("moe mcp");
     expect(quoted(DOC)).toContain("goal.create_with_source");
-    // The connect recipe, and the reason no credential belongs in it.
-    expect(DOC).toContain(`{"mcpServers":{"moe-next":{"command":"moe","args":["mcp",`);
+    // The connect recipe must be something a client can SPAWN. A client runs its
+    // command literally: `moe` is a .cmd on no PATH after the install steps, and a
+    // bare .cmd spawn is EINVAL besides. So it names node and the entry MOE_CMD runs,
+    // derived from MOE_CMD so that moving the entry turns this red.
+    const entry = /node "%~dp0([^"]+)"/u.exec(MOE_CMD)?.[1] ?? "MOE_CMD names no entry";
+    const server = recipe(DOC);
+    expect(server.command).toBe("node");
+    expect(server.args).toHaveLength(3);
+    expect(server.args[0]?.endsWith(`\\${entry}`), server.args[0]).toBe(true);
+    expect(server.args[1]).toBe("mcp");
+    // Absolute, both: the client starts node from a working directory of its own.
+    for (const path of [server.args[0], server.args[2]]) {
+      expect(win32.isAbsolute(path ?? ""), path).toBe(true);
+    }
     expect(DOC).toMatch(/NO credential belongs in this file|NO credential belongs in the\s+client config/u);
     // Every served query kind is named, so a reader learns the read surface from
     // the doc rather than by probing the server.
