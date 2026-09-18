@@ -111,11 +111,19 @@ export function tlsCertificateCommand(container: string): readonly string[] {
 /**
  * `ssl` is a SIGHUP parameter in PostgreSQL 10+, so ALTER SYSTEM plus a reload turns it on
  * without a restart; the initial POSTGRES_USER is a superuser, which ALTER SYSTEM requires.
+ * ONE `-c` PER STATEMENT: psql runs a single `-c` string as one implicit transaction, and
+ * ALTER SYSTEM refuses "inside a transaction block" (measured live 2026-09-18). Each `-c` is
+ * its own transaction; ON_ERROR_STOP still halts at the first failure.
  */
 export function tlsEnableCommand(container: string, user: string, database: string): readonly string[] {
-  const sql = "ALTER SYSTEM SET ssl = 'on'; ALTER SYSTEM SET ssl_cert_file = 'server.crt';"
-    + " ALTER SYSTEM SET ssl_key_file = 'server.key'; SELECT pg_reload_conf();";
-  return ["exec", "--user", "postgres", container, "psql", "-v", "ON_ERROR_STOP=1", "-U", user, "-d", database, "-c", sql];
+  const statements = [
+    "ALTER SYSTEM SET ssl = 'on'",
+    "ALTER SYSTEM SET ssl_cert_file = 'server.crt'",
+    "ALTER SYSTEM SET ssl_key_file = 'server.key'",
+    "SELECT pg_reload_conf()",
+  ];
+  return ["exec", "--user", "postgres", container, "psql", "-v", "ON_ERROR_STOP=1", "-U", user, "-d", database,
+    ...statements.flatMap((statement) => ["-c", statement])];
 }
 
 /** The public certificate only; the key is never read out. */
