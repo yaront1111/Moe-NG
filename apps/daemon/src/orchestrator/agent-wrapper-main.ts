@@ -107,6 +107,7 @@ async function main(): Promise<void> {
   const seatDiagnostics = diagnostics.emitterFor("seat");
   const passDiagnostics = diagnostics.emitterFor("wrapper");
   const mcpDiagnostics = diagnostics.emitterFor("mcp");
+  const verifierDiagnostics = diagnostics.emitterFor("verifier");
   // The command ports this wrapper's host dispatches through report a store fault on this plane.
   const provider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
   let verifierStore: SqliteEventStore | undefined;
@@ -243,6 +244,16 @@ async function main(): Promise<void> {
       ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
       ...(verifierDatabase === undefined ? {} : { database: verifierDatabase }),
       // Same drop as the spawner's handler below, for the verifier's own child.
+      // A recipe that could not START used to read exactly like one the deadline killed.
+      onSpawnFault: (fault) => {
+        verifierDiagnostics.error("VERIFIER_SPAWN_FAILED", {
+          fields: {
+            stage: fault.stage, test: fault.test, thrownCode: fault.thrown.code,
+            thrownMessage: fault.thrown.message, thrownName: fault.thrown.name,
+            thrownStack: fault.thrown.stack, workspace: fault.workspace,
+          },
+        });
+      },
       onFatalContainment: (error: { readonly reason?: string }) => {
         process.stderr.write("[verifier] fatal containment failure: "
           + `${error.reason ?? "UNNAMED"}; stopping the fleet\n`);
