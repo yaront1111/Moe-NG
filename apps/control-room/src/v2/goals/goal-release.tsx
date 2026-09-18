@@ -186,16 +186,20 @@ export function GoalRelease({ evidence, frame, goalId, port }: GoalReleaseProps)
                 ? `Confirm: release ${String(summary.covered)} covered, ${String(summary.unknown)} UNKNOWN`
                 : "Approve the release"}
           </ActionButton>
-          {/* SAY WHY THE CONTROL IS OFF, NEXT TO THE CONTROL. The sha line above already
-              states "Nothing is published yet", but an operator reading a greyed button asks
-              "why" at the button (UnAI 2026-09-18, asked twice). A release opens a pull
-              request for the sha the PUBLISH card pushed, so with no push there is nothing
-              this decision could be about. */}
+          {/* SAY WHY THE CONTROL IS OFF, NEXT TO THE CONTROL, AND WHERE THE CURE IS. The sha
+              line above already states "Nothing is published yet", but an operator reading a
+              greyed button asks "why" at the button (UnAI 2026-09-18, asked twice), and the
+              PUBLISH card is NOT on this tab: `live-product-workspace.tsx` mounts this card
+              under Delivery and the publish card under Technical detail (via the board), so
+              "above" sent the operator to the New-product form instead. A release opens a
+              pull request for the sha the PUBLISH card pushed, so with no push there is
+              nothing this decision could be about. */}
           {sha === null ? (
             <p className="cr2-needs-detail" data-testid="cr.release.disabled-reason">
-              Approve stays off until this goal is published: the PUBLISH card above pushes the
-              landed commits, and that pushed commit is what this release would open a pull
-              request for, against the base branch named here.
+              Approve stays off until this goal is published. The PUBLISH card sits at the top
+              of this goal&apos;s Technical detail tab; it pushes the landed commits, and that
+              pushed commit is what this release would open a pull request for, against the
+              base branch named here.
             </p>
           ) : null}
           {armed && !busy ? (

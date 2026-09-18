@@ -205,7 +205,7 @@ describe("GoalRelease offered and un-offered", () => {
     render(<GoalRelease evidence={evidenceOf([COVERED], null, null)} frame={OFFERED} goalId={GOAL_ID} port={createReleasePort(wire)} />);
     expect(screen.getByTestId("cr.release.button").hasAttribute("disabled")).toBe(true);
     expect(screen.getByTestId("cr.release.sha").textContent).toContain("Nothing is published yet");
-    expect(screen.getByTestId("cr.release.disabled-reason").textContent).toContain("PUBLISH card above");
+    expect(screen.getByTestId("cr.release.disabled-reason").textContent).toContain("Technical detail tab");
     // The base field itself is NOT what is disabled: only a dispatch in flight locks it.
     expect(screen.getByTestId("cr.release.base").hasAttribute("disabled")).toBe(false);
   });
