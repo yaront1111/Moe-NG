@@ -1,4 +1,5 @@
 import { recordReviewRound } from "@moe/review";
+import { NodeBriefUnreadableError } from "./agent-spawn-contract.js";
 import type { ReviewContinuationApproval } from "@moe/review";
 import type { SqliteEventStore } from "@moe/store";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
@@ -30,7 +31,9 @@ export function withLatestVerifierFailure(
     const store = context.store();
     if (store === undefined) return null;
     const ledger = readReviewLedger(store, context.projectId, nodeRef);
-    if (ledger.unreadable) return null;
+    // A KNOWN-unreadable ledger, spelled the same as a thrown one below: retried next pass by
+    // name, never reported as a brief that does not exist.
+    if (ledger.unreadable) throw new NodeBriefUnreadableError(`review ledger ${nodeRef}`);
     const guidance = readReviewImplementationGuidance(store, context.projectId, nodeRef, ledger);
     if (guidance.status === "INVALID") return null;
     if (guidance.status === "PRESENT") brief = Object.freeze({ ...brief, instructions: [brief.instructions,
@@ -79,9 +82,12 @@ export function withLatestVerifierFailure(
       ...(detail.length > MAX_DIAGNOSTIC_CHARACTERS ? ["[diagnostic truncated]"] : []),
       `END ${marker} DIAGNOSTIC`,
     ].join("\n") });
-  } catch {
-    // Lost or unprovable review evidence must not become a normal-looking fresh mission.
-    return null;
+  } catch (error) {
+    // Lost or unprovable review evidence must not become a normal-looking fresh mission. The
+    // throws that land here are the durable READS refusing; the content refusals above return
+    // null explicitly. So this is a store fault by construction, and it is named as one.
+    if (error instanceof NodeBriefUnreadableError) throw error;
+    throw new NodeBriefUnreadableError(`review evidence ${nodeRef}`);
   }
 }
 
