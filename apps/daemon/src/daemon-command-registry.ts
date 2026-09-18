@@ -75,6 +75,7 @@ import { createActivationReceiptMeasurer } from "./bootstrap/activation-command-
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
 import { foundationSyncHandler } from "./daemon-foundation-command.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
+import type { CommandStoreFaultObserver } from "./daemon-command-decision-port.js";
 import {
   runAnswerClarificationEdge, runAskClarificationEdge,
   runContinuationEdge, runEventResumeEdge, runProposeRevisionEdge,
@@ -131,6 +132,8 @@ export interface DaemonCommandPortOptions {
   /** Which durable cutover authority must admit every registry entry. */
   readonly authorityPlane?: "V1" | "V2";
   readonly clock: () => string;
+  /** Host-side disclosure of a commit that failed on the durable store; absent means silent. */
+  readonly onStoreFault?: CommandStoreFaultObserver;
   readonly cutoverActivation?: CutoverActivationWiring;
   /** Daemon-owned event reader bound to authenticated WORK principals. An absent
    *  binding leaves events.resume registered but fail-closed. */
@@ -702,5 +705,10 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     (Object.keys(PAYLOAD_KEYS) as readonly WiredCommandKind[]).map(entryOf),
   );
 
-  return Object.freeze({ decisions: createCommandDecisionPort(), registry });
+  return Object.freeze({
+    decisions: createCommandDecisionPort(
+      options.onStoreFault === undefined ? {} : { onStoreFault: options.onStoreFault },
+    ),
+    registry,
+  });
 }

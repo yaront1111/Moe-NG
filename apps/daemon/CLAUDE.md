@@ -26,7 +26,12 @@ its own: a caller that injects no dependency provider is refused, never served a
   "<key>" is INVALID` / `threw: <name> <code>: <message>`, `provider.provide() threw: …`,
   `boot reconciliation threw: …`) beside the unchanged DAEMON_ENTRY_* code.
 - `createDaemonCommandPorts` (`daemon-command-registry.ts`) and `createMcpDispatchPort`
-  (`mcp-dispatch-port.ts`) are the two dispatch fronts over the same durable pipeline.
+  (`mcp-dispatch-port.ts`) are the two dispatch fronts over the same durable pipeline. A
+  commit that fails on the durable store is a 503 frame to the caller AND `COMMAND_STORE_FAULT`
+  on the diagnostics plane (`daemon-command-decision-port.ts` observer →
+  `command-store-fault-report.ts`), threaded as `StoreDependencyConfig.diagnostics`; the
+  shipped provider builds that emitter itself from the environment, through
+  `sharedDiagnosticRuntime` so the bin and the provider rotate one log.
 - `createStoreDependencies` / `readStoreDependencyEnv` (`daemon-store-dependencies.ts`) is
   the shipped provider `--dependencies=` points at; it re-exports `agentCapabilitiesFor`
   because the agent wrapper has always imported it from that path.

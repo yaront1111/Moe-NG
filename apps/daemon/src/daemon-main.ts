@@ -6,7 +6,7 @@ import { flag } from "./argv-flag.js";
 import { isDependencyProvider, refuseEntry, startDaemon } from "./daemon-entry.js";
 import { teeDiagnosticLine } from "./diagnostics/diagnostic-line-tee.js";
 import { diagnosticProjectRoot } from "./diagnostics/diagnostic-project-root.js";
-import { createDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
+import { sharedDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
 import { credentialValues } from "./orchestrator/credential-scrub.js";
 import type {
   DaemonDependencyProvider, DaemonEntryRefused, DaemonPairingApprovalResult, ShutdownResult,
@@ -221,7 +221,8 @@ if (meta.main === true) {
   // prints — a refused start naming its seam, LISTENER_REFUSED, the boot sweep's throw — also
   // lands under the project's own .moe/logs, where it survives a supervisor that discards
   // stdout. The store path names the project; a daemon started without one logs beside cwd.
-  const diagnostics = createDiagnosticRuntime({
+  // SHARED with the dependency provider this bin loads by path, which reports on the same plane.
+  const diagnostics = sharedDiagnosticRuntime({
     env: process.env,
     projectRoot: diagnosticProjectRoot(process.env["MOE_STORE_PATH"] ?? "", process.cwd()),
     secrets: credentialValues(process.env),

@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
     secrets: [...credentialValues(process.env), credential],
   });
-  const provider = createStoreDependencies(config);
+  const provider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
   const subscriptions = provider.subscriptions?.();
   if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
 

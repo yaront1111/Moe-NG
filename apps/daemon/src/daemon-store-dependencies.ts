@@ -17,6 +17,10 @@ export { agentCapabilitiesFor } from "./daemon-command-registry.js";
 
 export { createStoreDependencies };
 export { CUTOVER_EVIDENCE_ROOT_ENV_KEY };
+import { diagnosticProjectRoot } from "./diagnostics/diagnostic-project-root.js";
+import { sharedDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
+import { credentialValues } from "./orchestrator/credential-scrub.js";
+
 export type { StoreDependencyConfig };
 
 export const STORE_DEPENDENCIES_ENV_MISSING = "STORE_DEPENDENCIES_ENV_MISSING" as const;
@@ -56,8 +60,21 @@ export function readStoreDependencyEnv(
 
 let envProvider: StoreDependencyProvider | null = null;
 
+/**
+ * The provider `moe-daemon` loads by module path and hands no arguments, so the diagnostics
+ * plane it reports on is built here from the SAME environment the bin builds its own from —
+ * and shared with it, so one process rotates one log.
+ */
 function fromEnv(): StoreDependencyProvider {
-  envProvider = envProvider ?? createStoreDependencies(readStoreDependencyEnv(process.env));
+  if (envProvider === null) {
+    const config = readStoreDependencyEnv(process.env);
+    const diagnostics = sharedDiagnosticRuntime({
+      env: process.env,
+      projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
+      secrets: credentialValues(process.env),
+    });
+    envProvider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
+  }
   return envProvider;
 }
 

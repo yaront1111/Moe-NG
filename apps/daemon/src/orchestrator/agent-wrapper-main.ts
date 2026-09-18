@@ -107,7 +107,8 @@ async function main(): Promise<void> {
   const seatDiagnostics = diagnostics.emitterFor("seat");
   const passDiagnostics = diagnostics.emitterFor("wrapper");
   const mcpDiagnostics = diagnostics.emitterFor("mcp");
-  const provider = createStoreDependencies(config);
+  // The command ports this wrapper's host dispatches through report a store fault on this plane.
+  const provider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
   let verifierStore: SqliteEventStore | undefined;
   let verifierRunner: VerifierProcessRunner | undefined;
   let delivery: ReturnType<typeof createRepositoryDeliveryRuntime> | undefined;

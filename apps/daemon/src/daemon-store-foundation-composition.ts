@@ -6,11 +6,13 @@ import type { ReleasePublisher } from "./release/release-decide-service.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { DiagnosticEmitter } from "@moe/contracts";
 import { DurableStoreError } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import {
   acknowledge, reseatToSnapshot,
 } from "@moe/store/subscriptions/subscription-writes.js";
+import { commandStoreFaultReporter } from "./command-store-fault-report.js";
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DeploymentDeploySeams } from "./daemon-command-async-entries.js";
 import type { ReleasePrPort } from "./release/release-pr-port.js";
@@ -145,6 +147,12 @@ export interface StoreDependencyConfig {
   readonly affordanceMintId?: ((kind: string) => string) | undefined;
   readonly clock?: () => string;
   readonly credential: string;
+  /**
+   * The diagnostics plane this composition reports on: a commit that failed on the durable
+   * store lands as COMMAND_STORE_FAULT beside the 503 frame the caller receives. Absent means
+   * the fault stays in the frame alone, as it always did.
+   */
+  readonly diagnostics?: DiagnosticEmitter;
   /** OPTIONAL. Where `cutover.activate` reads the live-quiesce evidence; absent means the
    *  kind refuses CUTOVER_ACTIVATE_UNCONFIGURED (see daemon-store-cutover-wiring.ts). */
   readonly cutoverEvidenceRoot?: string | undefined;
@@ -276,6 +284,8 @@ export function createStoreDependencies(
     projectId: config.projectId, store,
   });
   const { decisions, registry } = createDaemonCommandPorts({
+    ...(config.diagnostics === undefined
+      ? {} : { onStoreFault: commandStoreFaultReporter(config.diagnostics) }),
     ...(repositoryWorkspace === null || repositoryWorkspace === "" ? {} : {
       // Deferred until dispatch; the shared authenticator is constructed below before ports
       // are exposed. Capture rechecks the same durable identity after its asynchronous work.
