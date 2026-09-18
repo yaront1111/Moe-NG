@@ -112,6 +112,9 @@ export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "REVIEW_COMMAND_ID_SPENT",
   "REVIEW_EXPECTED_VERSION_STALE",
   "REVIEW_FINDING_ATTRIBUTION_INVALID",
+  // The reporter's sealed plan could not be READ, so ownership could not be checked at all.
+  // Never INVALID: that code accuses the reviewer of naming work their plan does not own.
+  "REVIEW_FINDING_ATTRIBUTION_UNREADABLE",
   "REVIEW_LINEAGE_UNREADABLE",
   "REVIEW_ESCALATION_NOT_REACHED",
   "REVIEW_REPLAN_WITHOUT_ROUND",
