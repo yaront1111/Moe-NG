@@ -56,13 +56,17 @@ export function reviewContinuationMatches(
 
 /**
  * Acceptance may spend only the clean result of that append, never a subsequent attempt. The
- * clean append may carry findings attributed to OTHER nodes - they never charge this one - so
- * only an unattributed record past the approved round disqualifies it.
+ * clean append may carry findings attributed to OTHER nodes - they never charge this one - and
+ * informational MINOR notes - they never block a round (review-findings.ts) - so only an
+ * unattributed CRITICAL/MAJOR record past the approved round disqualifies it. Measured
+ * 2026-09-18: with `attributedTo === undefined` alone, the exact UnAI shape (one honest MINOR
+ * note on the continued round) routed ACCEPT in `recordReviewRound` and was then refused here
+ * as REVIEW_CONTINUATION_INVALID, so the operator's "Allow one more attempt" bought nothing.
  */
 export function reviewContinuationAccepts(lineage: ReviewLineage, use: ReviewContinuationUse): boolean {
   if (!validReviewContinuationApproval(use?.approval) || lineage.highestRound !== use.round
     || lineage.records.some((record) => record.round > use.approval.sourceRound
-      && record.finding.attributedTo === undefined)) return false;
+      && record.finding.attributedTo === undefined && record.finding.severity !== "MINOR")) return false;
   const source = { ...lineage, highestRound: use.approval.sourceRound,
     records: lineage.records.filter((record) => record.round <= use.approval.sourceRound) };
   const sourceDigest = canonicalDigest({ highestRound: source.highestRound,
