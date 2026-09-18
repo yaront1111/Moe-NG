@@ -155,7 +155,7 @@
   ],
   "planRevision": 18,
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-09357cdf",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -186,7 +186,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:22.330Z",
-  "updatedAt": "2026-09-18T22:20:41.990Z",
+  "updatedAt": "2026-09-18T22:21:24.878Z",
   "dependsOn": [
     "task-adeabf1f8c9e4e2c8b778491f9e20b71"
   ],
@@ -226,7 +226,8 @@
   "planApprovedAt": "2026-09-18T21:46:50.568Z",
   "contextFetchedBy": [
     "worker-07e6de2a",
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-18T21:00:54.186Z",
   "blockedReason": null,
@@ -249,6 +250,39 @@
       "treeId": "891ae94d0df5954cb347349e8102da2f8448a17d",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "21721c40aa9619cdddf2e81fd888b301b74e912c",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-18T21:46:52Z",
+      "paths": [
+        ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+        ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+        ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+        ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/gates-human-only-fence.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/repository/publish-resolve-command.js",
+        "apps/daemon/src/repository/publish-resolve-command.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-18T22:20:56.808Z",
+      "treeId": "36c65c3b092c19588ae13b764569bc5fc63739a5",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -266,14 +300,18 @@
     "apps/daemon/src/repository/publish-resolve-command.ts",
     "apps/daemon/src/repository/publish-resolve-command.js",
     "apps/daemon/src/daemon-command-registry.test.ts",
-    "apps/daemon/src/daemon-v2-command-registry.test.ts"
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+    ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+    ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-07e6de2a@2026-09-18T20:59:48Z",
-    "at": "2026-09-18T21:07:33.642Z"
+    "kind": "completion",
+    "sessionId": "worker-952c612b@2026-09-18T21:46:52Z",
+    "at": "2026-09-18T22:20:56.808Z"
   },
   "priorBlockedReason": "Step 1 census (the specified :(glob) regex) hit only the two named files (allowlist.test.ts :159/:230/:251/:280 and vocabulary.test.ts:465). Independent of that regex, four more EXACT whole-set pins in @moe/daemon WILL red when repository.publish_resolve joins PAYLOAD_KEYS + OPERATOR_PRINCIPAL_KINDS, and they are not in this plan's 8 files. Adding all four is 12 files, over the 10-file cap — a split/amend signal, not an in-line extra path.\n\nUnnamed consumers (file:line, what fails):\n1. apps/daemon/src/mcp-main.test.ts:220 EXPECTED_EXCLUDED_COMMAND_KINDS hand list; :268 EXCLUSION_CASES.length.toBe(29); :270 *2=58; :273 production.toEqual(expected).\n2. apps/daemon/src/mcp-http/mcp-http-host.test.ts:694 and :725 EXCLUSION_CASES.length.toBe(29) (list is DERIVED, count is frozen); :696 *2=58.\n3. apps/daemon/src/daemon-command-registry-human-approver.test.ts:387 expectedExclusions hand list; :419/:420 length 29; :421 sort-equal to MCP_EXCLUDED_COMMAND_KINDS.\n4. apps/daemon/src/daemon-store-dependencies.test.ts:840 registryKinds exact sorted served-set (comment: 'A new command writes its own kind here').\n\nDoD requires a green full `pnpm --filter @moe/daemon test`. Those four files live in that package, so a path-attributed baseline cannot excuse them: the owned-package leg would be nonzero. I will not edit unnamed paths. Please amend or split so those pins are owned (or carve a sibling that this row dependsOn, and drop the full-daemon-leg from THIS DoD). Census regex positive control: allowlist.test.ts:280 WAS found. Row 2 task-adeabf1f is DONE/merged. Template still preview.decide; REPOSITORY_RECOVERY_FAMILY at vocabulary.ts:181 is the right family (no bootstrap-sequence coupling).",
   "blockedOnTaskIds": null,
@@ -285,5 +323,22 @@
     "reportedAt": "2026-09-18T22:20:41.984Z",
     "source": "agent-reported"
   },
-  "completionSummary": "repository.publish_resolve is wired and fenced to the operator (row 3 of task-21be6e90).\n\nPRODUCTION\n- PAYLOAD_KEYS row [decisionId, resolution], appended.\n- vocabulary: REPOSITORY_RECOVERY_FAMILY at ADMIN, WiredCommandKind, agentCapabilitiesFor null, OPERATOR_PRINCIPAL_KINDS.\n- NEW repository/publish-resolve-command.ts (+ .js) entry factory, registered in async-entries (an inline stub would cross 400 lines).\n- mcp-tool-allowlist.ts: MCP_NEVER_DELEGATED (governor ruling msg-c532f7aa).\n- families.ts unchanged by design: ADMIN derives from the family table, and a test asserts it.\n\nENTRY BEHAVIOUR\n- Fence: `OPERATOR_PRINCIPAL_KINDS.has(kind) && principal !== operator` -> 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION.\n- Then a stub: 422 PUBLISH_RESOLVE_DECISION_NOT_FOUND@DAEMON_PREREQUISITE via row 2's constructor, with no writes.\n\nTESTS\n- DoD 1/2/3 arms in daemon-command-registry.test.ts, plus a named arm outside BAND in gates-human-only-fence.test.ts.\n- Pins in 9 test files taken from the printed legs, including v2 registry.size 65 and the delegate partition {15, 15} (both amend-1).\n\nDRILLS (in memory)\n- M1 (kind removed from the set): DoD1 red (the stub answers 422) and DoD2 red at :752.\n- M2 (fence deleted): DoD1 red.\n- M3 (stub accepts): DoD3 red.\n- M4 (kind made delegable): DoD2 red at :758.\n- Control: green.\n\nGATES\n- daemon 765/765 files, 12594 passed / 22 skipped\n- control-room 195/195 files, 2584 tests\n- typecheck 19/19\n- test:security 12/12, 1009\n- fresh targeted run 11/11, 794\n- Root `pnpm test`: 1 FOREIGN red, pack-artifact-sweep over tracked node-spec-loader.{ts,js} from f5d5f4ee. Already fixed on origin/main.\n\nRECORDS\n- Census verdicts and adversarial review: comment-8a81745d.\n- Follow-ups:\n  - task-a47babf8 comment-fc392957: the swap point is the new module; re-aim DoD3 and the ROWS entry; add project and transport checks.\n  - task-21be6e90 comment-ca397fbb: a paired browser human is refused 403; HUMAN_ONLY_STEPS.\n- Pre-existing debt: vocabulary.ts"
+  "completionSummary": "repository.publish_resolve is wired and fenced to the operator (row 3 of task-21be6e90).\n\nPRODUCTION\n- PAYLOAD_KEYS row [decisionId, resolution], appended.\n- vocabulary: REPOSITORY_RECOVERY_FAMILY at ADMIN, WiredCommandKind, agentCapabilitiesFor null, OPERATOR_PRINCIPAL_KINDS.\n- NEW repository/publish-resolve-command.ts (+ .js) entry factory, registered in async-entries (an inline stub would cross 400 lines).\n- mcp-tool-allowlist.ts: MCP_NEVER_DELEGATED (governor ruling msg-c532f7aa).\n- families.ts unchanged by design: ADMIN derives from the family table, and a test asserts it.\n\nENTRY BEHAVIOUR\n- Fence: `OPERATOR_PRINCIPAL_KINDS.has(kind) && principal !== operator` -> 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION.\n- Then a stub: 422 PUBLISH_RESOLVE_DECISION_NOT_FOUND@DAEMON_PREREQUISITE via row 2's constructor, with no writes.\n\nTESTS\n- DoD 1/2/3 arms in daemon-command-registry.test.ts, plus a named arm outside BAND in gates-human-only-fence.test.ts.\n- Pins in 9 test files taken from the printed legs, including v2 registry.size 65 and the delegate partition {15, 15} (both amend-1).\n\nDRILLS (in memory)\n- M1 (kind removed from the set): DoD1 red (the stub answers 422) and DoD2 red at :752.\n- M2 (fence deleted): DoD1 red.\n- M3 (stub accepts): DoD3 red.\n- M4 (kind made delegable): DoD2 red at :758.\n- Control: green.\n\nGATES\n- daemon 765/765 files, 12594 passed / 22 skipped\n- control-room 195/195 files, 2584 tests\n- typecheck 19/19\n- test:security 12/12, 1009\n- fresh targeted run 11/11, 794\n- Root `pnpm test`: 1 FOREIGN red, pack-artifact-sweep over tracked node-spec-loader.{ts,js} from f5d5f4ee. Already fixed on origin/main.\n\nRECORDS\n- Census verdicts and adversarial review: comment-8a81745d.\n- Follow-ups:\n  - task-a47babf8 comment-fc392957: the swap point is the new module; re-aim DoD3 and the ROWS entry; add project and transport checks.\n  - task-21be6e90 comment-ca397fbb: a paired browser human is refused 403; HUMAN_ONLY_STEPS.\n- Pre-existing debt: vocabulary.ts",
+  "touchedFiles": [
+    "apps/daemon/src/repository/publish-resolve-command.js",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/gates-human-only-fence.test.ts",
+    "apps/daemon/src/repository/publish-resolve-command.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
+  ]
 }
