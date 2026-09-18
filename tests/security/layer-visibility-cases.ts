@@ -175,7 +175,10 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 // PRODUCTION: `isProductionModule` accepted `.ts` only, so no `.tsx` was ever opened by either
 // scan and this declaration had never been counted. The same widening moved EXPECTED_ROSTER_SIZE
 // (180 -> 181, NEW_PRODUCT_LAYER) and both literal counts below — a blind spot, not a landing.
-const EXPECTED_PRIVATE_COUNT = 83;
+// 83 -> 84 on 2026-09-18 for FAULT_LAYER (apps/daemon/src/http/http-refusal-tag.ts, landed in
+// 3e0a70fb): a module-private stamp the listener's completion line compares against, never a
+// refusal layer on the wire, so it is enrolled here rather than in LAYER_ROSTER.
+const EXPECTED_PRIVATE_COUNT = 84;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -198,6 +201,8 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "RELEASE_LAYER", file: "apps/control-room/src/v2/goals/release-port.ts" },
   { constant: "AGENT_PROVIDER_LAYER", file: "apps/control-room/src/v2/ops/agent-provider-port.ts" },
   { constant: "ADVANCED_FRAMES_LAYER", file: "apps/control-room/src/v2/shell/advanced-frames.ts" },
+  // The listener's own-fault tag (3e0a70fb): compared against, never stamped onto a wire refusal.
+  { constant: "FAULT_LAYER", file: "apps/daemon/src/http/http-refusal-tag.ts" },
   // Not a stamp at all: the card MATCHES the daemon's own `LEDGER` layer to tell "no design was
   // compiled" apart from "the read failed". Module-private for the reason the sibling ports are
   // — it leaves the browser on nothing — and invisible until `isProductionModule` learned `.tsx`.
