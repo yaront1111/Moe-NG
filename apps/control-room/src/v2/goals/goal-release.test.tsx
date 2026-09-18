@@ -196,6 +196,27 @@ describe("GoalRelease offered and un-offered", () => {
     expect(screen.getByTestId("cr.release.button").textContent).toContain("Confirm: release 1 covered, 0 UNKNOWN");
   });
 
+  it("keeps approve DISABLED and says why, at the button, while nothing is published", () => {
+    // The daemon offers release.decide as soon as a commit LANDS, but a release is a pull
+    // request for a PUSHED sha; until the PUBLISH card pushes, the control must stay off AND
+    // the reason must sit beside it -- the operator on UnAI 2026-09-18 read a greyed button
+    // twice without connecting it to the sha line further up the card.
+    const { wire } = wireWith({ ok: true });
+    render(<GoalRelease evidence={evidenceOf([COVERED], null, null)} frame={OFFERED} goalId={GOAL_ID} port={createReleasePort(wire)} />);
+    expect(screen.getByTestId("cr.release.button").hasAttribute("disabled")).toBe(true);
+    expect(screen.getByTestId("cr.release.sha").textContent).toContain("Nothing is published yet");
+    expect(screen.getByTestId("cr.release.disabled-reason").textContent).toContain("PUBLISH card above");
+    // The base field itself is NOT what is disabled: only a dispatch in flight locks it.
+    expect(screen.getByTestId("cr.release.base").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("drops the disabled reason once a sha exists, so the hint cannot outlive its cause", () => {
+    const { wire } = wireWith({ ok: true });
+    render(<GoalRelease evidence={evidenceOf([COVERED], null)} frame={OFFERED} goalId={GOAL_ID} port={createReleasePort(wire)} />);
+    expect(screen.getByTestId("cr.release.button").hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByTestId("cr.release.disabled-reason")).toBeNull();
+  });
+
   it("renders NOTHING AT ALL when the daemon offers no release.decide and none was taken", () => {
     // DoD 3: absence, not a disabled button. A control that dispatches into a refusal is worse
     // than an honest explanation, and the daemon withholds the offer until a commit has landed.
