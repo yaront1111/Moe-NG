@@ -41,8 +41,16 @@ durable fact and consumes the verdict. Its one job is to make a reviewer's autho
   unresolvable (`identified`). A proven disqualification dominates `UNKNOWN`, but both codes are
   reported. Only `MUTATING` leases by *that* principal over *that* `subjectRef` disqualify.
 - **A finding's identity is `subject` + `ruleId` only.** `findingFingerprint` hashes nothing
-  else, so rewording `detail` or downgrading `severity` cannot evade repeat detection. A repeat
-  routes `REJECT_PLAN`; fresh findings route `REJECT_IMPLEMENTATION`; a clean round `ACCEPT`.
+  else, so rewording `detail` cannot evade repeat detection. A repeated *blocking* finding routes
+  `REJECT_PLAN`; fresh blocking findings route `REJECT_IMPLEMENTATION`; a clean round `ACCEPT`.
+- **Only CRITICAL/MAJOR block; MINOR is informational** (owner decision 2026-09-18). A MINOR own
+  finding is recorded in the lineage exactly like any other, but it does not make the round
+  unsuccessful, does not enter repeat detection, and does not stop the `clean && continuation`
+  rescue. `clean` therefore means "no *blocking* own finding", not "no own finding". This is
+  the fix for the UnAI 2026-09-18 loop: one honest MINOR note per round made every round
+  unsuccessful, the escalation limit was reached, and past it the continuation could rescue only
+  a round with no own findings, so the verifier never ran. Downgrading a finding to MINOR is a
+  reviewer's explicit judgment that it no longer blocks — the record persists either way.
 - **Attributed findings do not charge the reporter.** `ReviewFinding.attributedTo`
   (`{ nodeKey, criterionIds }`) names another node of the same sealed plan. Such records are
   stored and attested but excluded from `unsuccessfulRounds`, from repeat detection and from the
