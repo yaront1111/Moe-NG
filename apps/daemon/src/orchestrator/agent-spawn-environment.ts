@@ -76,22 +76,9 @@ export function agentEnvironment(
   environment["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1";
   // The size of one MCP tool result the seat may read in context. Claude's default
   // (25000 tokens) spills a PRD-sized answer to disk, where an MCP-only planning seat
-  // cannot follow it (measured 2026-09-03 on UnAI's ~121 KB PRD). The operator's own
-  // setting wins when present.
-  //
-  // CLAUDE-ONLY, AND DELIBERATELY INERT ON A CODEX SEAT rather than an oversight. codex-cli
-  // 0.153.4 (measured 2026-09-07, host Yaron-PC) recognizes NO result-size configuration at
-  // all: `mcp_servers.<name>.tool_max_output_tokens`, `.max_output_tokens`,
-  // `.output_token_limit`, `tools.max_output_tokens` and `model_max_output_tokens` are every
-  // one REJECTED as unknown fields under `--strict-config`. The only per-server keys it
-  // accepts are `startup_timeout_sec` and `tool_timeout_sec`, and a timeout bounds DURATION,
-  // never result size; `codex features list` reports `token_budget` as under development /
-  // false, which is not a shipped lever. There is therefore nothing to mirror this variable
-  // to. It stays UNCONDITIONAL because removing it for a codex seat changes nothing a seat
-  // reads while touching the allowlist this builder is pinned on. Bounding the result
-  // daemon-side is the real remedy and is a change to the SERVED MCP READ SURFACE, not to
-  // the spawn surface — a separate row, not a knob to invent here.
-  environment["MAX_MCP_OUTPUT_TOKENS"] = source["MAX_MCP_OUTPUT_TOKENS"] ?? DEFAULT_MCP_OUTPUT_TOKENS;
+  // cannot follow it (measured 2026-09-03 on UnAI's ~121 KB PRD). Codex never reads this
+  // variable; `codexResultSizeArgs` below hands a codex seat the same budget on argv.
+  environment["MAX_MCP_OUTPUT_TOKENS"] = mcpOutputBudget(source);
   // Claude honors standard proxy variables. Force its loopback MCP connection
   // around any enterprise proxy so the scoped bearer never leaves this host.
   const bypass = [source["NO_PROXY"], source["no_proxy"]]
@@ -103,4 +90,39 @@ export function agentEnvironment(
   environment["NO_PROXY"] = bypass.join(",");
   environment["no_proxy"] = bypass.join(",");
   return deliverEnvironment(environment, delivered).environment;
+}
+
+/**
+ * The ONE MCP result budget for every seat. Claude's env and codex's argv both read it here, so
+ * the two cannot drift. The operator's own `MAX_MCP_OUTPUT_TOKENS` wins when it is a plain integer
+ * from 1 to 999999999; anything else gets the default rather than reaching a seat. Declared below
+ * `agentEnvironment` so the line numbers other files cite in it stay put.
+ */
+function mcpOutputBudget(source: NodeJS.ProcessEnv): string {
+  const operator = source["MAX_MCP_OUTPUT_TOKENS"];
+  return operator !== undefined && /^[1-9]\d{0,8}$/u.test(operator) ? operator : DEFAULT_MCP_OUTPUT_TOKENS;
+}
+
+/**
+ * The codex form of `MAX_MCP_OUTPUT_TOKENS`: the same budget, as the top-level
+ * `tool_output_token_limit` override. Without it a codex seat truncates a PRD-sized MCP read.
+ *
+ * MEASURED 2026-09-18 on codex-cli 0.154.0 (host Yaron-PC), offline. The real CLI ran with this
+ * spawner's chain-seat argv against a stub model provider and a stub MCP server. The server's one
+ * tool returned 124,000 bytes: 1550 numbered lines, about 31000 tokens. Codex's model catalog
+ * gives every listed model `truncation_policy` 10000 tokens. What the model received:
+ * - No override, default `gpt-6-astra` (`tool_mode: code_mode_only`, MCP tools reached through
+ *   a JS `exec` tool): 500 of 1550 lines, head and tail kept, with a truncation warning.
+ * - No override, direct-tool `gpt-5.5`: 599 of 1550 lines. Its marker said `…7 tokens
+ *   truncated…` while ~950 lines were missing.
+ * - This override at 120000: all 1550 lines on `gpt-5.5`. On `gpt-6-astra`, all 1550 only once
+ *   the model also raises `exec`'s own budget (`// @exec: {"max_output_tokens": N}`, default
+ *   10000). Neither this override nor a `model_catalog_json` raising the model's own
+ *   `truncation_policy` moved that default. Without this override, the same request still
+ *   stopped at 599 lines.
+ * - The per-tool `mcp_servers.<name>.tools.<tool>.output_token_limit` delivered every line on
+ *   `gpt-5.5` but changed nothing on `gpt-6-astra`, so it is not used.
+ */
+export function codexResultSizeArgs(source: NodeJS.ProcessEnv): readonly string[] {
+  return Object.freeze(["-c", `tool_output_token_limit=${mcpOutputBudget(source)}`]);
 }

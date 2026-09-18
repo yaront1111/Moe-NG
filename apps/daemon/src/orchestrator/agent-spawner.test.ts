@@ -285,8 +285,9 @@ describe("seat process runtime", () => {
 
   it("gives a CODEX seat the exec invocation, env-borne bearer and NO config file", async () => {
     const { calls, spawn } = fakeSpawn();
+    // An explicit empty environment: the result-size pair below is read from it, not the host's.
     const { configDir, made: spawner } = inSandbox(claudeSpawnStarter, {
-      command: "codex", log: () => undefined, platform: "linux", spawn,
+      command: "codex", environment: {}, log: () => undefined, platform: "linux", spawn,
     });
     const done = lifetime(spawner, calls, request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
@@ -306,6 +307,7 @@ describe("seat process runtime", () => {
       "-c", `mcp_servers.moe-next.url=${MCP_ORIGIN}`,
       "-c", "mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER",
       "-c", "mcp_servers.moe-next.disabled_tools=[]",
+      "-c", "tool_output_token_limit=120000",
       "-",
     ]);
     // The scoped bearer rides the child's OWN environment, never argv or disk;
@@ -1496,25 +1498,62 @@ describe("grants a codex seat the same tool roster as a claude seat", () => {
     }
   });
 
+  /** Spawned with an EXPLICIT environment, so the host's own budget cannot leak into a case. */
+  const spawnedWith = async (
+    command: string, environment: NodeJS.ProcessEnv, workspace: string | null = "D:/ws/node-1",
+  ): Promise<FakeChild> => {
+    const { calls, spawn } = fakeSpawn();
+    const { made: spawner } = inSandbox(claudeSpawnStarter, {
+      command, environment, log: () => undefined, platform: "linux", spawn,
+    });
+    const done = lifetime(spawner, calls, request({ workspace }));
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    child.emitter.emit("close", 0, null);
+    await done;
+    return child;
+  };
+  /** Only a value that FOLLOWS `-c` reaches codex as config; a stray token would be inert. */
+  const resultSizeOf = (argv: readonly string[]): readonly string[] => argv
+    .filter((value, index) => argv[index - 1] === "-c" && value.startsWith("tool_output_token_limit="));
+
   /**
-   * RESULT SIZE: THE ABSENCE IS ASSERTED POSITIVELY, so a future diff that invents a knob has to
-   * argue with a measurement rather than slip past. codex-cli 0.153.4 recognizes NO MCP
-   * result-size configuration — `mcp_servers.<name>.tool_max_output_tokens`, `.max_output_tokens`,
-   * `.output_token_limit`, `tools.max_output_tokens` and `model_max_output_tokens` are every one
-   * rejected as unknown fields under `--strict-config`, and only the two TIMEOUT keys are
-   * accepted. `MAX_MCP_OUTPUT_TOKENS` is claude's variable and is inert on a codex seat; it is
-   * still delivered in the child's environment, which this arm pins so "no override on argv" is
-   * not confused with "the variable was dropped".
+   * RESULT SIZE: ONE BUDGET, BOTH PROVIDERS. Claude reads `MAX_MCP_OUTPUT_TOKENS` from its env.
+   * Codex never reads that variable. Measured 2026-09-18 on codex-cli 0.154.0: without
+   * `tool_output_token_limit` it handed the model 500 of 1550 lines of a 124,000-byte MCP result
+   * (the full table is on `codexResultSizeArgs`). So the codex argv carries that key at exactly
+   * the value the claude seat's env carries, on both seat kinds, for the default and for an
+   * operator's own budget.
    */
-  it("carries no result-size override on the codex argv, because codex has none", async () => {
-    const argv = await argvFor({ workspace: "D:/ws/node-1" }, "codex");
-    for (const argument of argv) {
-      expect(argument).not.toMatch(/max_output_tokens|output_token_limit|token_budget/u);
-      expect(argument).not.toContain("MAX_MCP_OUTPUT_TOKENS");
+  it("carries claude's MCP result budget on the codex argv as tool_output_token_limit", async () => {
+    const environments: readonly NodeJS.ProcessEnv[] = [{}, { MAX_MCP_OUTPUT_TOKENS: "200000" }];
+    let cases = 0;
+    for (const kind of KINDS) {
+      for (const environment of environments) {
+        const claude = await spawnedWith("claude", environment, kind.workspace);
+        const codex = await spawnedWith("codex", environment, kind.workspace);
+        const budget = claude.options.env?.["MAX_MCP_OUTPUT_TOKENS"];
+        // Pinned first, so a claude-side change cannot move both sides of the comparison at once.
+        expect(budget).toBe(environment["MAX_MCP_OUTPUT_TOKENS"] ?? "120000");
+        expect(resultSizeOf(codex.args)).toEqual([`tool_output_token_limit=${budget}`]);
+        // The claude variable still reaches the codex child. It does nothing there, but the new
+        // argv pair is an addition and must not replace it.
+        expect(codex.options.env?.["MAX_MCP_OUTPUT_TOKENS"]).toBe(budget);
+        cases += 1;
+      }
     }
-    // Only the two keys codex DOES accept on a server could legitimately appear, and neither
-    // bounds size; nothing here emits them today, so no `_sec` key is on the argv either.
-    expect(argv.filter((value) => value.includes("_timeout_sec"))).toEqual([]);
+    // Both seat kinds times both budgets: a sweep that silently yielded fewer would pass.
+    expect(cases).toBe(4);
+  });
+
+  it("gives both providers the default when the budget is not a plain integer from 1 to 999999999", async () => {
+    // One derivation feeds claude's env and codex's argv, so neither may see the operator's junk.
+    for (const junk of ["0", "-1", "1e5", "120000 x", "12k", "1234567890"]) {
+      const claude = await spawnedWith("claude", { MAX_MCP_OUTPUT_TOKENS: junk });
+      const codex = await spawnedWith("codex", { MAX_MCP_OUTPUT_TOKENS: junk });
+      expect(claude.options.env?.["MAX_MCP_OUTPUT_TOKENS"]).toBe("120000");
+      expect(resultSizeOf(codex.args)).toEqual(["tool_output_token_limit=120000"]);
+    }
   });
 
   /**
@@ -1687,7 +1726,9 @@ describe("keeps the codex spawn surface intact", () => {
     // ...and the rest of the surface is untouched: strip the pair from today's overrides and
     // what remains is exactly what the historical argv carried, in order. So this arm reds both
     // ways — on a dropped approval flag AND on a smuggled change to the rest of the surface.
-    expect(overridesOf(today).filter((value) => !isApproval(value))).toEqual(before);
+    // The result-size pair was added later, by its own measurement, and has its own arms above.
+    const isLater = (value: string): boolean => value.startsWith("tool_output_token_limit=");
+    expect(overridesOf(today).filter((value) => !isApproval(value) && !isLater(value))).toEqual(before);
   });
 
   it("keeps the approval pair on the CODEX branch only, and off the claude one", async () => {

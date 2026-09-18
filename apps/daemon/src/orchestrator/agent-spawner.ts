@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { describeThrown } from "@moe/contracts";
 
-import { agentEnvironment,
+import { agentEnvironment, codexResultSizeArgs,
   trustedMcpOrigin } from "./agent-spawn-environment.js";
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
 import { AGENT_SPAWNER_LAYER, AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
@@ -148,7 +148,7 @@ function spawnRuntime(
         "-c", "approvals_reviewer=auto_review",
         "-c", `mcp_servers.moe-next.url=${trustedOrigin}`,
         "-c", `mcp_servers.moe-next.bearer_token_env_var=${CODEX_BEARER_VARIABLE}`,
-        ...role.codexRosterArgs,
+        ...role.codexRosterArgs, ...codexResultSizeArgs(options.environment ?? process.env),
         "-",
       ] : [
         "-p",

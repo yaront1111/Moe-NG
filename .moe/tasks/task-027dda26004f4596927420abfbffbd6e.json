@@ -164,7 +164,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T20:39:33.812Z",
-  "updatedAt": "2026-09-18T06:58:56.302Z",
+  "updatedAt": "2026-09-18T06:59:50.651Z",
   "metrics": {
     "firstClaimAt": "2026-09-17T20:52:06.923Z",
     "plannedStepCount": 7,
@@ -412,14 +412,29 @@
       "treeId": "6551ff36df2d86e677c6a0824c4db344ea76996c",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "bacfb87d8ca49e66bf69a641ef715bb718696f94",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T06:51:00Z",
+      "paths": [
+        ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T06:59:50.651Z",
+      "treeId": "d75adb96fc390eaf87c4bdf17ba5721c2fb28807",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6433dce1@2026-09-18T06:31:57Z",
-    "at": "2026-09-18T06:51:49.682Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T06:51:00Z",
+    "at": "2026-09-18T06:59:50.651Z"
   },
   "touchedFiles": [
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.ts",
