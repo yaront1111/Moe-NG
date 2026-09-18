@@ -186,7 +186,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:22.330Z",
-  "updatedAt": "2026-09-18T22:41:07.165Z",
+  "updatedAt": "2026-09-18T22:56:17.363Z",
   "dependsOn": [
     "task-adeabf1f8c9e4e2c8b778491f9e20b71"
   ],
@@ -359,6 +359,21 @@
       "treeId": "df0326138f936b7f55ba1feb5547e0eb43836067",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "8869b8c1118eb2af9620d685ba3065257249f24f",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T22:56:08Z",
+      "paths": [
+        ".moe/tasks/task-b94b92d70a684d82b2ff71a9abae18cc.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T22:56:17.363Z",
+      "treeId": "d2c79b068bb67776546df73511768250f92fcc2b",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -388,8 +403,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-09357cdf@2026-09-18T22:40:58Z",
-    "at": "2026-09-18T22:41:07.165Z"
+    "sessionId": "qa-09357cdf@2026-09-18T22:56:08Z",
+    "at": "2026-09-18T22:56:17.363Z"
   },
   "priorBlockedReason": "Step 1 census (the specified :(glob) regex) hit only the two named files (allowlist.test.ts :159/:230/:251/:280 and vocabulary.test.ts:465). Independent of that regex, four more EXACT whole-set pins in @moe/daemon WILL red when repository.publish_resolve joins PAYLOAD_KEYS + OPERATOR_PRINCIPAL_KINDS, and they are not in this plan's 8 files. Adding all four is 12 files, over the 10-file cap — a split/amend signal, not an in-line extra path.\n\nUnnamed consumers (file:line, what fails):\n1. apps/daemon/src/mcp-main.test.ts:220 EXPECTED_EXCLUDED_COMMAND_KINDS hand list; :268 EXCLUSION_CASES.length.toBe(29); :270 *2=58; :273 production.toEqual(expected).\n2. apps/daemon/src/mcp-http/mcp-http-host.test.ts:694 and :725 EXCLUSION_CASES.length.toBe(29) (list is DERIVED, count is frozen); :696 *2=58.\n3. apps/daemon/src/daemon-command-registry-human-approver.test.ts:387 expectedExclusions hand list; :419/:420 length 29; :421 sort-equal to MCP_EXCLUDED_COMMAND_KINDS.\n4. apps/daemon/src/daemon-store-dependencies.test.ts:840 registryKinds exact sorted served-set (comment: 'A new command writes its own kind here').\n\nDoD requires a green full `pnpm --filter @moe/daemon test`. Those four files live in that package, so a path-attributed baseline cannot excuse them: the owned-package leg would be nonzero. I will not edit unnamed paths. Please amend or split so those pins are owned (or carve a sibling that this row dependsOn, and drop the full-daemon-leg from THIS DoD). Census regex positive control: allowlist.test.ts:280 WAS found. Row 2 task-adeabf1f is DONE/merged. Template still preview.decide; REPOSITORY_RECOVERY_FAMILY at vocabulary.ts:181 is the right family (no bootstrap-sequence coupling).",
   "blockedOnTaskIds": null,
