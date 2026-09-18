@@ -12,6 +12,7 @@ import { publicationRepositoryId } from "../repository/publication-approval-cont
 import { PUBLICATION_TIP_UNREADABLE, publicationOwnerDigest, readPublicationIntent, readPublicationTransmission, recordPublicationIntent,
   recordPublicationTransmission } from "../repository/publication-effect-ledger.js";
 import type { PublicationPushOutcome } from "../repository/publication-effect-ledger.js";
+import { measureRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import { publicationReservation } from "./node-publisher-reservation.js";
 import { probeProcessAlive } from "./process-runner-lifecycle.js";
 
@@ -97,6 +98,7 @@ export function createNodePublisher(config: NodePublisherConfig) {
     } catch (error) { transmission = `push threw: ${said(error)}`; }
     recordPublicationTransmission(config.store, { projectId: config.projectId, goalId: request.goalId, decisionId: request.decisionId,
       tipBefore, outcome, transmittedAt: clock() });
+    await measureRemoteDefaultBranch(config.store, config.projectId, config.git, candidate, clock); // after the evidence, whatever git answered
     return transmission;
   };
   /** Gives a PUBLISHING hold back once its PUBLISH_NOT_LANDED receipt exists; a refused release is named, and the next pass re-drives it. */

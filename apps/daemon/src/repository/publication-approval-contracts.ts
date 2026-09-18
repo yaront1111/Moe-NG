@@ -16,7 +16,9 @@ export interface PublicationCandidate {
 }
 export interface PublicationRefusal { readonly ok: false; readonly code: string; readonly detail: string }
 export type PublicationCandidateResult = Readonly<{ ok: true; candidate: PublicationCandidate }> | PublicationRefusal;
-export type PublicationCandidateReader = (remoteUrl: string) => PublicationCandidateResult;
+/** What picks the pushed branch: the goal, and the remote's recorded default (null: unknown). */
+export interface PublicationTarget { readonly goalId: string; readonly remoteDefaultBranch: string | null }
+export type PublicationCandidateReader = (remoteUrl: string, target?: PublicationTarget) => PublicationCandidateResult;
 
 export const publicationRefused = (code: string): PublicationRefusal => Object.freeze({ ok: false, code, detail: code });
 export const validPublicationSha = (value: unknown): value is string =>

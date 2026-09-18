@@ -1,0 +1,28 @@
+{
+  "id": "task-b94b92d70a684d82b2ff71a9abae18cc",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: browser e2e publish drives hand-build approval.branch from the workspace HEAD; take the approval from the daemon's /repository/remote/read preview instead",
+  "description": "Parent task-0416061566de49939e91bbd6351be79e, whose step 4 is blocked on this row. That row makes the daemon choose approval.branch: `moe/release/<goalId>` when the remote's recorded default is unknown or equals the workspace branch. No e2e lane has a measured default, because the only measurement runs in node-publisher transmit, after the command. So once the parent passes the target from the preview and the command, a hand-built approval is refused PUBLISH_APPROVAL_STALE @ DAEMON_PREREQUISITE (apps/daemon/src/repository/publish-services.ts:99-101).\nSites, measured at e6369896:\n- Default-run in `pnpm test:e2e:browser`, all `branch: \"main\"` and all expecting ACCEPTED: tests/e2e/control-room/deploy-environment.spec.ts:100, deploy-fake-docker.spec.ts:109, deploy-migrations.spec.ts:142, and lane-rollback-incident.ts:182, which deploy-rollback-incident.spec.ts uses.\n- Opt-in or live, each using a checked-out branch name: release-approval.spec.ts:158-167 plus its pushed-branch checks, release-approval-live.spec.ts:282 plus its header comment at :55-62, and live-proof-release.ts:~163-190 plus its comment at :169-171.\nFix, order-independent (green before AND after the parent's wiring, so it lands first): each drive takes `approval` from the daemon's own preview, POST /repository/remote/read {goalId, remoteUrl} -> body.approval, exactly as the control-room Publish card does, instead of hand-building the branch. Every pushed-branch assertion reads that approval.branch.",
+  "definitionOfDone": [
+    "Every site named in the description obtains its publish approval from the daemon's /repository/remote/read preview. `git grep -n 'branch: \"main\"' -- tests/e2e/control-room` returns no publish-approval literal. The whole-tree census is recorded in the completion record.",
+    "The four default-run specs (deploy-environment, deploy-fake-docker, deploy-migrations, deploy-rollback-incident) pass under `pnpm test:e2e:browser` at the delivered tree, and the `N passed` count line is quoted. Those runs take the browser-e2e-gate lease.",
+    "`tsc -p tests/e2e/control-room/tsconfig.json` exits 0. The opt-in/live drives' pushed-branch assertions read the approval's branch, never their checked-out name, and their comments that pin `publication-candidate.ts:21` as the branch source are corrected."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1026.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T21:38:49.493Z",
+  "updatedAt": "2026-09-18T21:38:49.493Z"
+}

@@ -113,4 +113,43 @@ describe("immutable publication Git port", () => {
     expect(await port.push(candidate)).toMatchObject({ ok: false, code: "PUBLISH_REPOSITORY_CHANGED" });
     expect(calls).toBe(0);
   });
+  it("measures the remote's default branch from HEAD's own symref on the isolated authenticated path, and never guesses one", async () => {
+    const sha = candidate.approval.sha;
+    const measured = fixture(`ref: refs/heads/master\tHEAD\n${sha}\tHEAD\n`);
+    expect(await measured.port.measureDefaultBranch(candidate)).toEqual({ ok: true, defaultBranch: "master" });
+    const read = measured.calls.find((args) => args.includes("ls-remote"));
+    // `--refs` drops every symref: it would answer "no default" for every remote.
+    expect(read?.slice(-5)).toEqual(["ls-remote", "--symref", "--", candidate.approval.remoteUrl, "HEAD"]);
+    expect(read).not.toContain("--refs"); expect(read).toContain("credential.helper=fixture-manager");
+    expect(read?.[0]).toMatch(/^--git-dir=/u); expect(read?.[0]).not.toContain(identity.gitDirectory);
+    // The pattern HEAD also tail-matches refs/remotes/origin/HEAD (measured, git 2.54): only the line naming HEAD itself counts.
+    const tail = `ref: refs/heads/other\trefs/remotes/origin/HEAD\n${sha}\trefs/remotes/origin/HEAD\n`;
+    expect(await fixture(`ref: refs/heads/trunk\tHEAD\n${sha}\tHEAD\n${tail}`).port.measureDefaultBranch(candidate))
+      .toEqual({ ok: true, defaultBranch: "trunk" });
+    // The remote answered and advertises no default: a detached HEAD (even beside a tail match), or an empty repository.
+    const none = [`${sha}\tHEAD\n`, `${sha}\tHEAD\n${tail}`, ""];
+    for (const output of none) expect(await fixture(output).port.measureDefaultBranch(candidate)).toEqual({ ok: true, defaultBranch: null });
+    expect(none).toHaveLength(3);
+    const refused = (detail: string) => ({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail });
+    const unreadable: readonly (readonly [string, string])[] = [
+      ["ref: refs/heads/master HEAD\n", "ls-remote --symref answered an unreadable symref line"],
+      ["ref: refs/heads/master\tHEAD\textra\n", "ls-remote --symref answered an unreadable symref line"],
+      ["ref: refs/tags/v1\tHEAD\n", "remote HEAD is a symref to something other than a branch"],
+      ["ref: refs/heads/..\tHEAD\n", "remote HEAD is a symref to something other than a branch"],
+      ["ref: refs/heads/a\tHEAD\nref: refs/heads/b\tHEAD\n", "ls-remote --symref answered more than one symref for HEAD"],
+    ];
+    for (const [output, detail] of unreadable) expect(await fixture(output).port.measureDefaultBranch(candidate)).toEqual(refused(detail));
+    expect(unreadable).toHaveLength(5);
+    const exits = (code: number | null, stderr = ""): GitRunner => async (_cwd, args) => args.includes("ls-remote")
+      ? { code, stderr, stdout: `ref: refs/heads/master\tHEAD\n` } : { code: 0, stderr: "", stdout: "" };
+    const port = (run: GitRunner) => createGitPublicationPort({ run, resolveIdentity: () => ({ ok: true, identity }) });
+    expect(await port(exits(128, "fatal: repository not found\n")).measureDefaultBranch(candidate))
+      .toEqual(refused("git exited 128: fatal: repository not found"));
+    expect(await port(exits(null)).measureDefaultBranch(candidate)).toEqual(refused("git exited without a code"));
+    expect(await port(async () => { throw new Error("spawn lost"); }).measureDefaultBranch(candidate)).toEqual(refused("ls-remote threw: spawn lost"));
+    const substituted = createGitPublicationPort({ run: async () => { throw new Error("must not run"); },
+      resolveIdentity: () => ({ ok: true, identity: { ...identity, root: "D:/other" } }) });
+    expect(await substituted.measureDefaultBranch(candidate))
+      .toEqual({ ok: false, code: "PUBLISH_REPOSITORY_CHANGED", detail: "PUBLISH_REPOSITORY_CHANGED" });
+  });
 });

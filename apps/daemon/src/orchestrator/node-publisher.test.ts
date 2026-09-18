@@ -16,7 +16,8 @@ import type { PublicationTransmission } from "../repository/publication-effect-l
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import type { RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
-import { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId } from "../repository/publish-receipt-contracts.js";
+import { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId, remoteAggregateId } from "../repository/publish-receipt-contracts.js";
+import { readRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import { PROJECT_ID, closeStores, openStore } from "../review/review-test-fixtures.js";
 import { createNodePublisher } from "./node-publisher.js";
 afterEach(closeStores);
@@ -106,13 +107,19 @@ function fence() {
   };
   return { port, releases, phase: () => held?.reservation.phase ?? null, refuseNextRelease: () => { refuse = true; } };
 }
-type Remote = { tip: string | null; pushes: number; observes: number; unreadableFirst: boolean;
-  onPush: (remote: Remote) => Readonly<{ ok: true }> | PublicationRefusal };
-/** One approved decision against a scripted remote whose branch starts at BEFORE. */
-function evidenceWorld(onPush: Remote["onPush"]) {
+type Measurement = Readonly<{ ok: true; defaultBranch: string | null }> | PublicationRefusal;
+type Remote = { tip: string | null; pushes: number; observes: number; measures: number; unreadableFirst: boolean;
+  onPush: (remote: Remote) => Readonly<{ ok: true }> | PublicationRefusal; onMeasure: ((remote: Remote) => Measurement) | null };
+/** One approved decision against a scripted remote whose branch starts at BEFORE. A null `onMeasure` is a port that cannot measure at all. */
+function evidenceWorld(onPush: Remote["onPush"], onMeasure: Remote["onMeasure"] = null) {
   const store = openStore(); const decisionId = decide(store, "publish-1"); const repository = fence();
-  const remote: Remote = { tip: BEFORE, pushes: 0, observes: 0, unreadableFirst: false, onPush };
+  const remote: Remote = { tip: BEFORE, pushes: 0, observes: 0, measures: 0, unreadableFirst: false, onPush, onMeasure };
   const git: PublicationGitPort = {
+    ...(onMeasure === null ? {} : { async measureDefaultBranch(given: PublicationCandidate): Promise<Measurement> {
+      expect(given).toEqual(candidate); remote.measures += 1;
+      const answer = remote.onMeasure; if (answer === null) throw new Error("no measurement scripted");
+      return answer(remote);
+    } }),
     async push(given) { expect(given).toEqual(candidate); remote.pushes += 1; return remote.onPush(remote); },
     async contains(given) { expect(given).toEqual(candidate); return { ok: true, contains: true, known: true }; },
     async observe(given) {
@@ -171,8 +178,8 @@ describe("a publish whose push provably did not land (both conditions, never one
     for (const [onPush, words] of answers) { const w = evidenceWorld(onPush); await expectStuck(w, sent(w.decisionId, BEFORE, "INDETERMINATE"), 1, words); }
     expect(answers).toHaveLength(2);
   });
-  it("keeps an intent from before this rule UNKNOWN: it has no transmission record and is never pushed again", async () => {
-    const w = evidenceWorld(() => { throw new Error("a journaled intent must never push again"); });
+  it("keeps an intent from before this rule UNKNOWN: it has no transmission record, is never pushed again and never measures the remote", async () => {
+    const w = evidenceWorld(() => { throw new Error("a journaled intent must never push again"); }, () => ({ ok: true, defaultBranch: "master" }));
     const owner = { nodeRef: `publish:${w.decisionId}`, projectId: PROJECT_ID, storeId: "D:/store.db", ownershipToken: "d".repeat(64) };
     expect(w.repository.port.acquire(identity.root, owner, CONTROLLER)).toMatchObject({ ok: true });
     expect(w.repository.port.transition(identity.root, owner, 1, { ...CONTROLLER, phase: "PUBLISHING", baselineId: null, sessionId: null, pid: null }))
@@ -180,6 +187,8 @@ describe("a publish whose push provably did not land (both conditions, never one
     recordPublicationIntent(w.store, { version: "moe-publication-intent/1", candidate, decisionId: w.decisionId, goalId: GOAL, projectId: PROJECT_ID,
       ownerDigest: publicationOwnerDigest(owner), reservationRevision: 1, controllerId: CONTROLLER.controllerId, intendedAt: NOW });
     await expectStuck(w, null, 0, REPLAY);
+    // Recovery only observes: a replayed intent makes no network call for the default on any pass.
+    expect(w.remote.measures).toBe(0); expect(readRemoteDefaultBranch(w.store, PROJECT_ID, approval.remoteUrl)).toBeNull();
   });
   it("keeps a refused push UNKNOWN when the pre-push tip was UNREADABLE, even though the post-push tip reads unchanged", async () => {
     const w = evidenceWorld(() => REJECTED); w.remote.unreadableFirst = true;
@@ -201,6 +210,48 @@ describe("a publish whose push provably did not land (both conditions, never one
   });
 });
 
+describe("the remote's default branch: measured on a fresh publish, recorded only when the remote answered", () => {
+  const measured = (defaultBranch: string | null) => (): Measurement => ({ ok: true, defaultBranch });
+  const PUSHED = [{ goalId: GOAL, outcome: "PUSHED", detail: `${approval.sha.slice(0, 10)} ${approval.branch} -> ${approval.remoteUrl}` }];
+  const NOT_LANDED_REPORT = [{ goalId: GOAL, outcome: "REFUSED", detail: `PUBLISH_NOT_LANDED: ${NOT_LANDED(approval.sha, approval.branch, BEFORE, BEFORE)}` }];
+  const recorded = (w: ReturnType<typeof evidenceWorld>) => readRemoteDefaultBranch(w.store, PROJECT_ID, approval.remoteUrl);
+  const remoteEvents = (w: ReturnType<typeof evidenceWorld>) => w.store.readEvents(remoteAggregateId(PROJECT_ID)).length;
+
+  it("measures exactly once on a fresh publish and records the answer; a pass with nothing to publish measures nothing", async () => {
+    const w = evidenceWorld((remote) => { remote.tip = approval.sha; return { ok: true }; }, measured("master"));
+    expect(await w.publisher.publishOnce()).toEqual(PUSHED);
+    expect(w.remote.measures).toBe(1); expect(recorded(w)).toBe("master");
+    expect(await w.publisher.publishOnce()).toEqual([]); expect(w.remote.measures).toBe(1);
+    // The next fresh decision measures again, but an unchanged answer adds no event to the remote aggregate.
+    decide(w.store, "publish-2");
+    expect(await w.publisher.publishOnce()).toEqual(PUSHED);
+    expect(w.remote.measures).toBe(2); expect(remoteEvents(w)).toBe(1);
+  });
+  it("measures a push git REFUSED too, while the provably-not-landed resolution answers exactly as before", async () => {
+    const w = evidenceWorld(() => REJECTED, measured("master"));
+    expect(await w.publisher.publishOnce()).toEqual(NOT_LANDED_REPORT);
+    expect(w.remote.measures).toBe(1); expect(recorded(w)).toBe("master");
+    expect(w.evidence()).toEqual(sent(w.decisionId, BEFORE, "REJECTED")); expect(w.repository.releases).toEqual(["PUBLISH_NOT_TRANSMITTED"]);
+  });
+  it("records NOTHING for a refused or thrown measurement: the earlier default stands and the publish's outcome is untouched", async () => {
+    const w = evidenceWorld(() => REJECTED, measured("master"));
+    expect(await w.publisher.publishOnce()).toEqual(NOT_LANDED_REPORT); expect(recorded(w)).toBe("master");
+    const failures: Remote["onMeasure"][] = [() => ({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "git exited 128: fatal: repository not found" }),
+      () => { throw new Error("ls-remote lost"); }];
+    for (const [index, failure] of failures.entries()) {
+      w.remote.onMeasure = failure; decide(w.store, `publish-again-${String(index)}`);
+      expect(await w.publisher.publishOnce()).toEqual(NOT_LANDED_REPORT);
+      expect(w.remote.measures).toBe(index + 2); expect(recorded(w)).toBe("master");
+    }
+    expect(failures).toHaveLength(2); expect(remoteEvents(w)).toBe(1);
+  });
+  it("publishes exactly as before against a port that cannot measure, and records no default", async () => {
+    const w = evidenceWorld(() => REJECTED);
+    expect(await w.publisher.publishOnce()).toEqual(NOT_LANDED_REPORT);
+    expect(w.remote.measures).toBe(0); expect(recorded(w)).toBeNull(); expect(remoteEvents(w)).toBe(0);
+  });
+});
+
 it("LIVE: a real bare remote whose pre-receive hook refuses: refused, auto-resolved, then a fresh decision pushes once", async () => {
   const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publisher-refused-"));
   const remote = join(root, "remote.git"); const remoteUrl = "https://github.com/fixture/refused.git";
@@ -214,6 +265,8 @@ it("LIVE: a real bare remote whose pre-receive hook refuses: refused, auto-resol
     if (!captured.ok) throw new Error(captured.code);
     const sha = captured.candidate.approval.sha;
     git("init", "--bare", "--quiet", remote);
+    // The remote's own default names the approved branch, so the measurement is read from REAL `ls-remote --symref` output.
+    git(`--git-dir=${remote}`, "symbolic-ref", "HEAD", "refs/heads/approved");
     const hook = join(remote, "hooks", "pre-receive");
     writeFileSync(hook, "#!/bin/sh\necho refused by the fixture >&2\nexit 1\n", { mode: 0o755 });
     let pushes = 0;
@@ -239,6 +292,7 @@ it("LIVE: a real bare remote whose pre-receive hook refuses: refused, auto-resol
     expect(pushes).toBe(2); expect(releases).toEqual(["PUBLISH_NOT_TRANSMITTED", "PUBLISHED"]);
     expect(git(`--git-dir=${remote}`, "rev-parse", "refs/heads/approved")).toBe(sha);
     expect(readPublicationTransmission(store, PROJECT_ID, GOAL, second)).toMatchObject({ outcome: "ACCEPTED", tipBefore: null });
+    expect(readRemoteDefaultBranch(store, PROJECT_ID, remoteUrl)).toBe("approved");
     expect(await publisher.publishOnce()).toEqual([]); expect(pushes).toBe(2);
   } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
   // About 40 real git processes: seconds on an idle host, minutes when process spawns crawl under a loaded one.

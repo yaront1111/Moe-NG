@@ -118,7 +118,7 @@
     }
   ],
   "planRevision": 15,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:02:52.886Z",
-  "updatedAt": "2026-09-18T20:40:55.413Z",
+  "updatedAt": "2026-09-18T20:51:59.444Z",
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -175,7 +175,9 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
     "firstClaimAt": "2026-09-18T19:05:49.272Z",
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-18T20:51:21.580Z",
+    "wallClockMs": 6332308
   },
   "planningNotes": {
     "codebaseInsights": "Filed by me this session as the lean first slice of task-21be6e90; the owner chose to land it FIRST, with task-21be6e90's operator command queued behind it (dependsOn set). Re-measured at HEAD 2026-09-18 — source reads unless marked.\n\n(1) THE STUCK PATH. apps/daemon/src/orchestrator/node-publisher.ts (100 lines): a fresh intent pushes inside `try { await config.git.push(candidate); } catch { /* reconcile below */ }` (:62-65), DISCARDING the port's return value; then `if (!observed.ok || observed.sha !== candidate.approval.sha) return unknown();` (:67). A refused push never reaches the approved sha, so it is UNKNOWN every pass. The only release from PUBLISHING is `\"PUBLISHED\"` (:74). Line anchors in the parent row's reopen reason (:98-101, :124) are STALE — the file is 100 lines.\n\n(2) THE DISTINCTION ALREADY EXISTS AND IS THROWN AWAY. apps/daemon/src/repository/git-publication-port.ts:19-21, the git runner: `code: error === null ? 0 : typeof error.code === \"number\" ? error.code : null`. So git that RAN and exited non-zero yields a NUMBER; a timeout, a kill or a spawn failure (error.code a string like ENOENT, or absent) yields NULL. `push` then collapses both into `publicationRefused(\"PUBLISH_PUSH_UNKNOWN\")` (:66-67), and a throw in the outer catch does the same. Splitting that one return is the whole enabling change.\n\n(3) THE REFUSAL CODE IS FREE-FORM, AND push HAS ONE CONSUMER. `export const publicationRefused = (code: string): PublicationRefusal => ...` (publication-approval-contracts.ts:21) takes a plain string: there is no closed code roster to update. `git grep -n \"git.push(\"` finds exactly ONE caller, node-publisher.ts:64 (the other `.push(` hits are Array.push).\n\n(4) THE RESERVATION MACHINE. `RepositoryExecutionReleaseReason` is a string union in apps/daemon/src/repository/repository-execution-contracts.ts:10. The port's release guard is a ternary chain at repository-execution-port.ts:101-105 mapping each reason to the ONE prior phase it may leave; a reason missing from the chain falls through to `false` — it fails CLOSED. `PUBLISHING: [\"PUBLISHING\", \"BLOCKED\"]` at :16 is the TRANSITION map (phase to phase); release is separate and keyed on reason.\n\n(5) THE CARD ALREADY UN-STICKS ON A RECEIPT — measured, because it looked like a gap. apps/daemon/src/http/run-goal-publication.ts decides UNKNOWN only for a request with NO receipt: `if (state.receipts.has(pending.decisionId)) continue;` precedes the intent check. The intent is append-only and survives, but once a REFUSED receipt exists for the SAME decisionId, that decision is skipped, and the card reports outcome REFUSED with the receipt's code instead of UNKNOWN — which re-enables Publish. So recording the receipt for the right decisionId is what frees the card; run-goal-publication.ts needs NO edit.\n\n(6) THE INTENT MUST NOT BE WIDENED. It is `moe-publication-intent/1` in apps/daemon/src/repository/publication-effect-ledger.ts (VERSION at :10, reader at :24). The pre-push tip and the push outcome go in a SEPARATE, ADDITIVE event on the intent's aggregate. Widening an exact-key-set durable record without a legacy path is the failure fixed three times on this board today.\n\n(7) THE PATH CAP. The event's TYPE is declared in publication-effect-ledger.ts beside its writer and reader, not in publication-effect-contracts.ts, to hold the row at exactly 10 files. node-publisher-approved.test.ts is deliberately NOT an owned path: DoD 2 requires its single-transmission arms to pass UNCHANGED."
@@ -184,7 +186,8 @@
   "contextFetchedBy": [
     "worker-6433dce1",
     "worker-69773bc1",
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-18T19:06:02.404Z",
   "priorHandoffs": [
@@ -265,6 +268,21 @@
       "treeId": "060ee9d53283088f699b4527099b4d0116ddad92",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "6e7d910f148c0fd79f70d3ea0e12e918f18c55db",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T20:41:53Z",
+      "paths": [
+        ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T20:51:59.444Z",
+      "treeId": "ea31714a75afe5056b374f1a9adceed99d200822",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -279,14 +297,15 @@
     "apps/daemon/src/orchestrator/node-publisher.test.ts",
     "apps/daemon/CLAUDE.md",
     ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
-    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json",
+    ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-952c612b@2026-09-18T20:13:47Z",
-    "at": "2026-09-18T20:40:55.413Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-18T20:41:53Z",
+    "at": "2026-09-18T20:51:59.444Z"
   },
   "reviewStartedAt": "2026-09-18T20:40:37.458Z",
   "verification": {
@@ -300,5 +319,8 @@
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-publisher.test.ts",
     "apps/daemon/src/orchestrator/node-publisher.ts"
-  ]
+  ],
+  "completedAt": "2026-09-18T20:51:21.580Z",
+  "reviewCompletedAt": "2026-09-18T20:51:21.580Z",
+  "reviewSummary": "APPROVED by qa-09357cdf at HEAD 68f251be. Owned paths are byte-identical to completion 46123b30, which is on origin/moe/work-2026-09-18 with 50d7a0a9 and f7d014d6.\n\nBYTES: reviewed git diff f7d014d6^2 (main 3630e0c1) to 46123b30 over the 10 owned paths, +480/-23. No other work-branch change to these paths since merge-base 5b981dc7. node-publisher-approved.test.ts matches origin/main exactly. Largest production file: node-publisher.ts at 247 lines, under the 250 cap.\n\nGATES (re-run by me):\n- The recorded command: Test Files 57 passed (57), 616 passed, 15 skipped. The extra file is a peer's swept publish-resolve-contracts.test.ts.\n- Blast radius (every test importing a changed module): Test Files 51 passed, 648 tests.\n- Other files naming RECONCILIATION_REQUIRED: 4 files, 73 tests passed.\n- pnpm typecheck: 19/19, 0 errors.\n- Verbose run: every new arm executed, including the LIVE pre-receive-hook arm.\n\nDRILLS: 6 mutants, in memory via a %TEMP% config. The control stayed green (33/33) and SHA256 was unchanged. Each went red at its intended arm:\n- D1, drop REJECTED: the force-push-back and INDETERMINATE arms fail.\n- D2, drop tip equality: the tip-MOVED arm fails.\n- D4, a replay transmits: 5 arms fail.\n- D7, drop the settled re-drive: the refused-release arm fails.\n- D5, null exit counted as REJECTED: the port arm fails.\n- D6, NOT_TRANSMITTED allowed from any phase: the phase sweep fails.\n\nDoD: all 5 items verified by value.\n- The receipt code, the detail carrying both tips, the release reason and the phase; the card un-sticks.\n- Arms 2-6.\n- The exact TRANSITION_INVALID code, asserted over every phase.\n- A separate event, with the intent's reader and writer untouched.\n- The LIVE bare remote, and the CLAUDE.md bullet.\n\nThe version fence counts every decision, so the new event is safe. No roster census is hit. The transport-race residual is inherent to the owner-chosen rule. I did not re-run the full daemon suite."
 }
