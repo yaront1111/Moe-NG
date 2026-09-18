@@ -194,6 +194,31 @@ describe("the curated Windows project-stack request", () => {
     }
   });
 
+  it("carries the verifier database knobs through the launch payload — the hop that dropped them live", () => {
+    // UnAI 2026-09-18: start.ps1 set all four, the CLI had them, the wrapper never did — the
+    // native broker's environment is exactly this roster. A key missing here is a silent policy.
+    const settings = {
+      MOE_VERIFIER_DB_CA_VAR: "UNAI_DATABASE_CA_PATH",
+      MOE_VERIFIER_DB_IMAGE: "pgvector/pgvector:pg17",
+      MOE_VERIFIER_DB_TLS: "1",
+      MOE_VERIFIER_DB_URL_VARS: "DATABASE_URL,UNAI_MIGRATION_DATABASE_URL",
+    };
+    const encoded = encodeProjectStackLaunchPayload({
+      ...REQUEST, environment: { ...REQUEST.environment, ...settings },
+    });
+    expect(encoded).toBeInstanceOf(Uint8Array);
+    const payload = new TextDecoder().decode(encoded as Uint8Array);
+    for (const [name, value] of Object.entries(settings)) {
+      expect(payload).toContain(name);
+      expect(payload).toContain(value);
+      // The generic provider boundary still refuses them: the roster is the ONLY way through.
+      expect(encodeLaunchPayload({
+        argv: [], cwd: REQUEST.cwd, executable: REQUEST.nodeExecutable,
+        environment: { SYSTEMROOT: REQUEST.environment.SYSTEMROOT, [name]: value },
+      })).toMatchObject({ code: "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED", layer: "WINDOWS_PROCESS_REQUEST" });
+    }
+  });
+
   it("publishes a finite reviewed environment roster", () => {
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).toEqual([
       ...ALLOWED_ENVIRONMENT_KEYS,
@@ -209,6 +234,11 @@ describe("the curated Windows project-stack request", () => {
       "MOE_PRINCIPAL_ID", "MOE_PROJECT_CATALOG",
       "MOE_PROJECT_CONFIGURATION_DIGEST", "MOE_PROJECT_ID", "MOE_PROJECT_INSTANCE_ID",
       "MOE_RUNTIME_PIN_ROOT", "MOE_STORE_PATH", "MOE_VERIFICATION_CATALOG",
+      // The verifier's disposable database (image, URL variable names, TLS, CA variable). Read by
+      // the wrapper at startup; measured off this roster on UnAI 2026-09-18 the operator's start
+      // script set all four and the wrapper still provisioned plain postgres + DATABASE_URL.
+      "MOE_VERIFIER_DB_CA_VAR", "MOE_VERIFIER_DB_IMAGE", "MOE_VERIFIER_DB_TLS",
+      "MOE_VERIFIER_DB_URL_VARS",
       "MOE_WRAPPER_INTERVAL_MS", "MOE_WRAPPER_MAX_AGENTS", "MOE_WRAPPER_MAX_ITEM_ATTEMPTS",
       "MOE_WRAPPER_ONCE",
     ]);
