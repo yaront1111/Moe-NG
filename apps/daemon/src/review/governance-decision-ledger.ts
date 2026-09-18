@@ -177,14 +177,36 @@ export function validGovernanceDecision(input: GovernanceDecisionInput): boolean
   return input.citation === null && stated(input.rationale);
 }
 
+/**
+ * TWO SHAPES CLAIM ONE VERSION, AND ONLY THE KEY SET TELLS THEM APART. #52 added `findingSubject`
+ * to this VERSIONED record without bumping `version`, so the twelve-key rows #51 wrote and the
+ * thirteen-key rows since both say `moe-governance-decision/1`. Refusing the older shape let one
+ * pre-#52 row blind the whole ledger: on UnAI 2026-09-18 `fundedOn` was null for every node and
+ * governance stopped for the human on every pass without once asking its advisor. A KNOWN
+ * historical shape is not corruption; any other key set still is, and still reads as null.
+ *
+ * The old row gets `LEGACY:unrecorded`, stated rather than "": every record `read()` returns
+ * keeps a stated subject, and `validGovernanceDecision` still requires one to write, so no NEW
+ * row can take the old shape. `LEGACY` is no `REVIEW_FINDING_SUBJECT_KINDS` member, so no subject
+ * derived from a real finding can equal it. And the sentinel cannot move an id: nothing
+ * recomputes `governanceDecisionId` from a read record — both recompute sites hash write-path
+ * INPUT — and `decisionId` is itself one of the stored keys.
+ */
+const LEGACY_FINDING_SUBJECT = "LEGACY:unrecorded";
+const LEGACY_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "findingSubject");
+
 function recordOf(payload: Uint8Array): GovernanceDecisionRecord | null {
   try {
     const value: unknown = JSON.parse(decoder.decode(payload));
     if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
     const record = value as Record<string, unknown>;
-    if (Object.keys(record).sort().join(",") !== RECORD_KEYS.join(",")) return null;
     if (record["version"] !== GOVERNANCE_DECISION_VERSION) return null;
-    return record as unknown as GovernanceDecisionRecord;
+    const keys = Object.keys(record).sort().join(",");
+    if (keys === LEGACY_RECORD_KEYS.join(",")) {
+      const upcast = { ...record, findingSubject: LEGACY_FINDING_SUBJECT };
+      return upcast as unknown as GovernanceDecisionRecord;
+    }
+    return keys === RECORD_KEYS.join(",") ? record as unknown as GovernanceDecisionRecord : null;
   } catch { return null; }
 }
 

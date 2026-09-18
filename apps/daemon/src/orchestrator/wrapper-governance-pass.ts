@@ -1,7 +1,10 @@
 import type { SqliteEventStore } from "@moe/store";
 
 import { decideGovernanceEscalation } from "../review/governance-escalation-decider.js";
-import type { GovernanceAdvisor } from "../review/governance-escalation-decider.js";
+import type {
+  GovernanceAdvisor,
+  GovernanceOutcome,
+} from "../review/governance-escalation-decider.js";
 import { governanceOpen } from "../review/governance-policy-settings.js";
 import type { GovernancePolicy } from "../review/governance-policy-settings.js";
 import { reviewContinuationAvailable } from "../review/review-continuation.js";
@@ -40,6 +43,23 @@ export interface GovernancePassConfig {
   /** The wrapper's own handle, which is undefined before the store is opened. */
   readonly store: () => SqliteEventStore | undefined;
 }
+
+type HumanNeededWhy = Extract<GovernanceOutcome, { readonly kind: "HUMAN_NEEDED" }>["why"];
+
+/**
+ * ONE SENTENCE PER REASON, KEYED SO A NEW REASON CANNOT COMPILE WITHOUT ITS OWN. This was a chain
+ * whose last arm absorbed every reason it did not name, and that catch-all is what hid a ledger
+ * the daemon could not READ behind "no answer could be produced" — 302 such lines on UnAI
+ * 2026-09-18 while the advisor was never once asked, so the owner was told a model had failed
+ * when the thing to fix was the store.
+ */
+const HUMAN_NEEDED_BECAUSE: Readonly<Record<HumanNeededWhy, string>> = {
+  BOUND_SPENT: "its governance decision bound is spent",
+  LEDGER_UNREADABLE: "the daemon could not read its governance decision history from the store, "
+    + "a store problem and not a model that declined to answer",
+  NO_ANSWER: "no answer could be produced",
+  ROUND_CEILING: "its review has reached the absolute round ceiling, which no decision can raise",
+};
 
 export function createGovernancePass(config: GovernancePassConfig): () => Promise<void> {
   return async function governancePass(): Promise<void> {
@@ -87,12 +107,7 @@ export function createGovernancePass(config: GovernancePassConfig): () => Promis
         if (outcome.kind === "ALLOWED") {
           config.log(`[governance] ${nodeRef}: answered its exhausted review and funded one more attempt (${String(outcome.decisionIds.length)} decision(s) recorded)`);
         } else if (outcome.kind === "HUMAN_NEEDED") {
-          const why = outcome.why === "BOUND_SPENT"
-            ? "its governance decision bound is spent"
-            : outcome.why === "ROUND_CEILING"
-              ? "its review has reached the absolute round ceiling, which no decision can raise"
-              : "no answer could be produced";
-          config.log(`[governance] ${nodeRef}: ${why}; it needs your decision in the control room, and its work is untouched`);
+          config.log(`[governance] ${nodeRef}: ${HUMAN_NEEDED_BECAUSE[outcome.why]}; it needs your decision in the control room, and its work is untouched`);
         } else if (outcome.kind === "REFUSED") {
           config.log(`[governance] ${nodeRef}: the daemon refused the decision (${outcome.code}); it stays exactly as it was`);
         }
