@@ -150,9 +150,9 @@ export const acceptOutput: CommandHandler = (context): ReviewOutcome => {
   if (!loaded.ok) {
     return refuse(
       request.kind,
-      loaded.code === "VERIFIER_RECEIPT_NOT_FOUND"
-        ? "REVIEW_VERIFIER_RECEIPT_NOT_FOUND"
-        : "REVIEW_VERIFIER_RECEIPT_INVALID",
+      loaded.code === "VERIFIER_RECEIPT_NOT_FOUND" ? "REVIEW_VERIFIER_RECEIPT_NOT_FOUND"
+        : loaded.code === "VERIFIER_RECEIPT_UNREADABLE" ? "REVIEW_VERIFIER_RECEIPT_UNREADABLE"
+          : "REVIEW_VERIFIER_RECEIPT_INVALID",
       "DAEMON_PREREQUISITE",
     );
   }

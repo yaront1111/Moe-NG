@@ -86,6 +86,7 @@ const EXPECTED_DAEMON_CODES = [
   "REVIEW_VERIFIER_RECEIPT_INVALID",
   "REVIEW_VERIFIER_RECEIPT_NOT_FOUND",
   "REVIEW_VERIFIER_RECEIPT_STALE",
+  "REVIEW_VERIFIER_RECEIPT_UNREADABLE",
 ] as const;
 
 afterEach(() => { closeStores(); closeCompiledStores(); });
@@ -159,6 +160,29 @@ function driveDaemonRefusals(): readonly string[] {
   expect(send(missingReceiptStore, envelope(
     "review.submit", 0, submitPayload(1, []), "cmd-missing-receipt-source",
   )).ok).toBe(true);
+  // A round awaiting acceptance whose receipt lookup THROWS. Only the receipt's own decision
+  // key is refused, so every other read on the accept path lands and the arm measures the
+  // receipt seam alone. This used to answer REVIEW_VERIFIER_RECEIPT_INVALID — "the stored
+  // receipt is corrupt" — for a store that had not answered at all.
+  const unreadableReceiptBase = openStore();
+  expect(send(unreadableReceiptBase, envelope(
+    "review.submit", 0, submitPayload(1, []), "cmd-unreadable-receipt-source",
+  )).ok).toBe(true);
+  const unreadableReceiptId = "e".repeat(64);
+  const unreadableReceiptStore = new Proxy(unreadableReceiptBase, {
+    get(base, key: string | symbol): unknown {
+      const value: unknown = Reflect.get(base, key, base);
+      if (typeof value !== "function") return value;
+      if (key !== "getCommandDecision") return value.bind(base);
+      return (lookup: { readonly commandId: string; readonly principalId: string }): unknown => {
+        if (lookup.commandId === unreadableReceiptId
+          && lookup.principalId === NODE_VERIFIER_PRINCIPAL_ID) {
+          throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+        }
+        return (value as (this: unknown, l: unknown) => unknown).call(base, lookup);
+      };
+    },
+  });
   const acceptedStore = openStore();
   const acceptedReceipt = seedVerifierReceipt(acceptedStore);
   expect(send(acceptedStore, envelope(
@@ -286,6 +310,12 @@ function driveDaemonRefusals(): readonly string[] {
       1,
       { receiptId: "f".repeat(64), subjectRef: "node-run-1" },
       "cmd-missing-receipt",
+    ))),
+    daemonCode("unreadable verifier receipt", send(unreadableReceiptStore, envelope(
+      "integration.accept_output",
+      1,
+      { receiptId: unreadableReceiptId, subjectRef: "node-run-1" },
+      "cmd-unreadable-receipt",
     ))),
     daemonCode("stale verifier receipt", send(staleReceiptStore, envelope(
       "integration.accept_output",
