@@ -206,11 +206,19 @@ export function recordReviewRound(
   }
   const owned = (record: ReviewFindingRecord): boolean => record.finding.attributedTo === undefined;
   const own = added.filter(owned);
+  // Only a CRITICAL or MAJOR own finding blocks. A MINOR one is informational: it is RECORDED in
+  // the lineage for reviewers exactly as before, but it neither reroutes the round nor counts it
+  // as unsuccessful. Measured on UnAI 2026-09-18: a conscientious worker recorded one honest
+  // MINOR note per round ("no assigned criterion and no required check fails because of this"),
+  // each note made the round unsuccessful, the escalation limit was reached, and once past it the
+  // operator continuation could rescue only a round with NO own findings — so the verifier never
+  // ran and the node looped until the operator ordered the worker to suppress true information.
+  const blocking = own.filter((record) => record.finding.severity !== "MINOR");
   const seen = new Set(lineage.records.filter(owned).map((record) => record.fingerprint));
   const repeatFingerprints = [
-    ...new Set(own.map((record) => record.fingerprint).filter((entry) => seen.has(entry))),
+    ...new Set(blocking.map((record) => record.fingerprint).filter((entry) => seen.has(entry))),
   ].sort();
-  const clean = own.length === 0;
+  const clean = blocking.length === 0;
   const unsuccessfulRounds = lineage.unsuccessfulRounds + (clean ? 0 : 1);
   const records = [...lineage.records, ...added];
   // The guard above proved round.round > highestRound, so this only ever raises it.
