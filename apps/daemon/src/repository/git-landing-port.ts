@@ -61,7 +61,7 @@ export type GitPushResult =
   | Readonly<{ readonly ok: true; readonly receipt: GitPushReceipt }>
   | Readonly<{ readonly code: "GIT_PUSH_FAILED" | "NOT_A_REPOSITORY" | "DETACHED_HEAD"; readonly detail: string; readonly ok: false }>;
 
-/** `commit` of TRACKED paths with no `add` first: `add` exits 1 for one under an ignored directory (every hosted `.moe-next/`, 2026-09-18). */
+/** `commit` of TRACKED paths with no `add` first (`add` exits 1 for one under an ignored directory: every hosted `.moe-next/`, 2026-09-18), each pathspec `:(literal)` so `[`, `*` and `?` never glob onto another file. Per path, not the global `--literal-pathspecs`, which leaks GIT_LITERAL_PATHSPECS=1 into the operator's hooks (measured 2026-09-18). */
 export interface GitTrackedCommitPort { commitTracked(workspace: string, paths: readonly string[], message: string): Promise<GitCommitResult> }
 
 /** The publisher's effect: push the workspace's current branch to a remote the human named. */
@@ -194,7 +194,7 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     const located = await root(workspace);
     if (located.top === null) return { code: "GIT_COMMIT_FAILED", detail: located.detail, ok: false };
     const top = located.top;
-    const pathspecs = `${paths.join("\0")}\0`;
+    const pathspecs = `${(stage ? paths : paths.map((path) => `:(literal)${path}`)).join("\0")}\0`;
     const added = stage ? await run(top, ["add", "--pathspec-from-file=-", "--pathspec-file-nul"], pathspecs) : null;
     if (added !== null && added.code !== 0) return { code: "GIT_COMMIT_FAILED", detail: tail(added.stderr), ok: false };
     const scratch = mkdtempSync(join(tmpdir(), "moe-landing-"));

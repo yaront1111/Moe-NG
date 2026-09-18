@@ -74,7 +74,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:39:55.125Z",
-  "updatedAt": "2026-09-18T06:39:45.612Z",
+  "updatedAt": "2026-09-18T06:39:48.714Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:18:57.861Z",
     "plannedStepCount": 3,
@@ -133,7 +133,8 @@
     "apps/daemon/src/work/launch-template-producer.ts",
     "apps/daemon/src/daemon-v2-command-registry.ts",
     ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
-    ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
+    ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json",
+    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json"
   ],
   "completionSummary": "SHELL ROW CLOSED. Both SPIDR children delivered every DoD item, re-verified at HEAD 51a7910e. No production bytes were owed or written. This row's only commit is QA hand-landing 6dbdbe69 (via squash 04b01548): the version-probe sweep partition in 2 e2e files. Evidence: comment-05852e4c (gates and rail-3 attribution) and the step 1-3 notes.\n\nDoD1 journey: `pnpm test:e2e` EXIT 0, `Test Files 33 passed | 1 skipped (34)` / `Tests 262 passed | 7 skipped (269)`. codex-seat-loop.e2e.test.ts passes 9/9 by name, including \"reaches planning.submit_decomposition, verifier ACCEPTED and lander COMMITTED\" (verdicts are read from the store after the daemon is killed) and the negative arm \"fails a double that exits 0 having submitted nothing\".\nDoD2 result size: recorded as a MEASURED ABSENCE on codex-cli 0.153.4 (task-48932bec, with a negative control) and asserted on argv by \"carries no result-size override on the codex argv, because codex has none\". Residual: what codex does with an oversized result in flight needs the real CLI (child 3).\nDoD3: \"releases its own work item on the first try, with an EFFECTS_COMMITTED decision\" passes, with effectDisposition and resultCode both pinned.\nDoD4: \"matches grant for grant on a coding/chain-step seat, in both directions\" passes (agent-spawner.test.ts 58/58).\nDoD5: \"delivers the identical mission bytes to both providers for the same step\" passes.\nDoD6: `pnpm typecheck` EXIT 0, 19/19 tsc echoes plus Done. `pnpm --filter @moe/daemon test` is EXIT 1, all of it FOREIGN: `Test Files 13 failed | 732 passed (745)` / `Tests 17 failed | 12302 passed`. 12 files fail with ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX at agent-spawn-contract.ts:79, reached through 20896d47's import (owned by task-4444d180). wrapper-review-missions.test.ts fails 2 arms because 20896d47 changed :36 from null to throw (routed as comment-c5328ac5). Rail 3: this row's bytes are 2 e2e files the daemon vitest never collects, so delta = ∅ and the intersection with owned paths is ∅.",
   "commits": [
@@ -152,14 +153,30 @@
       "treeId": "70c48a737a18f539e94b73c573f25b57d2921e9d",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "c7211db854716acf99b22db744f5d9daf2c9bf93",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T06:31:11Z",
+      "paths": [
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+        ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T06:39:48.714Z",
+      "treeId": "d193e7c0a1abc04ccc6f33ac3eeed42e938da258",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6433dce1@2026-09-18T06:14:18Z",
-    "at": "2026-09-18T06:31:25.852Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T06:31:11Z",
+    "at": "2026-09-18T06:39:48.714Z"
   },
   "reviewCompletedAt": "2026-09-18T06:39:06.132Z",
   "rejectionDetails": {

@@ -29,9 +29,15 @@
       "author": "governor-cc0cc843",
       "content": "Governor measurement, closes the description's NOT MEASURED line partly: the packaged artifact dist/moe-windows (compiled-node-source.ts written 2026-09-18 07:55:52 +0300) does NOT carry the `import { NodeBriefUnreadableError } from \"./agent-spawn-contract.js\"` edge, so the artifact AS PACKED is not reached by this regression through compiled-node-source.ts. Its agent-spawn-contract.ts:79 still has the parameter property (reached today by the wrapper, which moe-up launches with --experimental-transform-types). The next re-pack from main WILL carry the edge (origin/main 0dcf6ba9 compiled-node-source.ts:26 has it), so this row should land before the next pack:windows.",
       "timestamp": "2026-09-18T06:24:47.926Z"
+    },
+    {
+      "id": "comment-c5328ac52b044abbaa9638204831c594",
+      "author": "worker-6433dce1",
+      "content": "PLANNER INPUT from worker-6433dce1 (task-df64aa20 gate run, HEAD 486edfc1, tree clean except .moe/). 20896d47 left a SECOND red that removing the parameter property will NOT fix, and this row's DoD 5 (\"no new reds versus the pre-fix baseline\") would let it ride.\n\n`pnpm --filter @moe/daemon test` at 486edfc1: `Test Files 13 failed | 732 passed (745)` / `Tests 17 failed | 12302 passed | 23 skipped (12342)`. 12 of the 13 files carry this row's ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX at agent-spawn-contract.ts:79: runtime-entrypoint (3), index-surface (2), graph-query-production-route (2), daemon-entry, daemon-entry-preview, daemon-startup, daemon-store-dependencies, daemon-main-activation-boot (whole file), genesis-first-boot, http-listener-failure-logging, activation-attempt-reader, and graph-preview-request (child exits 1, its stderr is not in the assertion, so that one is consistent with the cause but not separately proven).\n\nTHE 13TH IS DIFFERENT: src/orchestrator/wrapper-review-missions.test.ts, 2 arms, still red when run on its own:\n  pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/wrapper-review-missions.test.ts\n  -> `Tests 2 failed | 12 passed (14)`. The arms are \"withholds a mission when stored 'operator'|'agent' 'shape' evidence cannot be proved\", and they fail with `NodeBriefUnreadableError: NODE_BRIEF_UNREADABLE: review ledger node:v1:968e71bd…` at wrapper-review-missions.ts:36:34.\nIt fails INSIDE vitest, which transpiles fully, so it has nothing to do with strip-only mode. Cause: `git show 20896d47 -- apps/daemon/src/orchestrator/wrapper-review-missions.ts` turns `if (ledger.unreadable) return null;` into `throw new NodeBriefUnreadableError(...)` and makes the catch rethrow as well, but the test at :201 still expects the mission to be WITHHELD. So the behaviour moved on purpose (\"retried next pass by name\"), and either the test is re-aimed at the new refusal (assert the NODE_BRIEF_UNREADABLE code, per the rail that tests assert the reason code) or the change is wrong. That call belongs to whoever owns 20896d47's intent. I'm not taking it from a shell row that owns no path. Suggest folding it into this row's scope or splitting it out.",
+      "timestamp": "2026-09-18T06:28:19.340Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T06:22:27.676Z",
-  "updatedAt": "2026-09-18T06:24:47.926Z"
+  "updatedAt": "2026-09-18T06:28:19.340Z"
 }

@@ -124,6 +124,29 @@ describe("checkpointRuntimeMetadata against a real repository", () => {
     expect(readFileSync(join(root, ".git", "index"))).toEqual(index);
   });
 
+  // Not a fence case: the fence ACCEPTS this path, because one of its segments is `.moe-next`.
+  // As a glob pathspec, though, `[/.moe-next/]` is one character from a set holding `.`, so the
+  // same string also names src/product.ts (measured 2026-09-18). Only literal pathspecs hold it.
+  it("commits only the observed path when that path would glob onto product code", async () => {
+    const root = await scratchRepository();
+    const odd = "src/product[/.moe-next/]ts";
+    mkdirSync(join(root, "src", "product[", ".moe-next"), { recursive: true });
+    writeFileSync(join(root, odd), "# odd\n", "utf8");
+    git(root, "--literal-pathspecs", "add", "--", odd);
+    git(root, "commit", "--quiet", "-m", "operator: a file name legal on NTFS and POSIX");
+    writeFileSync(join(root, odd), "# odd, edited\n", "utf8");
+    writeFileSync(join(root, "src", "product.ts"), "export const shipped = 2;\n", "utf8");
+    const observed = await createGitLandingPort().observe(root);
+    expect(observed).toMatchObject({ code: "TRACKED_RUNTIME_METADATA_DIRTY", ok: false, paths: [odd] });
+
+    const report = await checkpoint(root, observed.ok ? [] : observed.paths ?? []);
+
+    expect(report.outcome).toBe("RUNTIME_METADATA_CHECKPOINTED");
+    expect(git(root, "show", "--name-only", "--format=", "HEAD").split("\n")).toEqual([odd]);
+    // Trimmed ` M`: the operator's product change is neither committed nor staged.
+    expect(git(root, "status", "--porcelain", "--", "src/product.ts")).toBe("M src/product.ts");
+  });
+
   it("reports the checkpoint ineffective when metadata it was not given stays dirty", async () => {
     const root = await scratchRepository();
     writeFileSync(join(root, ".moe-next", "start.ps1"), "# start --operator-stdin\n", "utf8");
