@@ -89,7 +89,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:04.144Z",
-  "updatedAt": "2026-09-18T20:59:32.577Z",
+  "updatedAt": "2026-09-18T21:00:08.313Z",
   "dependsOn": [
     "task-f3182818e7924be996d3543798a9d444"
   ],
@@ -133,7 +133,8 @@
     ".moe/tasks/task-717f4c0b953a4822bf71e225ee55b938.json",
     ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
     ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json",
-    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json",
+    ".moe/tasks/task-d6ada0821e0043dcaec8a4a265c40da0.json"
   ],
   "completionSummary": "NEW apps/daemon/src/repository/publish-resolve-contracts.ts (+ .js bridge), a leaf importing nothing: PUBLISH_RESOLVE_COMMAND_KIND=\"repository.publish_resolve\"; frozen PUBLISH_RESOLVE_CODE_LAYER_MAP; PUBLISH_RESOLVE_CODES derived from its keys, sorted; correlated PublishResolveRefusal (distributed mapped type); publishResolveRefusal(code, detail=null), no layer arg. Codes, all at \"DAEMON_PREREQUISITE\" (=GOAL_PREREQUISITE_LAYER; the daemon's own pre-action read of its durable facts finds all three): PUBLISH_RESOLVE_DECISION_NOT_FOUND, PUBLISH_RESOLVE_NOT_UNKNOWN (has a receipt or no intent), PUBLISH_RESOLVE_REMOTE_HOLDS_SHA. planningNotes had no designDecisions key, so codes come from the description's initial set.\nCORRECTION to this row's description (E): the map holds layer VALUES as string literals by design (keeps the leaf standalone-loadable), pinned by IMPORT of GOAL_PREREQUISITE_LAYER in the test; no call site can pass a layer. Census probe: 0 `layer:` literals, 0 declarations.\nTest (6 arms): bidirectional set-equality + sorted pin; per-code layer by value; strict shape + frozen; no layer param; @ts-expect-error compile arm; kind in RUNTIME_COMMAND_KINDS. In-memory drills: map+code -> arm1 RED; restated roster+code -> ONLY set-equality RED; wrong layer -> arm2 RED. tsc controls on an out-of-src copy: directive unused -> TS2578; directive removed -> TS2322 at the layer line. Live files SHA256 unchanged.\nGates: contracts test \"Test Files 1 passed (1) / Tests 6 passed (6)\"; pnpm typecheck 19/20 scope, 19 Done, 0 errors; pnpm test:security \"12 passed (12) / 1009 passed (1009)\"; daemon runtime-entrypoint+gates-roster-coherence+contracts 4/27; root package-loadability 1/7.\nSWEEP: the test file was committed by peer checkpoint 96db094d (Moe-Task task-8bc14883) 29s after I wrote it; blob d02386b4 == my file. The completion commit carries .ts/.js. Bug filed: task-717f4c0b.",
   "commits": [
@@ -156,6 +157,23 @@
       "treeId": "527064ac1139cabffc69715e833a2e447e4f0bc3",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "c8baaa4ed399e98c9aba9d3aafeddb146757505f",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T20:52:31Z",
+      "paths": [
+        ".moe/tasks/task-717f4c0b953a4822bf71e225ee55b938.json",
+        ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json",
+        ".moe/tasks/task-d6ada0821e0043dcaec8a4a265c40da0.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T21:00:08.313Z",
+      "treeId": "c45f3c0403c84eb9e0c378796a0e6642e42fbca2",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -165,9 +183,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-69773bc1@2026-09-18T20:40:49Z",
-    "at": "2026-09-18T20:51:51.741Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-18T20:52:31Z",
+    "at": "2026-09-18T21:00:08.313Z"
   },
   "declaredFiles": [
     "apps/daemon/src/repository/publish-resolve-contracts.ts",

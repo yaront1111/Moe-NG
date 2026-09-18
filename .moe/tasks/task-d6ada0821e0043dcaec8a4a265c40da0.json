@@ -43,7 +43,7 @@
     }
   ],
   "planRevision": 7,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -63,16 +63,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T20:38:32.809Z",
-  "updatedAt": "2026-09-18T20:55:51.327Z",
+  "updatedAt": "2026-09-18T21:05:35.820Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T20:40:02.710Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 3
+    "executedStepCount": 3,
+    "doneAt": "2026-09-18T21:05:35.820Z",
+    "wallClockMs": 1533110
   },
   "contextFetchedBy": [
     "architect-c7fb990e",
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "stepsCompleted": [
     "step-1",
@@ -134,5 +137,8 @@
     "kind": "completion",
     "sessionId": "worker-952c612b@2026-09-18T20:43:28Z",
     "at": "2026-09-18T20:55:51.327Z"
-  }
+  },
+  "completedAt": "2026-09-18T21:05:35.820Z",
+  "reviewCompletedAt": "2026-09-18T21:05:35.820Z",
+  "reviewSummary": "QA qa-09357cdf, HEAD c8baaa4e. BYTES: completion commit dae49b0e holds only .moe task JSON; the 1-line diff (test :395, 1+/1-) landed via peer QA checkpoint 68f251be (task-8bc14883), disclosed in comment-e080d75d. Test blob c9368395 identical at HEAD, 68f251be and origin/main a0f5adef (PR #56); prod blob identical HEAD/main; both paths clean; sha256 test 01f9d33f, prod b0100fbf.\nDoD1: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts` EXIT=0, `Test Files 1 passed (1)`, `Tests 52 passed (52)`.\nDoD2 + adversarial: in-memory drills, out-of-tree %TEMP% vitest config transforming the TEST module (enforce:pre; each anchor must occur once or it throws; transform logged per run; config deleted, ls: No such file; owned sha256 unchanged). Prod measured: new from x1, old from x0, offset inside the createAgentWrapper slice, one /^\\s+deps,$/ line.\n- M0 control: 52/52.\n- M1 row reverted to old anchor: reproduces recorded pre-fix red, 1 failed | 51 passed, wrapper-deps control :402:24 not.toBe.\n- M2 deps wiring line deleted: 1 failed, main arm at assertPlaneWiring :378:33 toMatch(/^\\s+deps,\\r?$/mu).\n- M3 wrapper clause removed: 1 failed, wrapper-deps control at 2nd expect :402:45 toThrow; the replaced deps, is the wrapper call's and only that clause catches it.\n- M4 key inserted between clock and deps: 1 failed at 1st expect :402:24; fails loud, not vacuous.\n`pnpm --filter @moe/daemon typecheck` EXIT=0, 0 error TS.\nCensus: git grep finds neither anchor elsewhere. Pin moved to the preceding key with 2-line context kept; matcher not widened, arm kept, other rows unchanged, no production byte touched. Full daemon suite not re-run by QA (1-line leaf test edit); worker's run at 68f251be: 764/764 files, 12548 passed, 0 failed."
 }
