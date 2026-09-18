@@ -4,7 +4,8 @@ import type { McpDispatchFault } from "@moe/mcp";
 import { describe, expect, it } from "vitest";
 
 import {
-  MCP_DISPATCH_THREW, MCP_SESSION_SCREEN_THREW, mcpDispatchFaultReporter, mcpSessionFaultReporter,
+  MCP_DISPATCH_THREW, MCP_FAULT_FRAME, MCP_SESSION_SCREEN_THREW,
+  mcpDispatchFaultReporter, mcpFaultFrameReporter, mcpSessionFaultReporter,
 } from "./mcp-dispatch-fault-report.js";
 
 const FAULT: McpDispatchFault = {
@@ -108,5 +109,25 @@ describe("mcpSessionFaultReporter", () => {
       level: "error",
     });
     expect(records[0]?.fields?.["thrownStack"]).toContain("session-authenticator.ts");
+  });
+});
+
+describe("mcpFaultFrameReporter", () => {
+  it("lands one error record under MCP_FAULT_FRAME naming the code, layer, kind and surface", () => {
+    const records: DiagnosticRecord[] = [];
+    const emitter = createDiagnosticEmitter({
+      clock: () => "2026-09-18T08:00:00.000Z",
+      component: "mcp",
+      sink: { emit: (record) => { records.push(record); } },
+    });
+
+    mcpFaultFrameReporter(emitter)({ code: "OUTCOME_UNKNOWN", kind: "work.claim", layer: "DURABLE_STORE", surface: "command" });
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      event: MCP_FAULT_FRAME,
+      fields: { code: "OUTCOME_UNKNOWN", kind: "work.claim", layer: "DURABLE_STORE", surface: "command" },
+      level: "error",
+    });
   });
 });

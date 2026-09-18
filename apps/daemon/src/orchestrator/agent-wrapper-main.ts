@@ -52,7 +52,9 @@ import { createPassLogger } from "./wrapper-pass-log.js";
 import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
 import { diagnosticProjectRoot } from "../diagnostics/diagnostic-project-root.js";
 import { teeDiagnosticLine } from "../diagnostics/diagnostic-line-tee.js";
-import { mcpDispatchFaultReporter, mcpSessionFaultReporter } from "../mcp-dispatch-fault-report.js";
+import {
+  mcpDispatchFaultReporter, mcpFaultFrameReporter, mcpSessionFaultReporter,
+} from "../mcp-dispatch-fault-report.js";
 
 export {
   createWrapperStopSignal,
@@ -388,6 +390,7 @@ async function main(): Promise<void> {
       // A seat's tool call that THROWS host-side used to vanish: UNKNOWN_ERROR to the seat and
       // nothing here. It now lands as MCP_DISPATCH_THREW on this wrapper's diagnostics plane.
       onDispatchFault: mcpDispatchFaultReporter(mcpDiagnostics),
+      onFaultFrame: mcpFaultFrameReporter(mcpDiagnostics),
       onSessionFault: mcpSessionFaultReporter(mcpDiagnostics),
       subscriptions,
       v2Deps,

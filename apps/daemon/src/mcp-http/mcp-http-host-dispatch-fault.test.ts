@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { McpDispatchFault, McpSessionFault } from "@moe/mcp";
+
+import type { McpFaultFrame } from "../mcp-dispatch-port.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
@@ -188,6 +190,62 @@ describe("mcp-http host session fault disclosure", () => {
         thrown: { code: "SQLITE_BUSY", message: SECRET, name: "Error" },
         transport: "http",
       });
+    } finally {
+      await within("host.stop during teardown", host.stop()).catch(() => undefined);
+      provider.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("mcp-http host fault frame disclosure", () => {
+  it("reports a fault frame ANSWERED to the seat, while the dispatch and session observers stay silent", async () => {
+    // Not a throw this time: the access port answers a refusal whose code says the daemon could
+    // not READ. The seat receives the frame as its result text and nothing threw anywhere.
+    const directory = mkdtempSync(join(tmpdir(), "moe-mcp-http-fault-frame-"));
+    const provider = createStoreDependencies({
+      clock: CLOCK, credential: CREDENTIAL, principalId: PRINCIPAL, projectId: PROJECT,
+      storePath: join(directory, "store.db"),
+    });
+    const subscriptions = provider.subscriptions?.();
+    if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
+    const dispatchFaults: McpDispatchFault[] = [];
+    const sessionFaults: McpSessionFault[] = [];
+    const frames: McpFaultFrame[] = [];
+    const host = createMcpHttpHost({
+      deps: {
+        ...provider.provide(),
+        eventStreamAccess: {
+          authorize: () => ({
+            code: "EVENT_STREAM_ACCESS_UNREADABLE" as never, httpStatus: 503, layer: "DAEMON_AUTHORIZATION", ok: false,
+          }),
+        },
+      },
+      enableJsonResponse: true,
+      onDispatchFault: (fault) => { dispatchFaults.push(fault); },
+      onFaultFrame: (frame) => { frames.push(frame); },
+      onSessionFault: (fault) => { sessionFaults.push(fault); },
+      subscriptions,
+    });
+    try {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error(`start refused: ${started.code}`);
+      const opened = await within("initialize", host.handleRequest(mcpRequest(started.origin, INITIALIZE_BODY)));
+      const sessionId = opened.headers.get(SESSION_ID_HEADER);
+      if (opened.body !== null) await opened.text();
+      if (sessionId === null) throw new Error(`initialize minted no session: ${String(opened.status)}`);
+
+      const response = await within("tools/call", host.handleRequest(
+        mcpRequest(started.origin, EVENTS_READ_BODY, sessionId),
+      ));
+      const text = await within("tools/call body", response.text());
+
+      expect(text).toContain("EVENT_STREAM_ACCESS_UNREADABLE");
+      expect(dispatchFaults).toEqual([]);
+      expect(sessionFaults).toEqual([]);
+      expect(frames).toEqual([{
+        code: "EVENT_STREAM_ACCESS_UNREADABLE", kind: "events.read", layer: "DAEMON_AUTHORIZATION", surface: "query",
+      }]);
     } finally {
       await within("host.stop during teardown", host.stop()).catch(() => undefined);
       provider.close();

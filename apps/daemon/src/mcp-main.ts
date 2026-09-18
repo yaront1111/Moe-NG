@@ -17,7 +17,8 @@ import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { wiredMcpPayloadProperties, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 import { createDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
 import { diagnosticProjectRoot } from "./diagnostics/diagnostic-project-root.js";
-import { mcpDispatchFaultReporter } from "./mcp-dispatch-fault-report.js";
+import { mcpDispatchFaultReporter, mcpFaultFrameReporter } from "./mcp-dispatch-fault-report.js";
+import type { McpFaultFrame } from "./mcp-fault-frame.js";
 import { credentialValues } from "./orchestrator/credential-scrub.js";
 
 /**
@@ -120,6 +121,8 @@ export function createStdioHost(seam: StdioHostSeam): StdioHost {
 export interface StdioServerComposition {
   readonly credential: string;
   readonly onDispatchFault: McpDispatchFaultObserver;
+  /** Where a fault frame ANSWERED to the seat is reported; absent means the seat alone sees it. */
+  readonly onFaultFrame?: (frame: McpFaultFrame) => void;
   readonly provider: StoreDependencyProvider;
 }
 
@@ -152,6 +155,7 @@ export function composeStdioServer(
       documents: provider.goalSource?.(),
       fallbackCredential: credential,
       graph: provider.graph?.(),
+      ...(composition.onFaultFrame === undefined ? {} : { onFaultFrame: composition.onFaultFrame }),
       subscriptions,
       v2Deps: provider.provideV2?.(),
     }),
@@ -180,6 +184,7 @@ async function main(): Promise<void> {
   const server = composeStdioServer({
     credential,
     onDispatchFault: mcpDispatchFaultReporter(diagnostics.emitterFor("mcp-stdio")),
+    onFaultFrame: mcpFaultFrameReporter(diagnostics.emitterFor("mcp-stdio")),
     provider,
   });
 

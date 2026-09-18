@@ -6,7 +6,9 @@ import {
 } from "../daemon-store-dependencies.js";
 import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
 import { diagnosticProjectRoot } from "../diagnostics/diagnostic-project-root.js";
-import { mcpDispatchFaultReporter, mcpSessionFaultReporter } from "../mcp-dispatch-fault-report.js";
+import {
+  mcpDispatchFaultReporter, mcpFaultFrameReporter, mcpSessionFaultReporter,
+} from "../mcp-dispatch-fault-report.js";
 import { credentialValues } from "../orchestrator/credential-scrub.js";
 import {
   MCP_HTTP_HOST_ENV,
@@ -53,6 +55,7 @@ async function main(): Promise<void> {
     documents: provider.goalSource?.(),
     graph: provider.graph?.(),
     onDispatchFault: mcpDispatchFaultReporter(diagnostics.emitterFor("mcp-http")),
+    onFaultFrame: mcpFaultFrameReporter(diagnostics.emitterFor("mcp-http")),
     onSessionFault: mcpSessionFaultReporter(diagnostics.emitterFor("mcp-http")),
     port: readHttpPort(process.env),
     subscriptions,

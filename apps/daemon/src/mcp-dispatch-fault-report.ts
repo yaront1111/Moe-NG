@@ -3,6 +3,8 @@ import type {
   McpDispatchFault, McpDispatchFaultObserver, McpSessionFault, McpSessionFaultObserver,
 } from "@moe/mcp";
 
+import type { McpFaultFrame } from "./mcp-dispatch-port.js";
+
 /**
  * The event a tool call that THREW host-side lands under, on every MCP entry: the wrapper's
  * loopback host, the `moe-mcp-http` bin and the per-seat `moe-mcp-stdio` bin all report
@@ -58,6 +60,17 @@ export function mcpSessionFaultReporter(emitter: DiagnosticEmitter): McpSessionF
         thrownStack: fault.thrown.stack,
         transport: fault.transport,
       },
+    });
+  };
+}
+
+/** A fault frame ANSWERED to a seat: the seat sees the code, the operator now sees it too. */
+export const MCP_FAULT_FRAME = "MCP_FAULT_FRAME";
+
+export function mcpFaultFrameReporter(emitter: DiagnosticEmitter): (frame: McpFaultFrame) => void {
+  return (frame: McpFaultFrame): void => {
+    emitter.error(MCP_FAULT_FRAME, {
+      fields: { code: frame.code, kind: frame.kind, layer: frame.layer, surface: frame.surface },
     });
   };
 }

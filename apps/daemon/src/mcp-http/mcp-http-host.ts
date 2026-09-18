@@ -9,6 +9,7 @@ import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
+import type { McpFaultFrame } from "../mcp-fault-frame.js";
 import { wiredMcpPayloadProperties, wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
@@ -61,6 +62,8 @@ export interface McpHttpHostOptions {
   readonly onDispatchFault?: McpDispatchFaultObserver;
   /** Host-side disclosure of the session screen's port THROWING while validating a bearer. */
   readonly onSessionFault?: McpSessionFaultObserver;
+  /** Host-side disclosure of a fault frame ANSWERED to a seat (the seat sees only the code). */
+  readonly onFaultFrame?: (frame: McpFaultFrame) => void;
   readonly port?: number;
   /** The daemon's committed subscription seam, handed through to the dispatch port. */
   readonly subscriptions: SubscriptionPort;
@@ -158,6 +161,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
     adapter ??= createHttpMcpAdapter({
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
+        ...(options.onFaultFrame === undefined ? {} : { onFaultFrame: options.onFaultFrame }),
         commandAuthorityPlane: options.commandAuthorityPlane,
         contract: options.contract,
         deps: options.deps,
