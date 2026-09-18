@@ -25,23 +25,32 @@ function hostilePayload(): Record<string, number> {
 }
 
 describe("describeKeys bounds what a refusal echoes", () => {
-  it("lists a short roster verbatim", () => {
-    expect(describeKeys(["reviewer"])).toBe("reviewer");
-    expect(describeKeys(["a", "b"])).toBe("a, b");
+  it("lists a short roster, JSON-quoted", () => {
+    expect(describeKeys(["reviewer"])).toBe('"reviewer"');
+    expect(describeKeys(["a", "b"])).toBe('"a", "b"');
+  });
+
+  it("escapes a key's control bytes instead of echoing them raw", () => {
+    // Review of 14dbf7b8: values went through JSON.stringify, keys did not, so a key holding a
+    // newline or an ANSI escape reached the wrapper log unescaped.
+    const detail = describeKeys(["ro\nund", "\u001b[31mred"]);
+    expect(detail).toBe('"ro\\nund", "\\u001b[31mred"');
+    expect(detail).not.toMatch(/[\u0000-\u001f]/u);
   });
 
   it("cuts a long key at ECHOED_STRING_CHARS and marks the cut", () => {
     const key = "y".repeat(ECHOED_STRING_CHARS + 1);
-    expect(describeKeys([key])).toBe(`${"y".repeat(ECHOED_STRING_CHARS)}...`);
+    expect(describeKeys([key])).toBe(`"${"y".repeat(ECHOED_STRING_CHARS)}..."`);
     // Exactly at the bound is echoed whole: the cut is for what EXCEEDS it.
-    expect(describeKeys(["z".repeat(ECHOED_STRING_CHARS)])).toBe("z".repeat(ECHOED_STRING_CHARS));
+    expect(describeKeys(["z".repeat(ECHOED_STRING_CHARS)])).toBe(`"${"z".repeat(ECHOED_STRING_CHARS)}"`);
   });
 
   it("lists at most ECHOED_KEYS keys and counts the rest", () => {
     const keys = Array.from({ length: ECHOED_KEYS + 3 }, (_, index) => `k${String(index)}`);
-    expect(describeKeys(keys)).toBe(`${keys.slice(0, ECHOED_KEYS).join(", ")} +3 more`);
+    const quoted = (list: readonly string[]): string => list.map((key) => `"${key}"`).join(", ");
+    expect(describeKeys(keys)).toBe(`${quoted(keys.slice(0, ECHOED_KEYS))} +3 more`);
     // Exactly ECHOED_KEYS is listed whole with no "+0 more".
-    expect(describeKeys(keys.slice(0, ECHOED_KEYS))).toBe(keys.slice(0, ECHOED_KEYS).join(", "));
+    expect(describeKeys(keys.slice(0, ECHOED_KEYS))).toBe(quoted(keys.slice(0, ECHOED_KEYS)));
   });
 
   it("pins the two bounds the header quotes", () => {

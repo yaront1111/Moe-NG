@@ -1,7 +1,5 @@
 import { randomBytes } from "node:crypto";
 import type { RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
-import type { PublicationCandidate } from "../repository/publication-approval-contracts.js";
-import { publicationRepositoryId } from "../repository/publication-approval-contracts.js";
 
 /**
  * Why the publisher could not hold the repository for this decision. `waiting` separates the
@@ -20,7 +18,7 @@ const refused = (waiting: boolean, detail: string): PublicationReservationOutcom
 
 export function publicationReservation(config: { repository: RepositoryExecutionPort; workspace: string; projectId: string;
   storeId: string; controller: RepositoryExecutionController; processAlive: (pid: number) => boolean },
-  decisionId: string, candidate: PublicationCandidate): PublicationReservationOutcome {
+  decisionId: string): PublicationReservationOutcome {
   const read = config.repository.readOwned(config.workspace, config.storeId, config.projectId);
   if (!read.ok) return refused(false, `reservation unreadable: ${read.code}`);
   let handle = read.handle;
@@ -37,9 +35,6 @@ export function publicationReservation(config: { repository: RepositoryExecution
   }
   if (handle.owner.projectId !== config.projectId || handle.owner.storeId !== config.storeId) {
     return refused(false, "repository held for another project or store");
-  }
-  if (publicationRepositoryId(handle.reservation.identity) !== candidate.approval.repositoryId) {
-    return refused(false, "the repository identity changed since the candidate was approved");
   }
   if (handle.reservation.controllerId !== config.controller.controllerId) {
     if (config.processAlive(handle.reservation.controllerPid)) {

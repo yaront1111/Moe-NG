@@ -276,7 +276,7 @@ describe("acceptance consumes one exact daemon verifier receipt (DoD 6)", () => 
     expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
     // The refusal names every stray field, so the caller does not bisect five of them.
     expect(outcome.detail).toBe(
-      "payload must have exactly receiptId, subjectRef; unexpected: calibration, packageItems, policy, proof, reviewer",
+      "payload must have exactly receiptId, subjectRef; unexpected: \"calibration\", \"packageItems\", \"policy\", \"proof\", \"reviewer\"",
     );
     expect(decisionCount(store)).toBe(before);
   });

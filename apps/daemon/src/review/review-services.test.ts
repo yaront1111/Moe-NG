@@ -395,7 +395,7 @@ describe("a refusal names the code AND the layer that produced it", () => {
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
     expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
-    expect(outcome.detail).toBe("payload must have exactly findings, packageItems, round, subjectRef; unexpected: reviewer");
+    expect(outcome.detail).toBe("payload must have exactly findings, packageItems, round, subjectRef; unexpected: \"reviewer\"");
   });
 
   it("keeps the unexpected-key detail under 1 KiB against 50 keys of 300 chars", () => {

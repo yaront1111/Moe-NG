@@ -31,11 +31,13 @@ function boundedString(value: string): string {
 
 /**
  * Caller-supplied keys as a detail lists them: at most {@link ECHOED_KEYS}, each bounded to
- * {@link ECHOED_STRING_CHARS}, the remainder as `+N more`. The rosters a detail names beside them
- * are the daemon's own constants and need no bound.
+ * {@link ECHOED_STRING_CHARS} and JSON-quoted (a key holding a newline or an escape sequence
+ * reaches the wrapper log and the MCP reply as `\n` / `\u001b`, never raw), the remainder as
+ * `+N more`. The rosters a detail names beside them are the daemon's own constants and need
+ * no bound.
  */
 export function describeKeys(keys: readonly string[]): string {
-  const shown = keys.slice(0, ECHOED_KEYS).map(boundedString).join(", ");
+  const shown = keys.slice(0, ECHOED_KEYS).map((key) => JSON.stringify(boundedString(key))).join(", ");
   const rest = keys.length - Math.min(keys.length, ECHOED_KEYS);
   return rest === 0 ? shown : `${shown} +${String(rest)} more`;
 }

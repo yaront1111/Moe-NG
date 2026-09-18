@@ -30,10 +30,13 @@ function requestPublish(store: ReturnType<typeof openStore>, commandId: string, 
 function reservation() {
   let held: RepositoryExecutionHandle | null = null;
   const releases: string[] = [];
+  // The identity the port observes when it reserves; `drift()` moves it, as a re-cloned or
+  // re-pointed checkout would after the candidate was approved.
+  let observedIdentity = identity;
   const port: RepositoryExecutionPort = {
     acquire: (_ws, owner, controller) => {
       if (held !== null) return { ok: false, code: "REPOSITORY_EXECUTION_BUSY", detail: "busy" };
-      held = { owner, reservation: { ...owner, ...controller, identity, phase: "RESERVED", baselineId: null, sessionId: null, pid: null, revision: 1 } };
+      held = { owner, reservation: { ...owner, ...controller, identity: observedIdentity, phase: "RESERVED", baselineId: null, sessionId: null, pid: null, revision: 1 } };
       return { ok: true, handle: held };
     },
     inspect: () => ({ ok: true, reservation: held?.reservation ?? null }),
@@ -64,7 +67,8 @@ function reservation() {
     held = { owner, reservation: { ...owner, controllerId: "controller-1", controllerPid: 1234, identity, phase: "EXECUTING",
       baselineId: "baseline-1", sessionId: "sess-1", pid: 4242, revision: 7 } };
   };
-  return { port, held: () => held, hold, free: () => { held = null; }, releases: () => [...releases] };
+  return { port, held: () => held, hold, free: () => { held = null; }, releases: () => [...releases],
+    drift: () => { observedIdentity = { root: "D:/elsewhere", gitDirectory: "D:/elsewhere/.git" }; } };
 }
 function world(bound = true, store = openStore()) {
   const decisionId = requestPublish(store, "publish-1", bound); const fence = reservation();
@@ -164,6 +168,19 @@ describe("approved node publication", () => {
     expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "UNKNOWN", detail: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED: "
       + "remote unreadable PUBLISH_REMOTE_UNREADABLE: git exited 128: Could not resolve host; no push this pass (an intent was already journaled)" }]);
     expect(w.pushes()).toBe(1);
+  });
+  it("refuses by name, releases the reservation and receipts a repository whose identity drifted since the approval", async () => {
+    // Review of 0f1f2ba9: the reservation helper answered this with a bare UNKNOWN and left the
+    // reservation it had just acquired held, every pass, until a new decision: the same wedge
+    // class as a diverged remote, on a rarer trigger. It now takes the pre-flight exit.
+    const w = world(); w.fence.drift(); const publisher = createNodePublisher(w.config);
+    expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "REFUSED",
+      detail: "PUBLISH_REPOSITORY_CHANGED: the repository identity changed since the candidate was approved; decide again to retry" }]);
+    expect(w.pushes()).toBe(0); expect(w.fence.held()).toBeNull(); expect(w.fence.releases()).toEqual(["ABORTED_BEFORE_EXECUTION"]);
+    expect(readPublicationIntent(w.store, PROJECT_ID, GOAL, w.decisionId)).toBeNull();
+    expect(readPublishLedger(w.store, PROJECT_ID).get(GOAL)?.receipts.get(w.decisionId)).toMatchObject({ outcome: "REFUSED", refusal: { code: "PUBLISH_REPOSITORY_CHANGED" } });
+    expect(pendingPublication(w.store, PROJECT_ID)).toBeNull();
+    expect(await publisher.publishOnce()).toEqual([]);
   });
   it("names a thrown push in the pass that threw it", async () => {
     const w = world(); w.throw();

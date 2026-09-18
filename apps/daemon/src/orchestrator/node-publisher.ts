@@ -7,6 +7,7 @@ import { publishLinkFor } from "../repository/publish-receipt-contracts.js";
 import type { PublishRefusal } from "../repository/publish-receipt-contracts.js";
 import { samePublicationApproval } from "../repository/publication-approval-contracts.js";
 import type { PublicationCandidate, PublicationRefusal } from "../repository/publication-approval-contracts.js";
+import { publicationRepositoryId } from "../repository/publication-approval-contracts.js";
 import { publicationOwnerDigest, readPublicationIntent, recordPublicationIntent } from "../repository/publication-effect-ledger.js";
 import { publicationReservation } from "./node-publisher-reservation.js";
 import { probeProcessAlive } from "./process-runner-lifecycle.js";
@@ -110,7 +111,7 @@ export function createNodePublisher(config: NodePublisherConfig) {
     const unknown = (reason: string) => report(goalId, "UNKNOWN", `${PUBLISH_EFFECT_RECONCILIATION_REQUIRED}: ${reason}`);
     try {
       const reserved = publicationReservation({ ...config, workspace: config.workspace,
-        processAlive: config.processAlive ?? probeProcessAlive }, decisionId, candidate);
+        processAlive: config.processAlive ?? probeProcessAlive }, decisionId);
       if (!reserved.ok) return reserved.waiting ? report(goalId, "WAITING", reserved.detail) : unknown(reserved.detail);
       let handle = reserved.handle;
       let intent = readPublicationIntent(config.store, config.projectId, goalId, decisionId);
@@ -120,7 +121,13 @@ export function createNodePublisher(config: NodePublisherConfig) {
         // Whatever the pre-flight refuses releases the reservation again: nothing was journaled
         // or transmitted under it, so ABORTED_BEFORE_EXECUTION is the truth. The release runs
         // before the receipt so a refused release can never strand a receipted request.
-        const refusal = await preflight(candidate);
+        // A repository whose identity drifted since the approval is a PERMANENT pre-flight
+        // refusal: it used to be answered from the reservation helper as a bare UNKNOWN with the
+        // freshly acquired reservation left held, every pass, until a new decision (review of
+        // 0f1f2ba9). It takes the same exit as a diverged remote: release, receipt, decide again.
+        const refusal = publicationRepositoryId(handle.reservation.identity) !== candidate.approval.repositoryId
+          ? { code: "PUBLISH_REPOSITORY_CHANGED", detail: "the repository identity changed since the candidate was approved; decide again to retry" }
+          : await preflight(candidate);
         if (refusal !== null) {
           const released = config.repository.release(config.workspace, handle.owner, handle.reservation.revision, "ABORTED_BEFORE_EXECUTION", config.controller.controllerId);
           if (!released.ok) return unknown(`pre-flight ${refusal.code}, nothing journaled, but the reservation release was refused: ${released.code}`);
