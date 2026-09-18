@@ -1,0 +1,30 @@
+{
+  "id": "task-21be6e9055984413a651ce6ee331e2c8",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "An UNKNOWN publish effect has no operator exit: it blocks every later publish and holds the repository in PUBLISHING forever",
+  "description": "Found while fixing the UnAI 2026-09-18 publish (main 35aa437b named every UNKNOWN reason and made deliveries yield to a waiting publish; this is the part deliberately left out).\n\n`apps/daemon/src/orchestrator/node-publisher.ts`: once a publication intent is journaled, the push is never repeated (\"a persisted effect intent is never permission to repeat a push; recovery only observes\"). That invariant is right for a lost result. But when the push was REFUSED by the remote (ssh key missing, non-fast-forward, 403) the observed remote never reaches the approved sha, so every later pass is UNKNOWN forever:\n- the reservation stays in phase PUBLISHING (`repository-execution-port.ts` NEXT.PUBLISHING = [\"PUBLISHING\",\"BLOCKED\"]; the only release from PUBLISHING is reason \"PUBLISHED\"), so every node.deliver is REPOSITORY_EXECUTION_BUSY held by publish:<decisionId> — the whole product stalls;\n- `run-goal-publication.ts` reports outcome UNKNOWN, the Publish card disables its control (`canPublish` requires outcome !== \"UNKNOWN\"), and a later approval is queued behind the unknown effect (\"does not let a later approval bypass an unknown effect\");\n- nothing on any surface says what git said (only the wrapper log line of the pass that pushed, now with the reason).\n\nDesign an operator exit that keeps the single-transmission invariant:\n1. Persist the last publisher observation per decision (outcome + reason + observed remote sha + at) so the runs read / Publish card can show \"remote master is at 2ce84e5a, expected 9ca01b31; push refused: git exited 128: Permission denied (publickey)\".\n2. Offer the operator ONE explicit decision on an UNKNOWN publish — e.g. `repository.publish_resolve` with `{decisionId, resolution: \"NOT_TRANSMITTED\" | \"ABANDON\"}` — that records a REFUSED receipt (code PUBLISH_NOT_LANDED with the last observation), releases the reservation from PUBLISHING with a new reason (e.g. \"PUBLISH_RESOLVED\", allowed only from PUBLISHING), and lets a fresh decision push again. The operator, not the daemon, asserts that the remote does not hold the sha (the card shows the observation to decide on).\n3. Optional automatic variant to weigh: if the remote branch tip observed AFTER the push equals the tip observed BEFORE it (record it in the intent), the transmission provably did not land and the daemon may resolve NOT_TRANSMITTED itself. State the decision either way.",
+  "definitionOfDone": [
+    "The Publish card shows the last publisher observation (reason and observed remote sha) for a PENDING or UNKNOWN publish, decoded exact-key like every other wire body; a control-room arm pins it.",
+    "An UNKNOWN publish can be resolved by an explicit operator decision that records a REFUSED receipt with the last observation, releases the PUBLISHING reservation, and enables a fresh publish; the single-transmission invariant arms in node-publisher-approved.test.ts still pass unchanged.",
+    "A live-shaped daemon arm: push refused by the remote -> UNKNOWN -> node.deliver refused BUSY -> operator resolves -> delivery admitted and a new publish pushes once.",
+    "The new release reason is allowed only from PUBLISHING (repository-execution-port.test.ts arm), and the operator fence / MCP exclusion census are updated for the new command kind.",
+    "apps/daemon/CLAUDE.md publisher bullet updated with the exit."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1013.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T09:33:41.593Z",
+  "updatedAt": "2026-09-18T09:33:41.593Z"
+}

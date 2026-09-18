@@ -135,7 +135,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T06:22:27.676Z",
-  "updatedAt": "2026-09-18T09:17:09.478Z",
+  "updatedAt": "2026-09-18T09:18:09.928Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T07:58:26.478Z",
     "plannedStepCount": 6,
@@ -179,7 +179,9 @@
     "apps/daemon/src/orchestrator/moe-up-spawn.ts",
     "apps/daemon/src/orchestrator/moe-up-main.test.ts",
     ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json",
-    ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json"
+    ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json",
+    ".moe/project.json",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json"
   ],
   "completionSummary": "DoD1: before the fix, plain node gave ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and `moe mcp` exited 1 with MOE_CLI_MCP_UNAVAILABLE. Now: IMPORT OK, and `moe mcp` serves a stdio client (initialize, tools/list = 43 tools, exit 0).\nFix: AgentProcessFailureError uses explicit readonly fields. The parameter list is unchanged, so no call site changed.\nDoD2: runtime-entrypoint.test.ts alone: 5/5 (was 3 failed).\nDoD3: erasableSyntaxOnly is set in apps/daemon/tsconfig.json, and project-review-drain.test.ts:69 was converted. Negative control: HEAD blob rewritten, then `pnpm typecheck` exits 1 with TS1294 at agent-spawn-contract.ts(79,15)..(81,5). Restore proven by SHA256: d807c26b equals d807c26b. A probe in packages/contracts also reds, so the guard covers package sources too.\nDoD4: governor ruling msg-541e4475 (B): the flag is KEPT, because it is one argv shape shared with `moe start`. Removing it is task-8bc14883ca524cb99c0dfe667d1399cd. The tripwire is inverted to \"loads the wrapper entry under plain strip-only node\" (marker, exit 0), and the flagged arm is kept. The :281/:354 checks are unchanged (39/39). Loader-hook drill serving the pre-fix blob: the plain arm reds on ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and the flagged arm stays green.\nDoD5: pre-fix baseline was 13 failed files (c5328ac5); now 745/745. wrapper-review-missions was proven foreign, and was fixed by peer 81f25498.\nArtifact dist/moe-windows as packed: only agent-wrapper-main fails under plain node, and it is launched with the flag, so `moe start` is not broken.\nDELIVERY: peer \"main\" commits 147c62fe and fdb0eee2 committed all 5 owned paths byte-identically, with no Moe-Task trailer. They reached main by squash f254ab66 (#55). The checkout is now on main (owner switch), so this row's own completion commit will be empty.\nFollow-ups: c684a69e (split, file now 422 lines), c19ba3a9 (widen guard; pin for an explicit outputSeen argument).",
   "commits": [
@@ -198,6 +200,23 @@
       "treeId": "b7e6d92d8e581826205593ff80418a1edfda07b8",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "a0fa0b49816879d969ae8e9968d7d51bd751ef5b",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T09:05:17Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json",
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T09:18:09.928Z",
+      "treeId": "9238e2e883cc58918e7e8e174082bf74475dcfd0",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -210,14 +229,30 @@
   "unattributedPaths": [
     "apps/control-room/src/v2/goals/goal-release.test.tsx",
     "apps/control-room/src/v2/goals/goal-release.tsx",
+    "apps/daemon/CLAUDE.md",
+    "apps/daemon/src/mcp-dispatch-fault-report.js",
     "apps/daemon/src/mcp-dispatch-fault-report.test.ts",
-    "apps/daemon/src/mcp-dispatch-fault-report.ts"
+    "apps/daemon/src/mcp-dispatch-fault-report.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host-dispatch-fault.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-main.ts",
+    "apps/daemon/src/mcp-main.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+    "packages/mcp/CLAUDE.md",
+    "packages/mcp/src/http/http-dispatch-fault.test.ts",
+    "packages/mcp/src/http/http-server.ts",
+    "packages/mcp/src/http/http-session.test.ts",
+    "packages/mcp/src/http/http-session.ts",
+    "packages/mcp/src/index.ts",
+    "packages/mcp/src/mcp-root-surface.test.ts",
+    "packages/mcp/src/session-fault.js",
+    "packages/mcp/src/session-fault.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-e0435164@2026-09-18T08:17:15Z",
-    "at": "2026-09-18T09:06:22.939Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T09:05:17Z",
+    "at": "2026-09-18T09:18:09.928Z"
   },
   "completedAt": "2026-09-18T09:17:09.478Z",
   "reviewCompletedAt": "2026-09-18T09:17:09.478Z",
