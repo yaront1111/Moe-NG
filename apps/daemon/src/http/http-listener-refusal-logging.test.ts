@@ -26,12 +26,14 @@ const deps = () => ({
 
 async function withListener(
   run: (origin: string, lines: string[]) => Promise<void>,
+  slowRequestMs?: number,
 ): Promise<void> {
   const lines: string[] = [];
   const listener = await startControlRoomListener({
     csrfToken: "refusal-log-csrf",
     deps: deps(),
     log: (line) => { lines.push(line); },
+    ...(slowRequestMs === undefined ? {} : { slowRequestMs }),
   });
   if (!listener.ok) throw new Error(listener.code);
   try {
@@ -101,5 +103,24 @@ it("never puts the refusal tag itself on the wire", async () => {
       code: "LISTENER_ROUTE_UNKNOWN", layer: "CONTROL_ROOM_LISTENER",
     }));
     for (const [name] of response.headers) expect(name).not.toContain("refusal");
+  });
+});
+
+it("names the status and duration of a request slower than the listener's threshold", async () => {
+  // Threshold zero: every served request is "slow", which proves the option reaches the
+  // per-request line through the real listener rather than only the unit under it.
+  await withListener(async (origin, lines) => {
+    const response = await fetch(`${origin}/no/such/route`);
+    expect(response.status).toBe(404);
+    const slow = lines.filter((line) => line.startsWith("LISTENER_SLOW "));
+    expect(slow).toHaveLength(1);
+    expect(slow[0]).toMatch(/^LISTENER_SLOW GET \/no\/such\/route 404 \d+ms$/u);
+  }, 0);
+});
+
+it("writes no LISTENER_SLOW line at the default threshold for a request answered at once", async () => {
+  await withListener(async (origin, lines) => {
+    await fetch(`${origin}/no/such/route`);
+    expect(lines.filter((line) => line.startsWith("LISTENER_SLOW "))).toEqual([]);
   });
 });
