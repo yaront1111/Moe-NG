@@ -75,14 +75,16 @@
     {
       "stepId": "step-5",
       "description": "GATES AND ADVERSARIAL REVIEW. Read each leg's OUTPUT, not its exit code.\n\n(A) DoD 3: `pnpm exec tsc -p tests/e2e/control-room/tsconfig.json` exits 0.\n\n(B) DoD 2: browser e2e, under the browser-e2e-gate lease.\n- Before you park behind the lease, PROVE its holder is live. At planning, crashed seats had held gate leases; route a stale one to #governors and never force it yourself.\n- Run `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts deploy-environment deploy-fake-docker deploy-migrations deploy-rollback-incident release-approval`. release-approval is included because its default local-remote arm lives in a file this row edits.\n- Quote the `N passed` line and name each spec. A spec that did not run is not a pass.\n- Re-run any failure alone before attributing it.\n\n(C) DoD 1 census, quoted in the completion record:\n- `git grep -n 'branch: \"main\"' -- tests/e2e/control-room` returns no publish-approval literal.\n- `git grep -n 'publicationRepositoryId(' -- tests` returns only the ONE deliberate hand-built approval, in release-approval.spec.ts's negative arm, and gives its reason.\n- `git grep -n 'readPublicationApproval' -- tests/e2e` shows all seven drives.\n\n(D) ADVERSARIAL REVIEW, written in the completion record:\n- Does any drive still derive a pushed branch from its checkout instead of the approval?\n- Can the helper return anything but the daemon's approval: a fallback, a reshaped object, a swallowed refusal?\n- Order independence, argued from the code. BEFORE task-04160615, the preview's branch is the workspace HEAD (\"main\" in the deploy lanes), so ACCEPTED is unchanged. AFTER it, the preview and the command compute the target by the same rule, so the approval cannot go stale between them.\n- State plainly that the opt-in and live drives were compiled but not run, and name the env vars each needs.\n- The parent task-04160615 is BLOCKED on this row. Once this is DONE it unblocks automatically; say so.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-18T22:19:40.546Z"
+      "note": "GATES, fresh in the RESUMED session at HEAD 703d82e7. The row's 8 e2e paths are byte-identical to wip a1438867, and `git status --porcelain -- tests/e2e/control-room` is clean. Held the browser-e2e-gate lease: it was mine since 22:19:45Z, and I renewed it before the run.\n\n(A)+(B) `pnpm test:e2e:browser deploy-environment deploy-fake-docker deploy-migrations deploy-rollback-incident release-approval` exited 0 (02:46:59 to 02:50:14 +0300).\n- pnpm echo: `$ tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c ...`, so tsc ran first and exited 0.\n- Count line: `2 skipped` / `11 passed (3.2m)`.\n- Ran: deploy-environment 153 and 248; deploy-fake-docker 158 SUCCESS, 158 DEPLOY_DOCKER_UNAVAILABLE, 230 publish, 248; deploy-migrations 232 and 411; deploy-rollback-incident 125 and 240; release-approval 312 (local remote refused).\n- Skipped (opt-in): release-approval-live 244 and release-approval 350.\n- Log: %TEMP%/moe-e2e-final-b94b92d7-worker-69773bc1.log.\n- The dead prior session's first run went red once, on deploy-migrations 232, at LANDING (spec :135): `REVIEW_SUBMIT 503 ... STORE_BUSY: decision history changed during its read`. That is BEFORE `readPublicationApproval` (:138), so it is not this diff. It passed alone (2 passed), and the whole set was green twice after that.\n\n(C) Census:\n- `git grep -n 'branch: \"main\"' -- tests/e2e/control-room`: no hits (exit 1).\n- `git grep -n 'publicationRepositoryId(' -- tests`: ONE hit, release-approval.spec.ts:171, inside `refusalOnlyLocalApproval`. It is a local remote, so the preview refuses it PUBLISH_REMOTE_URL_INVALID, and ingress refuses PUBLISH_APPROVAL_REQUIRED @ DAEMON_INGRESS before any approval is judged.\n- `readPublicationApproval` is called in all 7 drives: deploy-environment:96, deploy-fake-docker:106, deploy-migrations:138, lane-rollback-incident:175, live-proof-release:172, release-approval-live:280, release-approval:180.\n- `\"repository.publish\"` in tests/e2e: every positive dispatch takes the preview approval. The other hits are release-approval:326 (the negative arm), publish-remote:47 (the Publish card) and deploy-fake-docker:217 (a comment).\n- Whole-tree `branch: \"main\"` outside .moe: every remaining hit is an apps/** unit fixture fed straight to a pure function or ledger (daemon *.test.ts plus bootstrap-test-fixtures.ts:207, and control-room v2 and live tests). None is an e2e drive against a real daemon, and none is in this row's scope.\n\n(D) Adversarial review:\n- No drive derives a pushed branch from its checkout. Checkout names are renamed `checkout` and used only for `git checkout/switch` and the not-base guard. Every pushed-branch read uses approval.branch: the PUSHED messages, the LIVE RELEASE DRIVE record, record(\"publish-receipt\"), the LiveReleaseOutcome.branch returns, and the new `call[\"head\"]` check. fake-gh-dependencies.ts:39 writes `head: request.head`, so that key exists.\n- The helper cannot return anything but the daemon's approval. It throws on status!==200, outcome!==\"PUBLICATION_CANDIDATE\", a goalId mismatch, or a non-object approval, and quotes the full body. There is no fallback and no reshape; it returns `body.approval` as-is.\n- Order independence, from the code: the route (repository-remote-read.ts:100) and the command (publish-services.ts:95) call the SAME `workflows.readPublicationCandidate` (daemon-store-foundation-composition.ts:275 and :566).\n  - Today neither passes a target, so approval.branch is the workspace branch and samePublicationApproval holds. That is measured green.\n  - After task-04160615 wires `{goalId, remoteDefaultBranch: readRemoteDefaultBranch(...)}` at both sites, releaseBranch (publication-candidate.ts:17-20) gets the same inputs, so both sides produce the same approval. The recorded default is written only by node-publisher transmit, which runs after the command, and every drive dispatches right after its preview.\n- NOT RUN, compiled only:\n  - release-approval.spec.ts:350 needs MOE_E2E_RELEASE_REMOTE_TEST=1 + MOE_E2E_RELEASE_REMOTE_URL.\n  - release-approval-live.spec.ts needs MOE_LIVE_RELEASE_PR=1 + MOE_LIVE_RELEASE_REMOTE (+ MOE_LIVE_RELEASE_BASE), plus gh auth.\n  - live-proof-release.ts runs only via live-proof-prd.spec.ts, and needs MOE_LIVE_RELEASE_PR=1 plus that spec's own live env.\n- Parent task-04160615 is BLOCKED on this row and auto-unblocks when this row is DONE.\n\nForeign dirt, untouched: apps/daemon/CLAUDE.md and .moe/**.",
+      "startedAt": "2026-09-18T22:19:40.546Z",
+      "completedAt": "2026-09-18T23:51:13.108Z"
     }
   ],
-  "planRevision": 10,
-  "status": "WORKING",
-  "assignedWorkerId": "worker-69773bc1",
+  "planRevision": 11,
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -94,12 +96,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:38:49.493Z",
-  "updatedAt": "2026-09-18T23:14:32.289Z",
+  "updatedAt": "2026-09-18T23:51:47.332Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:07:10.239Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -108,7 +110,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T22:10:12.197Z",
@@ -261,20 +264,32 @@
       "treeId": "fab126bd1e25cad3b54b3f53bd11403b0313e3aa",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "703d82e79cc0beb0a8e5a645858fb6329102fcdc",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-18T23:29:33Z",
+      "paths": [
+        ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-18T23:29:41.784Z",
+      "treeId": "966cbdc48c7e457016d6a350692f0160f797dfd3",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-b94b92d70a684d82b2ff71a9abae18cc.json",
-    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+    "tests/e2e/control-room/publication-approval-read.ts",
     "tests/e2e/control-room/deploy-environment.spec.ts",
     "tests/e2e/control-room/deploy-fake-docker.spec.ts",
     "tests/e2e/control-room/deploy-migrations.spec.ts",
     "tests/e2e/control-room/lane-rollback-incident.ts",
-    "tests/e2e/control-room/live-proof-release.ts",
-    "tests/e2e/control-room/publication-approval-read.ts",
     "tests/e2e/control-room/release-approval.spec.ts",
     "tests/e2e/control-room/release-approval-live.spec.ts",
-    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json"
+    "tests/e2e/control-room/live-proof-release.ts"
   ],
   "touchedFiles": [
     "tests/e2e/control-room/release-approval.spec.ts",
@@ -290,7 +305,16 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-69773bc1@2026-09-18T23:14:23Z",
-    "at": "2026-09-18T23:14:32.289Z"
-  }
+    "sessionId": "worker-69773bc1@2026-09-18T23:29:33Z",
+    "at": "2026-09-18T23:29:41.784Z"
+  },
+  "reviewStartedAt": "2026-09-18T23:51:47.330Z",
+  "verification": {
+    "command": "pnpm test:e2e:browser deploy-environment deploy-fake-docker deploy-migrations deploy-rollback-incident release-approval",
+    "exitCode": 0,
+    "outputTail": "m/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts \"deploy-environment\" \"deploy-fake-docker\" \"deploy-migrations\" \"deploy-rollback-incident\" \"release-approval\"\n\nRunning 13 tests using 1 worker\n\n  ok  1 [chromium] › deploy-environment.spec.ts:153:1 › deploy journey: a bound target, an operator deploy, and the url the browser reads back (11.6s)\n  ok  2 [chromium] › deploy-environment.spec.ts:248:1 › deploy journey: teardown also runs when the body throws (2.3s)\n  ok  3 [chromium] › deploy-fake-docker.spec.ts:158:3 › real daemon fake docker: SUCCESS has a durable receipt (9.3s)\n  ok  4 [chromium] › deploy-fake-docker.spec.ts:158:3 › real daemon fake docker: DEPLOY_DOCKER_UNAVAILABLE has a durable receipt (9.3s)\n  ok  5 [chromium] › deploy-fake-docker.spec.ts:230:1 › real daemon fake docker: a paired human publishes the lane's own landed commit (10.1s)\n  ok  6 [chromium] › deploy-fake-docker.spec.ts:248:1 › real daemon fake docker: teardown also runs when the body throws (2.4s)\n  ok  7 [chromium] › deploy-migrations.spec.ts:232:1 › migration journey: what the schema did, on the card, in the feed, and NOT on the node (10.8s)\n  ok  8 [chromium] › deploy-migrations.spec.ts:411:1 › migration journey: teardown also runs when the body throws (2.4s)\n  ok  9 [chromium] › deploy-rollback-incident.spec.ts:125:1 › real daemon: a bad release goes DOWN, the incident card offers the rollback, the rollback recovers it (1.6m)\n  ok 10 [chromium] › deploy-rollback-incident.spec.ts:240:1 › real daemon: the incident lane tears down when its body throws (2.2s)\n  -  11 [chromium] › release-approval-live.spec.ts:244:1 › gate 3 live (opt-in)\n  ok 12 [chromium] › release-approval.spec.ts:312:1 › real daemon: a local publish remote is refused without publication or a release PR (35.9s)\n  -  13 [chromium] › release-approval.spec.ts:350:1 › real admitted remote (opt-in)\n\n  2 skipped\n  11 passed (3.2m)\nEXIT=0 (HEAD 703d82e7, 2026-09-19T02:46:59+03:00 -> 02:50:14+03:00)",
+    "reportedAt": "2026-09-18T23:51:47.330Z",
+    "source": "agent-reported"
+  },
+  "completionSummary": "All 7 e2e publish drives now take their approval from the daemon's preview, POST /repository/remote/read {goalId, remoteUrl} -> body.approval, exactly as the Publish card does. The bytes are in wip a1438867 (8 paths under tests/e2e/control-room).\n- NEW publication-approval-read.ts, 35 lines: `readPublicationApproval` reuses lane-preview.ts `lanePost` for the headers. It THROWS with the daemon's body on any non-200, non-PUBLICATION_CANDIDATE, goalId-mismatch or non-object answer. No fallback, no reshape.\n- The 4 default drives assert toMatchObject({remoteUrl, sha: landed}) and dispatch that approval: deploy-environment, deploy-fake-docker, deploy-migrations, lane-rollback-incident.\n- The 3 opt-in/live drives read approval.branch in every pushed-branch check, and guard approval.branch != base: release-approval, release-approval-live, live-proof-release. Their stale `publication-candidate.ts:21` comments are corrected.\n- The one deliberate hand-built approval is `refusalOnlyLocalApproval`, release-approval.spec.ts:171. That arm's remote is local: the preview refuses it, and ingress refuses PUBLISH_APPROVAL_REQUIRED @ DAEMON_INGRESS first.\n\nGATES, fresh at HEAD 703d82e7 under the browser-e2e-gate lease:\n- tsc exited 0.\n- Playwright: `11 passed (3.2m)`, `2 skipped` (the opt-in specs), EXIT 0.\n\nCENSUS:\n- `branch: \"main\"` in tests/e2e/control-room: none.\n- `publicationRepositoryId(` in tests: only :171.\n- `readPublicationApproval`: all 7 drives.\n\nORDER INDEPENDENCE: the route (:100) and the command (publish-services.ts:95) call the same `workflows.readPublicationCandidate`. So after task-04160615 wires the target at both sites, preview and command still agree.\n\nNOT RUN, compiled only: the opt-in/live drives. Their env vars are in the step-5 note.\n\nParent task-04160615 auto-unblocks when this row is DONE. Full evidence is in the step-5 note."
 }

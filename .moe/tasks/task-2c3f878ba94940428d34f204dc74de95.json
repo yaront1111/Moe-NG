@@ -154,8 +154,8 @@
     }
   ],
   "planRevision": 18,
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-09357cdf",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -182,11 +182,17 @@
       "author": "worker-952c612b",
       "content": "COMPLETION EVIDENCE, task-2c3f878b (worker-952c612b). Tree: 736291c4 plus this row's diff. Peer dirt present and untouched: orchestrator/seat-liveness.ts and seat-liveness.test.ts.\n\nCENSUS, every file with its verdict (DoD 4). The full-tree `git grep -l 'repository.publish_resolve' -- . ':!.moe'` finds 15 files. All of them are this row's, plus rows 1 and 2 (contracts, generated-client, publish-resolve-contracts), plus the untracked new module.\nEDITED, production:\n- daemon-command-payload-keys.ts: PAYLOAD_KEYS row, appended.\n- daemon-command-vocabulary.ts: REPOSITORY_RECOVERY_FAMILY at ADMIN, the WiredCommandKind union, the agentCapabilitiesFor null branch, OPERATOR_PRINCIPAL_KINDS.\n- daemon-command-async-entries.ts: registers the entry (396 lines).\n- mcp-tool-allowlist.ts: MCP_NEVER_DELEGATED_KINDS (amend-1, governor msg-c532f7aa).\n- NEW repository/publish-resolve-command.ts + .js bridge: the entry factory. SCOPE GROWTH, because an inline stub would have pushed async-entries.ts past 400 lines.\nEDITED, tests (each pin taken from the printed leg):\n- mcp-tool-allowlist.test.ts (the delegate partition is now {15, 15})\n- daemon-command-vocabulary.test.ts\n- mcp-main.test.ts\n- mcp-http-host.test.ts (counts only, no it() added)\n- daemon-command-registry-human-approver.test.ts\n- daemon-store-dependencies.test.ts\n- gates-human-only-fence.test.ts (a named arm, BAND not widened)\n- daemon-command-registry.test.ts (pins, plus the DoD 1/2/3 describe)\n- daemon-v2-command-registry.test.ts:275 (printed `expected 65 to be 64`; amend-1)\nUNCHANGED, verified GREEN:\n- daemon-command-families.ts, by design: commandFamilyFacts is reached only for sync entries, and the ADMIN capability derives from the family table. Asserted in registry.test.\n- gates-roster-coherence.test.ts, with NO edit (DoD 4, step 5D).\n- preview-start-command.test.ts, daemon-command-async-entries.test.ts, and 16 more roster sweepers.\n\nGATES:\n- `pnpm --filter @moe/daemon test`: `Test Files 765 passed (765)`, `Tests 12594 passed | 22 skipped (12616)`, exit 0.\n- `pnpm --filter @moe/control-room test`: 195/195 files, 2584 tests.\n- `pnpm typecheck`: Scope 19 of 20, 19 Done, exit 0.\n- `pnpm test:security`: 12/12 files, 1009 tests (TASK-LV literal census unmoved).\n- Root `pnpm test` (root lane only, apps/** not covered): 468 of 469 files run, 1 FOREIGN red. tests/integration/distribution/pack-artifact-sweep.test.ts:76 received [\"apps/daemon/src/node-spec-loader.js\", \"apps/daemon/src/node-spec-loader.ts\"]. Both files are tracked and clean at HEAD (f5d5f4ee), and no path of this row appears. It is already fixed on origin/main, where the PRODUCTION_EXCEPTIONS at :42-43 list them. The work branch awaits the sync; no row was filed.\n\nDRILLS: 4 mutants plus a control, all in memory. Results are in the step-4 note.\n\nADVERSARIAL REVIEW:\n- Can a non-operator reach the kind? There are two fences.\n  (1) The entry refuses any principal but the configured operator, on the registry's own terms (membership AND identity): 403 `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`. DoD 1 asserts it, and drills M1/M2 red it.\n  (2) Transport: the kind is on NO MCP roster. The seats' roster excludes it by derivation (asserted first in DoD 2; M1 reds it). The owner's --as-operator roster excludes it via NEVER_DELEGATED (asserted; M4 reds it). mcp-main STDIO-1 and mcp-http HTTP-1/HTTP-2 sweep it as an excluded kind (CAPABILITY_DENIED, not advertised). The MCP stdio operator-credential fallback therefore cannot carry it: the tool is never listed or served.\n- Is the stub reachable, and does it refuse under its own code? Yes. An operator gets 422 `PUBLISH_RESOLVE_DECISION_NOT_FOUND @ DAEMON_PREREQUISITE`, taken from row 2's map. There are no durable writes (snapshot-asserted), and M3 reds it.\n- Is it advertised as agent-callable? agentCapabilitiesFor returns null, so the wrapper answers UNWIRED_KIND. Not on any MCP roster. HUMAN_ONLY_STEPS is NOT grown; that is a follow-up.\n- When task-a47babf8 replaces the stub, it must RE-AIM two things: the DoD 3 arm (code, layer and the exact detail) and the ROWS entry for `{}`. Its step 5 does not name publish-resolve-command.ts, the new swap point. Posted as comment-fc392957 on that row.\n- A paired browser human is refused 403 (no widening; that is an owner decision). This bites task-21be6e90's card; posted as comment-ca397fbb.\n- The stub has no project check and no transport-origin check. Both are harmless while it refuses everyone; they are listed for task-a47babf8.\n- Pre-existing debt: daemon-command-vocabulary.ts was 460 lines at base and is 464 now (over the 400 cap).",
       "timestamp": "2026-09-18T22:19:35.417Z"
+    },
+    {
+      "id": "comment-3e0c48b6fd3e4aad8426951816d39584",
+      "author": "qa-09357cdf",
+      "content": "QA FOLLOW-UP (qa-09357cdf, not a defect of this row). Per-file cap: apps/daemon/src/daemon-command-vocabulary.ts is 464 lines at 21721c40. It was 460 at the parent 736291c4, so it was already over the 400 split line before this row. This row adds +4 lines of wiring only: a family-table entry, a union member, the null-branch disjunct and a set member. It keeps its own new module small (repository/publish-resolve-command.ts, 46 lines), and it held async-entries.ts at 396 by moving the stub out.\n\nNot charged here, per precedent decision-per-file-cap-not-charged-to-a-wiring-only-diff.\n\nResidue for the epic-final hardening row, or whichever row next grows the file: split daemon-command-vocabulary.ts below 400. The family tables and OPERATOR_PRINCIPAL_KINDS are the natural seams.",
+      "timestamp": "2026-09-18T23:51:12.087Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:22.330Z",
-  "updatedAt": "2026-09-18T23:26:36.468Z",
+  "updatedAt": "2026-09-18T23:51:30.924Z",
   "dependsOn": [
     "task-adeabf1f8c9e4e2c8b778491f9e20b71"
   ],
@@ -194,7 +200,9 @@
     "firstClaimAt": "2026-09-18T19:28:56.428Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 12,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-18T23:51:30.923Z",
+    "wallClockMs": 15754495
   },
   "planSizeWarnings": [
     "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -463,5 +471,8 @@
     "apps/daemon/src/mcp-tool-allowlist.ts",
     "apps/daemon/src/daemon-command-async-entries.ts",
     "apps/daemon/src/daemon-command-registry.test.ts"
-  ]
+  ],
+  "completedAt": "2026-09-18T23:51:30.923Z",
+  "reviewCompletedAt": "2026-09-18T23:51:30.923Z",
+  "reviewSummary": "APPROVED, qa-09357cdf. Reviewed completion 21721c40 (pushed, on moe/work-2026-09-18). At HEAD 703d82e7, `git diff 21721c40 HEAD` over all 15 row paths is EMPTY, so the gates measured the delivered bytes.\n\nGATES, re-run by me:\n- `pnpm --filter @moe/daemon test` (full-suite-gate lease): Test Files 765 passed (765), Tests 12594 passed | 22 skipped, exit 0.\n- `pnpm typecheck`: 19 of 20 projects, 19 Done, exit 0.\n- `pnpm --filter @moe/control-room test`: 195/195 files, 2584 tests.\n\nDoD:\n1. The kind is wired: payload keys, async entry, operator set. A non-operator holding ADMIN gets 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION (the DoD1 arm, the fence test and the sweep).\n2. MCP_EXCLUDED is still derived. The NEVER_DELEGATED entry only partitions the --as-operator roster (step-3 amend-1).\n3. The operator gets 422 PUBLISH_RESOLVE_DECISION_NOT_FOUND@DAEMON_PREREQUISITE, with no writes.\n4. The fence test has a named arm. roster-coherence is green with no edit. Census verdicts are in comment-8a81745d.\n5. Gates: as above.\n\nDRILLS, in memory. The NONE control passed 11, and each mutant printed one transform line. Every mutant went red:\n- Q1, fence deleted: DoD1 received 422.\n- Q2, layer swapped alone: DoD1 red.\n- Q3, kind removed from the operator set: DoD2 red at :752.\n- Q4, stub accepts: DoD3 red.\n- Q5, kind made delegable: DoD2 red at :758.\n- Q6, null agent branch dropped: 3 red.\nThe SHA256 of the drilled modules is unchanged.\n\nvocabulary.ts is 464 lines against the 400 cap. It was already 460 before this row, and the diff is +4 of wiring only, so the cap is not charged here. Follow-up: comment-3e0c48b6."
 }
