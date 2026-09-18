@@ -94,7 +94,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:38:49.493Z",
-  "updatedAt": "2026-09-18T22:19:40.546Z",
+  "updatedAt": "2026-09-18T22:27:53.996Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:07:10.239Z",
     "plannedStepCount": 5,
@@ -129,5 +129,60 @@
   "contextFetchedBy": [
     "worker-69773bc1"
   ],
-  "workStartedAt": "2026-09-18T22:11:00.822Z"
+  "workStartedAt": "2026-09-18T22:11:00.822Z",
+  "commits": [
+    {
+      "sha": "a143886712435d9cdfc5165a70ca3c22fb0992d3",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-18T22:10:38Z",
+      "paths": [
+        ".moe/tasks/task-b94b92d70a684d82b2ff71a9abae18cc.json",
+        ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+        "tests/e2e/control-room/deploy-environment.spec.ts",
+        "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+        "tests/e2e/control-room/deploy-migrations.spec.ts",
+        "tests/e2e/control-room/lane-rollback-incident.ts",
+        "tests/e2e/control-room/live-proof-release.ts",
+        "tests/e2e/control-room/publication-approval-read.ts",
+        "tests/e2e/control-room/release-approval.spec.ts",
+        "tests/e2e/control-room/release-approval-live.spec.ts"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-18T22:27:53.996Z",
+      "treeId": "954bcf6a02635fcc09a86c3e6c8e091abe388a91",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-b94b92d70a684d82b2ff71a9abae18cc.json",
+    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+    "tests/e2e/control-room/deploy-environment.spec.ts",
+    "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+    "tests/e2e/control-room/deploy-migrations.spec.ts",
+    "tests/e2e/control-room/lane-rollback-incident.ts",
+    "tests/e2e/control-room/live-proof-release.ts",
+    "tests/e2e/control-room/publication-approval-read.ts",
+    "tests/e2e/control-room/release-approval.spec.ts",
+    "tests/e2e/control-room/release-approval-live.spec.ts"
+  ],
+  "touchedFiles": [
+    "tests/e2e/control-room/release-approval.spec.ts",
+    "tests/e2e/control-room/deploy-environment.spec.ts",
+    "tests/e2e/control-room/lane-rollback-incident.ts",
+    "tests/e2e/control-room/release-approval-live.spec.ts",
+    "tests/e2e/control-room/live-proof-release.ts",
+    "tests/e2e/control-room/deploy-migrations.spec.ts",
+    "tests/e2e/control-room/publication-approval-read.ts",
+    "tests/e2e/control-room/deploy-fake-docker.spec.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-69773bc1@2026-09-18T22:10:38Z",
+    "at": "2026-09-18T22:27:53.996Z"
+  }
 }
