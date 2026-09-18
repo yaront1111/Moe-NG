@@ -29,6 +29,7 @@ export {
 } from "./stdio/stdio-tool-schemas.js";
 export type {
   StdioObjectSchema,
+  StdioPayloadPropertyOverlay,
   StdioPropertySchema,
   StdioTool,
   StdioToolEntry,

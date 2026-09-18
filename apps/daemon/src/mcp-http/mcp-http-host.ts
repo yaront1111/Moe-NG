@@ -9,7 +9,7 @@ import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
-import { wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
+import { wiredMcpPayloadProperties, wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import type { DesignReadPort } from "../mcp-design-read-query.js";
@@ -172,6 +172,8 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
         : { enableJsonResponse: options.enableJsonResponse }),
       ...(options.onDispatchFault === undefined ? {} : { onDispatchFault: options.onDispatchFault }),
       ...(options.onSessionFault === undefined ? {} : { onSessionFault: options.onSessionFault }),
+      // Same typed payload members as the stdio entry, from the same derivation.
+      payloadProperties: wiredMcpPayloadProperties(),
       sessionPort: createMcpHttpSessionPort(options.deps.authenticator),
       serverName: "moe-next",
       // Same roster as the stdio entry, from the same derivation.

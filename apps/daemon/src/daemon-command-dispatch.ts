@@ -117,8 +117,17 @@ export function createCommandAuthorityGate(
  *
  * The details are already sanitised to safe scalars by the runtime error registry, so no value
  * that reaches this string can carry attacker bytes or a separator.
+ *
+ * An outcome that carries its OWN `detail` sentence wins over both, on the same rule
+ * `domainRefusalOf` applies: the refusing authority's words, when it has any, and the code
+ * only as the floor. The review family's shape gate is the first to say more than its code
+ * (`review-ledger.ts` `refuseInvalidPayload`), after three seats each bisected a bare
+ * `REVIEW_PAYLOAD_INVALID` to learn that `round` had to be a JSON number (2026-09-18).
  */
-function detailOf(outcome: { readonly code: string; readonly error: RuntimeError | null }): string {
+function detailOf(outcome: {
+  readonly code: string; readonly detail?: string | null; readonly error: RuntimeError | null;
+}): string {
+  if (typeof outcome.detail === "string" && outcome.detail.length > 0) return outcome.detail;
   const error = outcome.error;
   if (error === null) return outcome.code;
   const details = error.details;

@@ -16,10 +16,14 @@ export function reviewSubmissionMissionLines(nodeRef: string): readonly string[]
     ruleId: "dependency-deliverable-missing", severity: "MAJOR",
     subject: { kind: "ARTIFACT", locator: "<path of the failing check>" },
   };
+  // The example used to render round as the placeholder STRING "<expectedVersion + 1>", and
+  // three seats copied the quoting: each sent round as "2", was refused REVIEW_PAYLOAD_INVALID,
+  // and burned a call learning the daemon wanted the number (UnAI 2026-09-18). The example is
+  // now valid JSON a seat may send as-is at expectedVersion 0, and the sentence names the type.
   return Object.freeze([
     `The review_submit payload must have exactly subjectRef, round, findings, packageItems: ${JSON.stringify({
-      subjectRef: nodeRef, round: "<expectedVersion + 1>", findings: [], packageItems: [],
-    })}. Replace round with that numeric value. ${compiled
+      subjectRef: nodeRef, round: 1, findings: [], packageItems: [],
+    })}. round is a JSON integer equal to expectedVersion + 1, sent as a bare number (2, never the quoted string "2"); a quoted round is refused REVIEW_PAYLOAD_INVALID. ${compiled
       ? "Submit no unattributed findings only after every assigned criterion is implemented and your verification command passes; attributed findings may accompany that round."
       : "Use empty findings only after every assigned criterion is implemented and required checks pass."}`,
     "Record unmet criteria, remaining work and unresolved product decisions as findings even when existing tests pass.",

@@ -28,6 +28,7 @@ import type { McpDispatchFaultObserver } from "../dispatch-fault.js";
 import type { McpSessionFaultObserver } from "../session-fault.js";
 import { createHttpMcpServer, httpListedTools } from "./http-tool-bridge.js";
 import type { HttpDispatchPort } from "./http-tool-bridge.js";
+import type { StdioPayloadPropertyOverlay } from "../stdio/stdio-tool-schemas.js";
 
 /**
  * Official MCP Streamable HTTP adapter over the same generated surface the stdio adapter
@@ -80,6 +81,8 @@ export interface HttpAdapterOptions {
   readonly onDispatchFault?: McpDispatchFaultObserver;
   /** Host-side disclosure of a session port that THROWS while validating a bearer. */
   readonly onSessionFault?: McpSessionFaultObserver;
+  /** Payload members the host has typed, per kind; same rule as the stdio server's. */
+  readonly payloadProperties?: StdioPayloadPropertyOverlay;
   readonly serverName?: string;
   readonly sessionIdFactory?: () => string;
   /** Milliseconds a session may sit idle before the next initialize reaps it. */
@@ -234,7 +237,7 @@ async function openSessionTransport(
 export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapter {
   // Resolved eagerly so an unknown or empty allowlist refuses at construction, not on
   // the first request a client makes.
-  const listedTools = httpListedTools(options.toolAllowlist);
+  const listedTools = httpListedTools(options.toolAllowlist, options.payloadProperties);
   const registry = createHttpSessionRegistry<SessionAttachment>();
   const lifecycle = createHttpAdapterLifecycle(async () => {
     await closeAllDaemonSessions(registry, options.sessionPort, registry.entries());

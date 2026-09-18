@@ -1,10 +1,17 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
   STDIO_TOOL_INDEX, allowlistedToolEntries, createStdioMcpServer, toolLabelForKind,
 } from "@moe/mcp";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 
+import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { FOUNDATION_RECEIPT_SCHEMA_VERSION } from "./host/foundation-receipts.js";
-import { createStdioHost } from "./mcp-main.js";
+import { composeStdioServer, createStdioHost } from "./mcp-main.js";
 import type { StdioHostSeam } from "./mcp-main.js";
 import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 
@@ -166,26 +173,28 @@ describe("the stdio host lifecycle", () => {
 /**
  * task-4c9b1d85 — the STDIO half of the transport closure.
  *
- * `mcp-main.ts:131` hands `wiredMcpToolKinds()` to `createStdioMcpServer` as its
- * `toolAllowlist`, and `mcp-http/mcp-http-host.ts:142` does the same INDEPENDENTLY. Closing
- * one entry proves nothing about the other, so each has its own arm and neither stands in
- * for the other.
+ * `composeStdioServer` in mcp-main.ts hands `wiredMcpToolKinds()` to `createStdioMcpServer`
+ * as its `toolAllowlist`, and `createMcpHttpHost` in mcp-http/mcp-http-host.ts does the same
+ * INDEPENDENTLY. Closing one entry proves nothing about the other, so each has its own arm and
+ * neither stands in for the other.
  *
- * WHY THIS ARM ASSERTS THE SEAM'S INPUTS AND THE HTTP ARM DRIVES A REAL `tools/call`:
- * exercising stdio end to end needs an MCP client and an in-memory transport, and
- * `@modelcontextprotocol/sdk` is a dependency of `@moe/mcp` ONLY — it is NOT declared by
- * `@moe/daemon` and does not resolve here. Rather than deep-import an undeclared package,
- * this arm asserts the EXACT production expressions the stdio seam is built from, which is
- * decisive about which refusal branch fires:
- *   stdio-server.ts:233-235  tools = listedFrom(allowlistedToolEntries(options.toolAllowlist))
- *   stdio-server.ts:236      allowed = new Set(tools.map((tool) => tool.name))
- *   stdio-server.ts:167      entry === undefined            -> INPUT_INVALID
- *   stdio-server.ts:168      known label, !allowed.has(...) -> CAPABILITY_DENIED
+ * WHY STDIO-1 ASSERTS THE SEAM'S INPUTS AND THE HTTP ARM DRIVES A REAL `tools/call`: the
+ * exclusion arm asserts the EXACT production expressions the stdio seam is built from, which
+ * is decisive about which refusal branch fires. Named by symbol, not by line, because the line
+ * numbers drifted twice; the bindings are in `createStdioMcpServer` and `callTool` of
+ * packages/mcp/src/stdio/stdio-server.ts:
+ *   createStdioMcpServer  tools   = listedFrom(withPayloadProperties(allowlistedToolEntries(...)))
+ *   createStdioMcpServer  allowed = new Set(tools.map((tool) => tool.name))
+ *   callTool              entry === undefined            -> INPUT_INVALID
+ *   callTool              known label, !allowed.has(...) -> CAPABILITY_DENIED
  * So proving, for each excluded kind, that `STDIO_TOOL_INDEX` DOES hold its generated label
  * while `allowed` does NOT pins the CAPABILITY_DENIED branch specifically and rules out the
  * INPUT_INVALID one. The HTTP arm in mcp-http-host.test.ts drives the identical refusal
- * (http-tool-bridge.ts:193/:195) all the way through a real request and asserts the code off
- * the wire, so the end-to-end proof exists once, on the entry that can carry it.
+ * (`refuseInvalidInput` / `CAPABILITY_DENIED` in http-tool-bridge.ts) all the way through a
+ * real request and asserts the code off the wire, so the end-to-end proof exists once, on the
+ * entry that can carry it. The typed-payload overlay is different: STDIO-3 below builds the
+ * server `composeStdioServer` builds and reads `tools/list` off it over the SDK's in-memory
+ * transport, so that wiring line is pinned on the transport the seats actually use.
  *
  * Every label is derived through the production helper `toolLabelForKind`, never hand-spelled:
  * a hand spelling that drifted from the generator would be an UNKNOWN label, would take the
@@ -198,7 +207,7 @@ const ENTRY = "stdio";
  * denominator can be pinned (epic rail 7) and drilled by deletion (step 7 D4). A sweep that
  * silently generates zero cases passes while testing nothing.
  *
- * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
+ * MCP_TRANSPORT_ENTRY_COUNT is 2 — `composeStdioServer` (stdio) and `createMcpHttpHost`
  * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
  * them, so the row's total case count is kinds x entries = 26 x 2 = 52, and the arm below
  * asserts both this file's share and that documented total.
@@ -245,7 +254,7 @@ const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string 
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
 
 describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
-  /** EXACTLY what stdio-server.ts:233-236 computes from `toolAllowlist`. */
+  /** EXACTLY what `createStdioMcpServer` computes into `allowed` from `toolAllowlist`. */
   function advertisedNames(): readonly string[] {
     return allowlistedToolEntries(wiredMcpToolKinds()).map((entry) => entry.tool.name);
   }
@@ -272,7 +281,7 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
       // Branch discriminator, both halves required. Generated => not INPUT_INVALID.
       expect({ generated: STDIO_TOOL_INDEX.get(label) !== undefined, kind })
         .toEqual({ generated: true, kind });
-      // Omitted from `allowed` => CAPABILITY_DENIED at stdio-server.ts:168.
+      // Omitted from `allowed` => CAPABILITY_DENIED in `callTool`.
       expect({ allowed: allowed.has(label), kind }).toEqual({ allowed: false, kind });
     }
     // A surviving control, so "advertises nothing" cannot pass this arm.
@@ -307,5 +316,51 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
 
     expect(server).toBeDefined();
     expect(advertisedNames().length).toBe(wiredMcpToolKinds().length);
+  });
+
+  it("STDIO-3 advertises review.submit round as a JSON integer on the REAL entry's tools/list", async () => {
+    // Not a server this arm assembles itself: `composeStdioServer` is what `main` runs, roster
+    // and overlay included, over a real provider on a throwaway store. Deleting the
+    // `payloadProperties: wiredMcpPayloadProperties()` line from mcp-main.ts reds THIS arm and
+    // nothing weaker, which is the pin the stdio entry lacked while only the HTTP entry had one.
+    const directory = mkdtempSync(join(tmpdir(), "moe-stdio-overlay-"));
+    const provider = createStoreDependencies({
+      credential: "stdio-overlay-credential",
+      principalId: "principal-stdio-overlay",
+      projectId: "proj-stdio-overlay",
+      storePath: join(directory, "store.db"),
+    });
+    const server = composeStdioServer({
+      credential: "stdio-overlay-credential",
+      onDispatchFault: () => { throw new Error("no tool call is dispatched by a listing"); },
+      provider,
+    });
+    const client = new Client({ name: "stdio-overlay", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    let tools: readonly { name: string; inputSchema: { properties?: Record<string, unknown> | undefined } }[];
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      tools = (await client.listTools()).tools;
+    } finally {
+      await client.close();
+      await server.close();
+      provider.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
+
+    // Read off the tool by name, never by substring: a typed member on the WRONG tool must fail.
+    const submit = tools.find((tool) => tool.name === toolLabelForKind("review.submit"));
+    expect(submit).toBeDefined();
+    const payload = submit!.inputSchema.properties!["payload"] as Record<string, unknown>;
+    expect(payload).toMatchObject({ additionalProperties: true, type: "object" });
+    expect(payload["properties"]).toEqual({ round: {
+      description: expect.stringContaining("JSON integer >= 1") as unknown as string,
+      maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+    } });
+    // Untyped kinds stay opaque: the overlay is per key, not a blanket.
+    const create = tools.find((tool) => tool.name === toolLabelForKind("goal.create"));
+    expect(Object.hasOwn(create!.inputSchema.properties!["payload"] as object, "properties")).toBe(false);
+    // The listing is the wired roster, so STDIO-1's exclusion holds on the real entry too.
+    expect(tools.length).toBe(wiredMcpToolKinds().length);
   });
 });

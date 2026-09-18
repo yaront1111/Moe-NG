@@ -4,15 +4,17 @@ import {
   createStdioMcpServer,
   readBootstrapCredential,
 } from "@moe/mcp";
+import type { McpDispatchFaultObserver } from "@moe/mcp";
 
 import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "./daemon-store-dependencies.js";
+import type { StoreDependencyProvider } from "./daemon-store-foundation-composition.js";
 import { createFoundationReceiptPublisher } from "./host/foundation-receipts.js";
 import type { FoundationPublishResult } from "./host/foundation-receipts.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
-import { wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
+import { wiredMcpPayloadProperties, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 import { createDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
 import { diagnosticProjectRoot } from "./diagnostics/diagnostic-project-root.js";
 import { mcpDispatchFaultReporter } from "./mcp-dispatch-fault-report.js";
@@ -113,24 +115,30 @@ export function createStdioHost(seam: StdioHostSeam): StdioHost {
   });
 }
 
-async function main(): Promise<void> {
-  const credential = readBootstrapCredential();
-  const config = readStoreDependencyEnv(process.env);
-  // This process is spawned by the agent's own CLI, so its stderr is the client's MCP log and
-  // nothing else; the file sink under the project's .moe/logs is where a tool call that threw
-  // becomes visible to the operator. The session credential is scrubbed with the rest.
-  const diagnostics = createDiagnosticRuntime({
-    env: process.env,
-    projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
-    secrets: [...credentialValues(process.env), credential],
-  });
-  const provider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
+/** What the stdio composition needs from the process: the seat's credential, the provider the
+ *  store env resolved to, and where a tool call that threw is reported. */
+export interface StdioServerComposition {
+  readonly credential: string;
+  readonly onDispatchFault: McpDispatchFaultObserver;
+  readonly provider: StoreDependencyProvider;
+}
+
+/**
+ * THE stdio server this entry ships, composed in one place so a test can build exactly what
+ * `main` builds and read `tools/list` off it: the wired roster, the typed-payload overlay and
+ * the dispatch port over both planes. `main` adds only what the process owns (env, diagnostics,
+ * the transport and the drain).
+ */
+export function composeStdioServer(
+  composition: StdioServerComposition,
+): ReturnType<typeof createStdioMcpServer> {
+  const { credential, onDispatchFault, provider } = composition;
   const subscriptions = provider.subscriptions?.();
   if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
 
-  const server = createStdioMcpServer({
+  return createStdioMcpServer({
     credential,
-    onDispatchFault: mcpDispatchFaultReporter(diagnostics.emitterFor("mcp-stdio")),
+    onDispatchFault,
     port: createMcpDispatchPort({
       affordances: provider.affordances?.(),
       // Both planes and the plane READER are composed once here; which plane a
@@ -147,10 +155,32 @@ async function main(): Promise<void> {
       subscriptions,
       v2Deps: provider.provideV2?.(),
     }),
+    // The JSON type of every integer payload key, so a seat reads it off the schema instead
+    // of off a refusal (review.submit round, 2026-09-18).
+    payloadProperties: wiredMcpPayloadProperties(),
     serverName: "moe-next",
     // Advertise only what this daemon wires: an agent never sees a tool that
     // could only ever refuse.
     toolAllowlist: wiredMcpToolKinds(),
+  });
+}
+
+async function main(): Promise<void> {
+  const credential = readBootstrapCredential();
+  const config = readStoreDependencyEnv(process.env);
+  // This process is spawned by the agent's own CLI, so its stderr is the client's MCP log and
+  // nothing else; the file sink under the project's .moe/logs is where a tool call that threw
+  // becomes visible to the operator. The session credential is scrubbed with the rest.
+  const diagnostics = createDiagnosticRuntime({
+    env: process.env,
+    projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
+    secrets: [...credentialValues(process.env), credential],
+  });
+  const provider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
+  const server = composeStdioServer({
+    credential,
+    onDispatchFault: mcpDispatchFaultReporter(diagnostics.emitterFor("mcp-stdio")),
+    provider,
   });
 
   const host = createStdioHost({

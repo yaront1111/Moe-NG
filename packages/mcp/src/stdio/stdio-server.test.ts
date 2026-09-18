@@ -137,6 +137,50 @@ describe("stdio server tool listing", () => {
     expect(listed.tools[0]?.inputSchema).toEqual(STDIO_TOOL_ENTRIES[0]?.tool.inputSchema);
   });
 
+  it("advertises a host-typed payload member on tools/list and keeps the payload open", async () => {
+    const server = createStdioMcpServer({
+      credential: CREDENTIAL,
+      payloadProperties: { "review.submit": { round: {
+        description: "The review round as a JSON integer >= 1.",
+        maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+      } } },
+      port: createRecordingPort(),
+      toolAllowlist: ["goal.create", "review.submit"],
+    });
+    const client = new Client({ name: "overlay-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const listed = await client.listTools();
+      const submit = listed.tools.find((tool) => tool.name === toolLabelForKind("review.submit"));
+      const payload = submit?.inputSchema.properties?.["payload"] as Record<string, unknown> | undefined;
+      expect(payload).toMatchObject({ additionalProperties: true, type: "object" });
+      expect(payload?.["properties"]).toEqual({ round: {
+        description: "The review round as a JSON integer >= 1.",
+        maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+      } });
+      // The other advertised kind is untouched by the overlay.
+      const create = listed.tools.find((tool) => tool.name === toolLabelForKind("goal.create"));
+      expect(Object.hasOwn(create?.inputSchema.properties?.["payload"] as object, "properties")).toBe(false);
+      // And the capability set is still the allowlist, so a typed tool is also a callable one.
+      expect(listed.tools.map((tool) => tool.name).sort()).toEqual(["goal_create", "review_submit"]);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("refuses at construction an overlay that types a kind outside the allowlist", () => {
+    expect(() => createStdioMcpServer({
+      credential: CREDENTIAL,
+      payloadProperties: { "review.submit": { round: {
+        description: "x", maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+      } } },
+      port: createRecordingPort(),
+      toolAllowlist: ["goal.create"],
+    })).toThrow("MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND: review.submit is not an advertised tool");
+  });
+
   it("never leaks the bootstrap credential through the listing", async () => {
     const listed = await withClient(createRecordingPort(), async (client) => client.listTools());
     const serialized = JSON.stringify(listed);

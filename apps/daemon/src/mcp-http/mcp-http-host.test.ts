@@ -613,14 +613,15 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
     });
   });
 
-  it("covers exactly the fourteen host behaviours this suite claims", async () => {
+  it("covers exactly the fifteen host behaviours this suite claims", async () => {
     // A hand-written count is only worth writing if it can FAIL. `expect(6).toBe(6)` cannot, so
     // the number is read back off this file's own source: delete or add a case and this reddens.
     // task-4c9b1d85 raised the count from 11 to 13 by adding the two transport-exclusion arms
-    // (HTTP-1, HTTP-2) below; the plane-following arm above raised it to 14. The counter is
-    // updated, never widened into a `toBeGreaterThan`.
+    // (HTTP-1, HTTP-2) below; the plane-following arm above raised it to 14; the typed-payload
+    // advertisement arm (HTTP-3) raised it to 15. The counter is updated, never widened into a
+    // `toBeGreaterThan`.
     const source = readFileSync(new URL(import.meta.url), "utf8");
-    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(15); // fourteen behaviours + this counter
+    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(16); // fifteen behaviours + this counter
     // And the host's public surface, hand-listed so a silently dropped method is visible.
     await withHarness(async ({ host }) => {
       expect(Object.keys(host).sort()).toEqual(["handleRequest", "start", "stop"]);
@@ -728,6 +729,39 @@ describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
       }
       // A surviving control, so an empty or failed listing cannot pass this arm.
       expect(body).toContain(`"${toolLabelForKind("goal.create")}"`);
+    });
+  });
+
+  it("HTTP-3 advertises review.submit round as a JSON integer on tools/list", async () => {
+    await withHarness(async ({ host }) => {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error("start refused");
+      const sessionId = await openSession(host, started.origin);
+
+      const response = await within("tools/list", host.handleRequest(mcpRequest(
+        started.origin,
+        {
+          body: JSON.stringify({ id: 201, jsonrpc: "2.0", method: "tools/list", params: {} }),
+          sessionId,
+        },
+      )));
+      const body = await within("tools/list body", response.text());
+      // The listing is one JSON-RPC frame (JSON response mode); read the tool off it rather than
+      // substring-matching, so a typed member on the WRONG tool cannot pass.
+      const frame = JSON.parse(body.startsWith("data:") ? body.split("\n").find((line) => line.startsWith("data:"))!.slice(5) : body) as {
+        result: { tools: readonly { name: string; inputSchema: { properties: Record<string, unknown> } }[] };
+      };
+      const submit = frame.result.tools.find((tool) => tool.name === toolLabelForKind("review.submit"));
+      expect(submit).toBeDefined();
+      const payload = submit!.inputSchema.properties["payload"] as Record<string, unknown>;
+      expect(payload).toMatchObject({ additionalProperties: true, type: "object" });
+      expect(payload["properties"]).toEqual({ round: {
+        description: expect.stringContaining("JSON integer >= 1") as unknown as string,
+        maximum: Number.MAX_SAFE_INTEGER, minimum: 1, type: "integer",
+      } });
+      // Untyped kinds stay opaque: the overlay is per key, not a blanket.
+      const create = frame.result.tools.find((tool) => tool.name === toolLabelForKind("goal.create"));
+      expect(Object.hasOwn(create!.inputSchema.properties["payload"] as object, "properties")).toBe(false);
     });
   });
 });

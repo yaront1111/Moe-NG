@@ -45,7 +45,15 @@ injected dispatch port.
 - **`payload` is an opaque `additionalProperties: true` object** — the daemon decoder is the
   only payload authority. `leaseAuthority`'s inner shape is described in prose inside the
   schema description rather than as properties, deliberately: MCP clients LOG tool
-  arguments, so naming the bearer field would put it in the log.
+  arguments, so naming the bearer field would put it in the log. The one exception is
+  host-declared: `payloadProperties` on both option bags (`withPayloadProperties`,
+  `stdio-tool-schemas.ts`) adds typed `properties` to the payload of the kinds it names while
+  the object stays open. The daemon derives it from its own key roster
+  (`wiredMcpPayloadProperties()`), so `review.submit.round` advertises
+  `{"type":"integer","minimum":1}` and a seat no longer learns the type from a refusal. An
+  overlay naming a kind the allowlist lacks throws `MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND` at
+  construction; the generated `STDIO_TOOL_ENTRIES` stay opaque, and
+  `stdio-schemas.test.ts` pins both.
 - **Envelope field ordering is the security control.** `buildCommandEnvelopeBytes`
   (`stdio-server.ts`) and `buildEnvelopeBytes` (`http-tool-bridge.ts`) spread `...args`
   FIRST and write `commandKind`, `requestDigest`, `schemaVersion`, `sessionCredential`

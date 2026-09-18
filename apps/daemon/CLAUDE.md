@@ -65,7 +65,25 @@ its own: a caller that injects no dependency provider is refused, never served a
   oracle against `servedMcpQueryKinds()`; importing one into the other would make the parity
   assertion tautological. `approval.decide` and `graph.approve` are excluded: the `humanReview`
   witness is minted on operator principal identity alone, which an MCP caller presents
-  identically.
+  identically. The same module derives `wiredMcpPayloadProperties()` from
+  `PAYLOAD_INTEGER_KEYS` (beside `PAYLOAD_KEYS` in `daemon-command-payload-keys.ts`), the
+  table of admitted keys that are JSON integers: both MCP entries pass it as
+  `payloadProperties`, so `review.submit.round` advertises `{"type":"integer","minimum":1}`
+  instead of being learned from a refusal. Advertisement only — the decoders still refuse `"4"`
+  by exact type — and `mcp-tool-allowlist.test.ts` pins the table as a hand-mirrored census
+  plus the rail that every typed key is on its kind's `PAYLOAD_KEYS` row. The stdio entry's
+  server is built by `composeStdioServer` (`mcp-main.ts`), the one composition `main` runs;
+  `mcp-main.test.ts` STDIO-3 lists tools off it over the SDK's in-memory transport, so deleting
+  either wiring line there reds a test instead of a seat.
+- **A refusal never grows with the caller's bytes.** `review-payload-shape.ts` echoes at most
+  `ECHOED_KEYS` (8) caller keys, each cut at `ECHOED_STRING_CHARS` (64), then `+N more`; string
+  values are cut at the same bound. `review-payload-shape.test.ts` holds a 50-keys-of-300-chars
+  detail under 1 KiB.
+- **A review shape refusal says which field.** `review-ledger.ts` `refuseInvalidPayload` puts
+  a `detail` on `ReviewRefused` (`round must be a JSON integer >= 1, got string "4"; send the
+  number unquoted`, built by `review-payload-shape.ts`), and `decisionOf` in
+  `daemon-command-dispatch.ts` carries any outcome's own `detail` to the wire ahead of the
+  registry-error fallback. Three seats bisected a bare `REVIEW_PAYLOAD_INVALID` on 2026-09-18.
 - **The work family owns a closed reason vocabulary.** Every refusal under `work/` is built by
   `workFailure` in `work-kernel.ts`; `work-ingress.ts` is bytes→envelope only (bounded JSON,
   then exact own-key check against `moe-work-request/1`) and may never learn routing, auth or

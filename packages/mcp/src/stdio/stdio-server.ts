@@ -20,8 +20,9 @@ import {
   STDIO_TOOL_ENTRIES,
   STDIO_TOOL_INDEX,
   allowlistedToolEntries,
+  withPayloadProperties,
 } from "./stdio-tool-schemas.js";
-import type { StdioToolEntry } from "./stdio-tool-schemas.js";
+import type { StdioPayloadPropertyOverlay, StdioToolEntry } from "./stdio-tool-schemas.js";
 import type { StdioDispatchPort } from "./stdio-dispatch-port.js";
 
 export const MOE_SESSION_CREDENTIAL_ENV = "MOE_SESSION_CREDENTIAL";
@@ -35,6 +36,12 @@ export interface StdioServerOptions {
    * else. Absent means the fault is contained silently, as it always was.
    */
   readonly onDispatchFault?: McpDispatchFaultObserver;
+  /**
+   * Payload members the host has typed, per kind (`withPayloadProperties`). Read from the
+   * daemon's own key roster, so what is advertised is what the decoder enforces; a kind not on
+   * the roster this server advertises refuses at construction.
+   */
+  readonly payloadProperties?: StdioPayloadPropertyOverlay;
   readonly port: StdioDispatchPort;
   readonly serverName?: string;
   /**
@@ -215,9 +222,15 @@ export function createStdioMcpServer(options: StdioServerOptions): Server {
   );
   // Filtered ONCE, at construction: an unknown or empty allowlist refuses here rather than at the
   // first ListTools, so a bad roster never reaches a client; the same value is the capability set.
-  const tools = options.toolAllowlist === undefined
+  // The overlay is applied AFTER the allowlist, so a typed member for a kind this server does not
+  // advertise refuses here too (MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND) rather than being dropped.
+  const tools = options.toolAllowlist === undefined && options.payloadProperties === undefined
     ? LISTED_TOOLS
-    : listedFrom(allowlistedToolEntries(options.toolAllowlist));
+    : listedFrom(withPayloadProperties(
+      options.toolAllowlist === undefined
+        ? STDIO_TOOL_ENTRIES : allowlistedToolEntries(options.toolAllowlist),
+      options.payloadProperties,
+    ));
   const allowed: ReadonlySet<string> = new Set(tools.map((tool) => tool.name));
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools }));

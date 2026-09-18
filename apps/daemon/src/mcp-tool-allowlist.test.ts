@@ -9,7 +9,9 @@ import type { HttpDispatchPort } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import {
+  CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_INTEGER_KEYS, PAYLOAD_KEYS,
+} from "./daemon-command-vocabulary.js";
 import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { readDeployReceipt } from "./deployment/deploy-ledger.js";
@@ -21,7 +23,7 @@ import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.
 import { createProductContractReadPort } from "./product-contract/product-contract-read-port.js";
 import { createMcpHttpSessionPort } from "./mcp-http/mcp-http-session-port.js";
 import {
-  MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds,
+  MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpPayloadProperties, wiredMcpToolKinds,
 } from "./mcp-tool-allowlist.js";
 
 /**
@@ -768,5 +770,83 @@ describe("task-749e585a the probe-interval kind is unreachable over MCP", () => 
     expect(wiredMcpToolKinds()).not.toContain(PROBE_INTERVAL);
     // Nothing durable was written by either call.
     expect(decisionsIn().length).toBe(before.length);
+  });
+});
+
+/**
+ * The typed payload members both MCP entries advertise (round-as-string refusals, 2026-09-18).
+ *
+ * CENSUS-STYLE, hand-mirrored: the expected roster below is a LITERAL transcribed from
+ * `PAYLOAD_INTEGER_KEYS`, never derived from it, so a key added to production appears on one
+ * side only and reds this arm — re-measure and move the pin, never widen the matcher. The
+ * second arm is the parity rail: every typed key must be a key the kind ADMITS, so the
+ * advertised type and the enforced one cannot name different fields.
+ */
+describe("wiredMcpPayloadProperties typed integer members", () => {
+  /** Hand-written from the table. `graph.supersede` is typed there but operator-only here. */
+  const EXPECTED_TYPED_KEYS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+    "graph.release_preparation": ["expectedPreparationVersion", "generation"],
+    "review.submit": ["round"],
+  });
+
+  it("advertises exactly the transcribed kinds and keys, in table order", () => {
+    const overlay = wiredMcpPayloadProperties();
+    const measured = Object.fromEntries(
+      Object.entries(overlay).map(([kind, members]) => [kind, Object.keys(members)]),
+    );
+    expect(measured).toEqual(EXPECTED_TYPED_KEYS);
+    expect(Object.keys(overlay)).toHaveLength(2);
+    expect(Object.keys(PAYLOAD_INTEGER_KEYS))
+      .toEqual(["graph.release_preparation", "graph.supersede", "review.submit"]);
+  });
+
+  it("types only keys the kind admits, and only kinds the roster advertises", () => {
+    const wired = wiredMcpToolKinds();
+    for (const [kind, members] of Object.entries(wiredMcpPayloadProperties())) {
+      expect({ advertised: wired.includes(kind), kind }).toEqual({ advertised: true, kind });
+      const admitted = PAYLOAD_KEYS[kind as keyof typeof PAYLOAD_KEYS];
+      for (const key of Object.keys(members)) {
+        expect({ admitted: admitted.includes(key), key, kind }).toEqual({ admitted: true, key, kind });
+      }
+    }
+    // The table itself may only name admitted keys too, even for kinds the roster withholds.
+    for (const [kind, members] of Object.entries(PAYLOAD_INTEGER_KEYS)) {
+      const admitted = PAYLOAD_KEYS[kind as keyof typeof PAYLOAD_KEYS];
+      expect({ kind, ok: Object.keys(members).every((key) => admitted.includes(key)) }).toEqual({ kind, ok: true });
+    }
+    // The operator-only kind is withheld from the overlay, not silently advertised.
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("graph.supersede");
+    expect(Object.hasOwn(wiredMcpPayloadProperties(), "graph.supersede")).toBe(false);
+  });
+
+  it("types review.submit round as the JSON integer the decoder enforces, and says so", () => {
+    const round = wiredMcpPayloadProperties()["review.submit"]?.["round"];
+    expect(round).toEqual({
+      description: expect.stringContaining("JSON integer >= 1") as unknown as string,
+      maximum: Number.MAX_SAFE_INTEGER,
+      minimum: 1,
+      type: "integer",
+    });
+    // The live defect, named in the description the seat reads BEFORE it sends.
+    expect(round?.description).toContain('never the quoted string "2"');
+    expect(round?.description).toContain("REVIEW_PAYLOAD_INVALID");
+  });
+
+  it("builds the real HTTP adapter with the real overlay: construction is the subset proof", async () => {
+    // Construction refuses MCP_PAYLOAD_OVERLAY_UNKNOWN_KIND if the overlay names a kind the
+    // roster lacks, so a green construction proves overlay ⊆ roster on the production inputs.
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port as HttpDispatchPort,
+      payloadProperties: wiredMcpPayloadProperties(),
+      sessionPort: createMcpHttpSessionPort(provider.provide().authenticator),
+      toolAllowlist: wiredMcpToolKinds(),
+    });
+    await adapter.close();
+  });
+
+  it("is deterministic and frozen", () => {
+    expect(wiredMcpPayloadProperties()).toBe(wiredMcpPayloadProperties());
+    expect(Object.isFrozen(wiredMcpPayloadProperties())).toBe(true);
+    expect(Object.isFrozen(wiredMcpPayloadProperties()["review.submit"])).toBe(true);
   });
 });

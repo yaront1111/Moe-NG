@@ -365,7 +365,8 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
 /** The exact per-kind ingress allow-lists, SPLIT OUT to `./daemon-command-payload-keys.js` when
  *  this module crossed the 400-line hard cap, and re-exported here so no consumer import path
  *  changes and this stays the one module a reader opens for a mapping (task-a2409cba). */
-export { PAYLOAD_KEYS } from "./daemon-command-payload-keys.js";
+export { PAYLOAD_INTEGER_KEYS, PAYLOAD_KEYS } from "./daemon-command-payload-keys.js";
+export type { PayloadIntegerKey } from "./daemon-command-payload-keys.js";
 
 export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
   CAPABILITIES.ADMIN, CAPABILITIES.GOAL, CAPABILITIES.PLANNING,

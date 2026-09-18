@@ -34,6 +34,25 @@ it("gives a coding worker an executable incomplete finding that records rejectio
   expect(world.runs()).toBe(0);
 });
 
+/**
+ * The live cause (UnAI 2026-09-18): the example rendered round as the placeholder STRING
+ * "<expectedVersion + 1>", three seats copied the quoting, and each was refused
+ * REVIEW_PAYLOAD_INVALID. The example must be sendable JSON with a NUMERIC round, and the
+ * sentence that names the round must name its JSON type.
+ */
+it("shows round as a JSON number in the example and says it is never a quoted string", () => {
+  const lines = reviewSubmissionMissionLines("node:v1:example");
+  const roundLine = lines.find((line) => line.startsWith("The review_submit payload must have exactly"));
+  expect(roundLine).toBeDefined();
+  const example = JSON.parse(roundLine!.slice(roundLine!.indexOf("{"), roundLine!.indexOf("}") + 1)) as JsonObject;
+  expect(example).toEqual({ subjectRef: "node:v1:example", round: 1, findings: [], packageItems: [] });
+  expect(typeof example["round"]).toBe("number");
+  expect(roundLine).toContain("round is a JSON integer equal to expectedVersion + 1");
+  expect(roundLine).toContain('never the quoted string "2"');
+  expect(roundLine).toContain("refused REVIEW_PAYLOAD_INVALID");
+  expect(roundLine).not.toContain("<expectedVersion + 1>");
+});
+
 it("teaches the decoder vocabularies and preserves finding identity across rounds", () => {
   const text = reviewSubmissionMissionLines("node:v1:example").join(" ");
   expect(text).toContain(`severity: ${REVIEW_FINDING_SEVERITIES.join(", ")}`);

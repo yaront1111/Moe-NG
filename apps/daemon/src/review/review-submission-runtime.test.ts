@@ -313,7 +313,16 @@ describe("runtime review submission without development payload hints", () => {
     const w = world(true, async (workspace) => { captures += 1; return createVerifiedWorkspacePort().capture(workspace); });
     await w.claim();
     expect(await w.dispatch("review.submit", { subjectRef: w.nodeRef, packageItems: [], round: 1 }))
-      .toMatchObject({ ok: false, refusal: { code: "REVIEW_PAYLOAD_INVALID" } });
+      .toMatchObject({ ok: false, refusal: {
+        code: "REVIEW_PAYLOAD_INVALID", detail: "findings must be a JSON array, got absent", layer: "DAEMON_INGRESS",
+      } });
+    // The live shape (UnAI 2026-09-18): round as a quoted string. The refusal on the wire says so.
+    expect(await w.dispatch("review.submit", { subjectRef: w.nodeRef, findings: [], packageItems: [], round: "1" },
+      0, "cmd-review-round-as-string"))
+      .toMatchObject({ ok: false, refusal: {
+        code: "REVIEW_PAYLOAD_INVALID",
+        detail: 'round must be a JSON integer >= 1, got string "1"; send the number unquoted',
+      } });
     expect(captures).toBe(0);
   });
 

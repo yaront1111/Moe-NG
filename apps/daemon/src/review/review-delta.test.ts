@@ -159,6 +159,79 @@ describe("delta approval classifies every affected node (DoD 3)", () => {
   });
 });
 
+/**
+ * The words on a REVIEW_PAYLOAD_INVALID from this handler: the typed-ref chain answers first, in
+ * the order it was written (nodes, subjectRef, successorPlanRef), and parseNodes names the index
+ * and member. Each case pins the exact sentence so a nulled detail cannot fall back to the
+ * generic "payload shape invalid" and stay green.
+ */
+const REPLAN_SHAPE_DETAIL_CASES = Object.freeze([
+  Object.freeze({
+    detail: "nodes must be a JSON array, got absent",
+    label: "nodes absent",
+    payload: { subjectRef: SUBJECT_REF, successorPlanRef: "plan-revision-2" },
+  }),
+  Object.freeze({
+    detail: 'nodes must be a JSON array, got string "node-1"',
+    label: "nodes as a string",
+    payload: replanPayload([], { nodes: "node-1" }),
+  }),
+  Object.freeze({
+    detail: "subjectRef must be a non-empty JSON string, got number 7",
+    label: "subjectRef as a number",
+    payload: replanPayload([deltaNode("node-1")], { subjectRef: 7 }),
+  }),
+  Object.freeze({
+    detail: 'successorPlanRef must be a non-empty JSON string, got string ""',
+    label: "successorPlanRef empty",
+    payload: replanPayload([deltaNode("node-1")], { successorPlanRef: "" }),
+  }),
+  Object.freeze({
+    // nodes first: when two of the handler's refs are wrong the FIRST in writing order is
+    // named. (subjectRef is not in this race: `runReviewCommand` refuses it before any handler,
+    // since it needs it to read the ledger — the subjectRef case above pins that sentence.)
+    detail: "nodes must be a JSON array, got null",
+    label: "nodes null beside a bad successorPlanRef",
+    payload: replanPayload([], { nodes: null, successorPlanRef: 7 }),
+  }),
+  Object.freeze({
+    detail: 'nodes[1] must be a JSON object {nodeRef}, got string "node-2"',
+    label: "a node that is not an object",
+    payload: replanPayload([deltaNode("node-1"), "node-2"] as unknown as Record<string, unknown>[]),
+  }),
+  Object.freeze({
+    detail: "nodes[0].nodeRef must be a non-empty JSON string, got number 3",
+    label: "a nodeRef that is not a string",
+    payload: replanPayload([{ nodeRef: 3 }]),
+  }),
+  Object.freeze({
+    detail: 'nodes[1].nodeRef must be a non-empty JSON string, got string ""',
+    label: "an empty nodeRef after a clean node",
+    payload: replanPayload([deltaNode("node-1"), { nodeRef: "" }]),
+  }),
+]);
+
+describe("a delta approval shape refusal names the field, the type and what arrived", () => {
+  it.each(REPLAN_SHAPE_DETAIL_CASES)("says $label: $detail", ({ detail, payload }) => {
+    const store = openStore();
+    driveRounds(store, 1);
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("qualification.replan", 1, payload, "cmd-replan-shape"));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect({ code: outcome.code, detail: outcome.detail, refusedBy: outcome.refusedBy })
+      .toEqual({ code: "REVIEW_PAYLOAD_INVALID", detail, refusedBy: "DAEMON_INGRESS" });
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("generated every case, so the sweep is not vacuous", () => {
+    expect(REPLAN_SHAPE_DETAIL_CASES).toHaveLength(8);
+    expect(new Set(REPLAN_SHAPE_DETAIL_CASES.map((entry) => entry.detail)).size).toBe(8);
+  });
+});
+
 describe("a delta approval that cannot classify commits nothing", () => {
   it("refuses an empty node set rather than recording an empty classification", () => {
     const store = openStore();
