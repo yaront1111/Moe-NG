@@ -76,6 +76,7 @@ import type { AsyncCommandHandler } from "./http/http-async-contract.js";
 import { foundationSyncHandler } from "./daemon-foundation-command.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
 import type { CommandStoreFaultObserver } from "./daemon-command-decision-port.js";
+import type { FoundationCaptureFaultObserver } from "./work/foundation-capture-fault-report.js";
 import {
   runAnswerClarificationEdge, runAskClarificationEdge,
   runContinuationEdge, runEventResumeEdge, runProposeRevisionEdge,
@@ -132,6 +133,8 @@ export interface DaemonCommandPortOptions {
   /** Which durable cutover authority must admit every registry entry. */
   readonly authorityPlane?: "V1" | "V2";
   readonly clock: () => string;
+  /** Host-side disclosure of a Foundation capture producer that THREW; absent means silent. */
+  readonly onCaptureFault?: FoundationCaptureFaultObserver;
   /** Host-side disclosure of a commit that failed on the durable store; absent means silent. */
   readonly onStoreFault?: CommandStoreFaultObserver;
   readonly cutoverActivation?: CutoverActivationWiring;
@@ -341,6 +344,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     "project.activate": activateEntry,
     ...createAsyncCommandEntries({
       operatorPrincipalId, projectId, store,
+      ...(options.onCaptureFault === undefined ? {} : { onCaptureFault: options.onCaptureFault }),
       ...(options.releaseDecide === undefined ? {} : { releaseDecide: options.releaseDecide }),
       ...(options.previewSupervisor === undefined
         ? {} : { previewSupervisor: options.previewSupervisor }),

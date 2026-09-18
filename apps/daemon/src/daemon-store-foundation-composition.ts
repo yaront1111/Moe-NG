@@ -3,8 +3,6 @@ import { createAncestryFactory, createProductionReleaseSeams } from "./release/r
 import { RELEASE_AUTO_DECIDE_JOB_ID, RELEASE_BASE_ENV_KEY, registerReleaseAutoDecide }
   from "./release/release-auto-decide.js";
 import type { ReleasePublisher } from "./release/release-decide-service.js";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { DiagnosticEmitter } from "@moe/contracts";
 import { DurableStoreError } from "@moe/store";
@@ -13,6 +11,8 @@ import {
   acknowledge, reseatToSnapshot,
 } from "@moe/store/subscriptions/subscription-writes.js";
 import { commandStoreFaultReporter } from "./command-store-fault-report.js";
+import { nodeSpecLoader } from "./node-spec-loader.js";
+import { foundationCaptureFaultReporter } from "./work/foundation-capture-fault-report.js";
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DeploymentDeploySeams } from "./daemon-command-async-entries.js";
 import type { ReleasePrPort } from "./release/release-pr-port.js";
@@ -30,8 +30,6 @@ import {
 } from "./identity/session-handshake.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
-import { COMPILED_EXECUTION_REF_PREFIX } from "./orchestrator/compiled-execution-ref.js";
-import { isRepositoryWorkflowRef } from "./repository/repository-workflow-ref.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -169,35 +167,6 @@ export interface StoreDependencyConfig {
   readonly workspaceCatalogPath?: string | undefined;
 }
 
-function nodeSpecLoader(directory: string): () => readonly NodeSpec[] {
-  return () => {
-    let entries: string[];
-    try {
-      entries = readdirSync(directory).filter((name) => name.endsWith(".json"));
-    } catch {
-      return [];
-    }
-    const specs: NodeSpec[] = [];
-    for (const name of entries.sort()) {
-      try {
-        const parsed = JSON.parse(readFileSync(join(directory, name), "utf8")) as {
-          nodeRef?: unknown; title?: unknown;
-        };
-        if (typeof parsed.nodeRef === "string" && parsed.nodeRef.length > 0
-          && !parsed.nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX)
-          && !isRepositoryWorkflowRef(parsed.nodeRef)
-          && typeof parsed.title === "string") {
-          // A file-authored spec carries no sealed build order — this format has
-          // no dependency field to read — so it declares none rather than
-          // inventing one. Only compiled-graph nodes can gate on dependencies.
-          specs.push({ dependsOn: [], nodeRef: parsed.nodeRef, title: parsed.title });
-        }
-      } catch { /* skipped, never invented */ }
-    }
-    return specs;
-  };
-}
-
 export type StoreDependencyProvider = DaemonDependencyProvider & {
   releasePublisher(): ReleasePublisher;
   close(): void;
@@ -284,8 +253,10 @@ export function createStoreDependencies(
     projectId: config.projectId, store,
   });
   const { decisions, registry } = createDaemonCommandPorts({
-    ...(config.diagnostics === undefined
-      ? {} : { onStoreFault: commandStoreFaultReporter(config.diagnostics) }),
+    ...(config.diagnostics === undefined ? {} : {
+      onCaptureFault: foundationCaptureFaultReporter(config.diagnostics),
+      onStoreFault: commandStoreFaultReporter(config.diagnostics),
+    }),
     ...(repositoryWorkspace === null || repositoryWorkspace === "" ? {} : {
       // Deferred until dispatch; the shared authenticator is constructed below before ports
       // are exposed. Capture rechecks the same durable identity after its asynchronous work.
@@ -431,9 +402,13 @@ export function createStoreDependencies(
     testCommand: null,
     workspace: null,
   });
+  // An unreadable directory or a malformed spec is still answered as absence, and now said.
+  const diagnostics = config.diagnostics;
   const specNodes = config.nodeSpecsDir === undefined
     ? (): readonly NodeSpec[] => []
-    : nodeSpecLoader(config.nodeSpecsDir);
+    : nodeSpecLoader(config.nodeSpecsDir, diagnostics === undefined
+      ? undefined
+      : (line) => { diagnostics.warn("NODE_SPECS", { fields: { line } }); });
   const mergedNodes = (): readonly NodeSpec[] => {
     const specs = specNodes();
     const listed = new Set(specs.map((spec) => spec.nodeRef));

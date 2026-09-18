@@ -22,6 +22,7 @@ import { createFoundationCaptureLifecycle } from "./work/foundation-capture-life
 import { unconfiguredFoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import type { FoundationCaptureFaultObserver } from "./work/foundation-capture-fault-report.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import { LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY } from "./work/launch-runtime-section.js";
 import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
@@ -138,6 +139,8 @@ export interface AsyncCommandEntryOptions {
    *  cannot launch a provider with no durably recorded context manifest. */
   readonly foundationContextSeal?: FoundationContextSealPort;
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
+  /** Host-side disclosure of a Foundation capture producer that THREW; absent means silent. */
+  readonly onCaptureFault?: FoundationCaptureFaultObserver;
   /** The configured operator principal, forwarded to the kinds that fence themselves on it. */
   readonly operatorPrincipalId: string;
   readonly projectId: string;
@@ -219,6 +222,7 @@ export function createAsyncCommandEntries(
     // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
     // is a DIFFERENT thing from an absent key, and only the absent key means "unconfigured".
     ...(runtimePinRoot === undefined ? {} : { pinRoot: runtimePinRoot }),
+    ...(options.onCaptureFault === undefined ? {} : { onCaptureFault: options.onCaptureFault }),
     store,
   });
   const verifyFoundationAttempt = createFoundationVerificationHandler({
