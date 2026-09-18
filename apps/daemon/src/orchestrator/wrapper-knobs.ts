@@ -76,6 +76,31 @@ function integer(env: Readonly<Record<string, string | undefined>>, name: string
   return parsed;
 }
 
+/** `20m`, `2h`, `90s`: the shortest whole unit that says it exactly, else minutes with a decimal. */
+function span(ms: number): string {
+  if (ms % 3_600_000 === 0) return `${String(ms / 3_600_000)}h`;
+  if (ms % 60_000 === 0) return `${String(ms / 60_000)}m`;
+  if (ms % 1_000 === 0) return `${String(ms / 1_000)}s`;
+  return `${String(ms)}ms`;
+}
+
+/**
+ * The seat budget as the wrapper will enforce it, stated once at startup beside the verifier
+ * database line, so the FIRST lines of wrapper.log prove the policy the process actually holds:
+ * the silence kill, the absolute cap, the claim horizon and how often the wrapper renews it.
+ * Measured 2026-09-18: a seat cap the owner set at the launcher, a claim TTL nobody renewed and
+ * a silence rule that did not exist yet were each discovered from a lost attempt an hour later.
+ * Says "(defaults: …)" when no MOE_AGENT_* knob reached this process, the way the verifier
+ * line does for MOE_VERIFIER_DB_*, because a knob dropped by the broker roster looks exactly
+ * like a knob never set.
+ */
+export function describeSeatBudget(knobs: WrapperKnobs, env: NodeJS.ProcessEnv, renewEveryMs: number): string {
+  const stated = ["MOE_AGENT_SILENCE_MS", "MOE_AGENT_TIMEOUT_MS"].some((key) => env[key] !== undefined);
+  return `[wrapper] seat budget: silence=${span(knobs.agentSilenceMs)} cap=${span(knobs.agentTimeoutMs)}`
+    + ` claim=${span(knobs.claimTtlMs)} renew=${span(renewEveryMs)} session=${span(knobs.sessionTtlMs)}`
+    + (stated ? "" : " (defaults: no MOE_AGENT_* reached this process)");
+}
+
 export function readWrapperKnobs(
   env: Readonly<Record<string, string | undefined>>,
 ): WrapperKnobs {

@@ -43,7 +43,8 @@ import {
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
 import { createSeatStartRecorder } from "./seat-start-recorder.js";
-import { readWrapperKnobs } from "./wrapper-knobs.js";
+import { describeSeatBudget, readWrapperKnobs } from "./wrapper-knobs.js";
+import { renewalCadenceMs } from "./agent-claim-renewal.js";
 import { readGovernancePolicySettings } from "../review/governance-policy-settings.js";
 import { createGovernorSeat, createProviderGovernorRunner } from "./governor-seat.js";
 import { createGovernancePass } from "./wrapper-governance-pass.js";
@@ -243,6 +244,9 @@ async function main(): Promise<void> {
     process.stdout.write(`[verifier] database: image=${shape.image} urlVariables=${shape.urlVariables.join(",")}`
       + ` tls=${String(shape.tls)} caVariable=${shape.caPathVariable ?? "-"}`
       + `${verifierDatabase === undefined ? " (defaults: no MOE_VERIFIER_DB_* reached this process)" : ""}\n`);
+    // The seat budget the same way: silence kill, absolute cap, claim horizon and renewal cadence,
+    // so a restart proves in its first lines which policy this process holds.
+    process.stdout.write(`${describeSeatBudget(knobs, process.env, renewalCadenceMs(knobs.claimTtlMs))}\n`);
     verifierRunner = createVerifierDatabaseRunner({
       ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
       ...(verifierDatabase === undefined ? {} : { database: verifierDatabase }),
@@ -313,6 +317,9 @@ async function main(): Promise<void> {
       claimTtlMs: knobs.claimTtlMs,
       clock: () => Date.now(),
       deps,
+      // The claim keepalive's lines belong in wrapper.log beside the seat quiet and kill lines,
+      // not on stderr: nothing tees console.error into the wrapper log (review of e15af58a).
+      log: (line) => { process.stdout.write(`${line}\n`); },
       maxAgents: knobs.maxAgents,
       maxItemAttempts: knobs.maxItemAttempts,
       mintSecret: () => randomUUID().replaceAll("-", ""),

@@ -110,11 +110,6 @@ its own: a caller that injects no dependency provider is refused, never served a
   any kill. `CPU_ACTIVITY_FLOOR_MS` is unmeasured against a no-tool-child model turn; its
   comment holds the calibration recipe. Any new `MOE_*` knob the wrapper reads must also join
   `PROJECT_STACK_ENVIRONMENT_KEYS` in `packages/runner` or the Windows broker drops it silently.
-  `MOE_WRAPPER_INTERVAL_MS` / `MOE_WRAPPER_MAX_AGENTS` / `MOE_AGENT_TIMEOUT_MS` with
-  `WRAPPER_ENV_INVALID`, because `setTimeout(fn, NaN)` becomes a tight loop against SQLite and
-  `active < NaN` staffs nothing while the log says idle. `sessionTtlMs` is *derived*
-  (`max(claimTtl, agentTimeout) + 60 s`) so the bearer outlives the child's own release.
-  `MOE_NODE_TREES=1` and `MOE_WRAPPER_ONCE=1` are the two `=== "1"` flags.
 - **The lease follows liveness.** `claimTtlMs` (30 min, not a knob) is the reap horizon for a
   DEAD child only: while the child lives, `orchestrator/agent-claim-renewal.ts` renews the claim
   under the seat's own bearer every `claimTtlMs / 3`, started by `agent-wrapper-staffing.ts` the

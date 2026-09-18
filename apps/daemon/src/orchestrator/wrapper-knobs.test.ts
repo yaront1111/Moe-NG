@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WRAPPER_ENV_INVALID, readWrapperKnobs } from "./wrapper-knobs.js";
+import { WRAPPER_ENV_INVALID, describeSeatBudget, readWrapperKnobs } from "./wrapper-knobs.js";
 
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 const TWENTY_MINUTES_MS = 20 * 60 * 1000;
@@ -18,6 +18,21 @@ const DEFAULTS = Object.freeze({
   once: false,
   // Derived from the cap, so a two-hour seat's bearer still outlives its exit-path release.
   sessionTtlMs: TWO_HOURS_MS + 60_000,
+});
+
+describe("describeSeatBudget", () => {
+  it("states every horizon the wrapper enforces, and says when none of it was configured", () => {
+    const line = describeSeatBudget(readWrapperKnobs({}), {}, 10 * 60 * 1000);
+    expect(line).toBe("[wrapper] seat budget: silence=20m cap=2h claim=30m renew=10m session=121m"
+      + " (defaults: no MOE_AGENT_* reached this process)");
+  });
+
+  it("drops the defaults marker once a MOE_AGENT_* knob reached the process, and prints the stated value", () => {
+    const env = { MOE_AGENT_SILENCE_MS: "90000" };
+    const line = describeSeatBudget(readWrapperKnobs(env), env, 600_000);
+    expect(line).toContain("silence=90s");
+    expect(line).not.toContain("defaults");
+  });
 });
 
 describe("readWrapperKnobs", () => {

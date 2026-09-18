@@ -26,6 +26,11 @@ export const EXPIRES_AT_SHAPE =
 /** Bounded, JSON-quoted: a caller value must not amplify or smuggle bytes into the detail. */
 const VALUE_PREVIEW_CHARS = 48;
 
+/** A caller's work item id as a detail names it: JSON-quoted and bounded, never raw (review of e15af58a). */
+function itemWords(workItemId: string): string {
+  return JSON.stringify(workItemId.length > VALUE_PREVIEW_CHARS ? `${workItemId.slice(0, VALUE_PREVIEW_CHARS)}…` : workItemId);
+}
+
 function describeValue(value: unknown): string {
   if (typeof value === "string") {
     const shown = value.length > VALUE_PREVIEW_CHARS
@@ -66,23 +71,23 @@ export function claimNotFoundDetail(
   kind: WorkClaimCommandKind, workItemId: string,
   existing: WorkClaimRecord | undefined, decidedAt: string,
 ): string {
-  if (existing === undefined) return `${kind}: "${workItemId}" has never been claimed`;
+  if (existing === undefined) return `${kind}: ${itemWords(workItemId)} has never been claimed`;
   if (existing.status === "RELEASED") {
-    return `${kind}: the claim on "${workItemId}" was already released (last held by ${existing.claimedBy})`;
+    return `${kind}: the claim on ${itemWords(workItemId)} was already released (last held by ${existing.claimedBy})`;
   }
-  return `${kind}: the claim on "${workItemId}" held by ${existing.claimedBy} expired at `
+  return `${kind}: the claim on ${itemWords(workItemId)} held by ${existing.claimedBy} expired at `
     + `${existing.expiresAt}, before the daemon's ${decidedAt}; a work.claim at expectedVersion = `
     + "the item's claimAggregateVersion takes it again";
 }
 
 export function claimHeldDetail(workItemId: string, held: WorkClaimRecord): string {
-  return `work.claim: "${workItemId}" is held by ${held.claimedBy} until ${held.expiresAt}`;
+  return `work.claim: ${itemWords(workItemId)} is held by ${held.claimedBy} until ${held.expiresAt}`;
 }
 
 export function notClaimantDetail(
   kind: WorkClaimCommandKind, workItemId: string, held: WorkClaimRecord, principalId: string,
 ): string {
-  const base = `${kind}: "${workItemId}" is held by ${held.claimedBy} until ${held.expiresAt}, not by ${principalId}`;
+  const base = `${kind}: ${itemWords(workItemId)} is held by ${held.claimedBy} until ${held.expiresAt}, not by ${principalId}`;
   return kind === "work.release"
     ? `${base}; the holder's seat is live (or its liveness unreadable), so only the holder releases it`
     : `${base}; only the holder renews its own claim`;

@@ -57,8 +57,9 @@ export interface AgentWrapperConfig {
   readonly deps: CommandAdapterDeps;
   /**
    * One line of wrapper diagnostics: a refused or skipped claim renewal is said here, once per
-   * code per seat (`[wrapper] <item> claim renew refused <code>: <detail>`). Absent = stderr,
-   * which the wrapper bin's diagnostic runtime already tees into `<project>/.moe/logs`.
+   * code per seat (`[wrapper] <item> claim renew refused <code>: <detail>`). Absent = stderr.
+   * The wrapper bin passes its wrapper.log sink (stdout) so these lines sit beside the seat
+   * quiet and kill lines; nothing tees stderr into that log.
    */
   readonly log?: ((line: string) => void) | undefined;
   readonly maxAgents: number;
