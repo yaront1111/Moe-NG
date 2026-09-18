@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,9 +11,14 @@ import { describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { FOUNDATION_RECEIPT_SCHEMA_VERSION } from "./host/foundation-receipts.js";
-import { composeStdioServer, createStdioHost } from "./mcp-main.js";
+import {
+  MCP_OPERATOR_AUDIT_UNAVAILABLE, composeStdioServer, createStdioHost, disclosingDelegatedActs, runMcpMain,
+} from "./mcp-main.js";
 import type { StdioHostSeam } from "./mcp-main.js";
-import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
+import {
+  MCP_DELEGABLE_OPERATOR_KINDS, MCP_EXCLUDED_COMMAND_KINDS, MCP_NEVER_DELEGATED_KINDS,
+  operatorDelegateMcpToolKinds, wiredMcpToolKinds,
+} from "./mcp-tool-allowlist.js";
 
 /**
  * The stdio host's lifecycle half: the drain that `mcp-main` had none of.
@@ -362,5 +367,105 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     expect(Object.hasOwn(create!.inputSchema.properties!["payload"] as object, "properties")).toBe(false);
     // The listing is the wired roster, so STDIO-1's exclusion holds on the real entry too.
     expect(tools.length).toBe(wiredMcpToolKinds().length);
+  });
+
+  it.each([{ MOE_LOG: "off" }, { MOE_LOG_LEVEL: "error" }])(
+    "STDIO-6 refuses --as-operator while %o would drop the record, before it opens a store", async (quiet) => {
+      const directory = mkdtempSync(join(tmpdir(), "moe-stdio-quiet-"));
+      const storePath = join(directory, "store.db");
+      const env: Record<string, string> = {
+        MOE_DAEMON_CREDENTIAL: "stdio-quiet-credential", MOE_PROJECT_ID: "proj-stdio-quiet",
+        MOE_SESSION_CREDENTIAL: "stdio-quiet-credential", MOE_STORE_PATH: storePath, ...quiet,
+      };
+      const before = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+      Object.assign(process.env, env);
+      try {
+        await expect(runMcpMain({ asOperator: true, projectRoot: directory }))
+          .rejects.toThrow(MCP_OPERATOR_AUDIT_UNAVAILABLE);
+        // Refused BEFORE the store was opened: nothing to close, nothing left behind.
+        expect(existsSync(storePath)).toBe(false);
+      } finally {
+        for (const [key, value] of Object.entries(before)) {
+          if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+        rmSync(directory, { force: true, recursive: true });
+      }
+    });
+
+  it("STDIO-5 writes the delegated-act record BEFORE the dispatch, and refuses to serve without one", async () => {
+    const order: string[] = [];
+    const bytes = new TextEncoder().encode(JSON.stringify({
+      commandId: "cmd-order", commandKind: "escalation.decide", targetAggregateId: "node:v1:x",
+    }));
+    const port = disclosingDelegatedActs(() => { order.push("record"); }, {
+      authenticate: () => ({ ok: true as const }),
+      dispatchCommandBytes: async () => { order.push("dispatch"); return new Uint8Array(); },
+      dispatchQueryBytes: () => new Uint8Array(),
+    } as unknown as Parameters<typeof disclosingDelegatedActs>[1]);
+    await port.dispatchCommandBytes(bytes);
+    expect(order).toEqual(["record", "dispatch"]);
+
+    // The roster is never served without its record: no observer, no server.
+    const directory = mkdtempSync(join(tmpdir(), "moe-stdio-noaudit-"));
+    const provider = createStoreDependencies({
+      credential: "stdio-noaudit-credential", principalId: "principal-stdio-noaudit",
+      projectId: "proj-stdio-noaudit", storePath: join(directory, "store.db"),
+    });
+    try {
+      expect(() => composeStdioServer({
+        asOperator: true, credential: "stdio-noaudit-credential", onDispatchFault: () => undefined, provider,
+      })).toThrow(/delegated-act observer/u);
+    } finally {
+      provider.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("STDIO-4 serves the delegate roster ONLY under asOperator, and discloses each delegated act before dispatch", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-stdio-delegate-"));
+    const provider = createStoreDependencies({
+      credential: "stdio-delegate-credential",
+      principalId: "principal-stdio-delegate",
+      projectId: "proj-stdio-delegate",
+      storePath: join(directory, "store.db"),
+    });
+    const acts: unknown[] = [];
+    const server = composeStdioServer({
+      asOperator: true,
+      credential: "stdio-delegate-credential",
+      onDelegatedAct: (act) => { acts.push(act); },
+      onDispatchFault: () => undefined,
+      provider,
+    });
+    const client = new Client({ name: "stdio-delegate", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const call = (kind: string, commandId: string): Promise<unknown> => client.callTool({
+      arguments: {
+        commandId, correlationId: "stdio-delegate", expectedVersion: 0, payload: {},
+        targetAggregateId: "node:v1:nothing",
+      },
+      name: toolLabelForKind(kind),
+    }).catch((error: unknown) => error);
+    let names: readonly string[];
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      names = (await client.listTools()).tools.map((tool) => tool.name);
+      // Whatever the daemon answers to these empty payloads, the record is written FIRST.
+      await call("escalation.decide", "cmd-delegated");
+      await call("goal.create", "cmd-ordinary");
+    } finally {
+      await client.close();
+      await server.close();
+      provider.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
+
+    expect([...names].sort()).toEqual(operatorDelegateMcpToolKinds().map(toolLabelForKind).sort());
+    for (const kind of MCP_DELEGABLE_OPERATOR_KINDS) expect(names).toContain(toolLabelForKind(kind));
+    for (const kind of MCP_NEVER_DELEGATED_KINDS) expect(names).not.toContain(toolLabelForKind(kind));
+    // One record, for the operator kind alone: an ordinary command is nobody's delegation.
+    expect(acts).toEqual([
+      { commandId: "cmd-delegated", kind: "escalation.decide", targetAggregateId: "node:v1:nothing" },
+    ]);
   });
 });

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,7 +23,9 @@ import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.
 import { createProductContractReadPort } from "./product-contract/product-contract-read-port.js";
 import { createMcpHttpSessionPort } from "./mcp-http/mcp-http-session-port.js";
 import {
-  MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpPayloadProperties, wiredMcpToolKinds,
+  MCP_DELEGABLE_OPERATOR_KINDS, MCP_EXCLUDED_COMMAND_KINDS, MCP_NEVER_DELEGATED_KINDS, MCP_SERVED_QUERY_KINDS,
+  operatorDelegateMcpPayloadProperties, operatorDelegateMcpToolKinds,
+  wiredMcpPayloadProperties, wiredMcpToolKinds,
 } from "./mcp-tool-allowlist.js";
 
 /**
@@ -283,6 +285,47 @@ describe("wiredMcpToolKinds command half", () => {
   it("is deterministic and frozen", () => {
     expect(wiredMcpToolKinds()).toEqual(wiredMcpToolKinds());
     expect(Object.isFrozen(wiredMcpToolKinds())).toBe(true);
+  });
+});
+
+describe("the owner's delegate roster (moe mcp --as-operator)", () => {
+  it("partitions the exclusion EXACTLY with the never-delegated list, so a new operator kind reds until classified", () => {
+    const classified = [...MCP_DELEGABLE_OPERATOR_KINDS, ...MCP_NEVER_DELEGATED_KINDS].sort();
+    expect(classified).toEqual([...MCP_EXCLUDED_COMMAND_KINDS].sort());
+    expect(new Set(classified).size).toBe(classified.length);
+    expect({
+      delegable: MCP_DELEGABLE_OPERATOR_KINDS.length, never: MCP_NEVER_DELEGATED_KINDS.length,
+    }).toEqual({ delegable: 15, never: 14 });
+    expect(Object.isFrozen(MCP_DELEGABLE_OPERATOR_KINDS)).toBe(true);
+    expect(Object.isFrozen(MCP_NEVER_DELEGATED_KINDS)).toBe(true);
+  });
+
+  it("is the seats' roster plus the delegable kinds and nothing else", () => {
+    const delegate = operatorDelegateMcpToolKinds();
+    expect([...delegate].sort()).toEqual([...wiredMcpToolKinds(), ...MCP_DELEGABLE_OPERATOR_KINDS].sort());
+    for (const kind of MCP_NEVER_DELEGATED_KINDS) expect(delegate).not.toContain(kind);
+    expect(Object.isFrozen(delegate)).toBe(true);
+    // Every delegated kind has a generated tool, so construction cannot refuse the roster.
+    expect(() => allowlistedToolEntries(delegate)).not.toThrow();
+    // `graph.supersede` is typed in the table and only THIS roster carries it.
+    expect(Object.keys(operatorDelegateMcpPayloadProperties())).toContain("graph.supersede");
+    expect(Object.keys(wiredMcpPayloadProperties())).not.toContain("graph.supersede");
+  });
+
+  it("never reaches a seat: ONLY the owner's CLI path names the delegate roster", () => {
+    // The roster is the ONLY transport fence for these kinds, and both rosters are
+    // `readonly string[]`, so no type stops an identifier swap. Closed world, measured from
+    // disk: every production module under src/ that names the delegation at all. A seat-side
+    // module that starts to (the mcp-http host, the wrapper, the spawner) reds here by name.
+    const naming = (readdirSync(import.meta.dirname, { recursive: true }) as string[])
+      .map((file) => file.replaceAll("\\", "/"))
+      .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+      .filter((file) => /operatorDelegate|asOperator|MCP_DELEGABLE/u
+        .test(readFileSync(join(import.meta.dirname, file), "utf8")))
+      .sort();
+    expect(naming).toEqual([
+      "cli/moe-cli-argv.ts", "cli/moe-cli-mcp.ts", "mcp-main.ts", "mcp-tool-allowlist.ts",
+    ]);
   });
 });
 

@@ -17,6 +17,14 @@ export interface ReviewSubmissionWiring {
   /** The SAME authenticator as ingress, so operator and session revocation rules cannot drift. */
   readonly authenticate: Authenticator["authenticate"];
   readonly workspace: string;
+  /**
+   * Where THIS node's work lives, when that is not `workspace`. Under MOE_NODE_TREES a node codes
+   * in a working tree of its own, and the verifier captures that tree: evidence captured from the
+   * shared checkout instead can never equal it, so every such node looped
+   * VERIFIER_WORKSPACE_CHANGED forever (measured on UnAI 2026-09-19: submitted root was the
+   * project, branch master; the verifier's was the node's tree and branch).
+   */
+  readonly workspaceOf?: (nodeRef: string) => string;
   readonly capture?: VerifiedWorkspacePort["capture"];
 }
 
@@ -74,7 +82,7 @@ export function createReviewSubmissionCommandEntry(options: {
       if (admission.ok || admission.code !== "PACKAGE_BINDING_INCOMPLETE") return decisionOf(admission);
       if (envelope.payload["subjectRef"] !== envelope.targetAggregateId) return refuse("REVIEW_SUBMISSION_SUBJECT_MISMATCH");
       const before = sourceFor(input);
-      const observed = await capture(wiring.workspace);
+      const observed = await capture(wiring.workspaceOf?.(envelope.targetAggregateId) ?? wiring.workspace);
       options.assertAuthority();
       if (!observed.ok) return refuse(observed.code);
       // No await follows these checks. Approval, claim (including version), and review version

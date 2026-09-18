@@ -63,7 +63,9 @@ export function runApprovalIntentEdge(context: CommandEdgeContext): DurableDecis
     // The witness admits the configured operator AND a durable HUMAN principal the
     // operator approved at pairing (ruling comment-18dc557c) — identity-alone trust
     // that holds only while the kind is MCP-excluded, same contract as
-    // `approval.decide`. The registry fence upstream already refused everyone else.
+    // `approval.decide` and with the same one exception: the owner's own
+    // `moe mcp --as-operator` session (see the registry's note on it). The registry fence
+    // upstream already refused everyone else.
     humanReview: principal.principalId === operatorPrincipalId
       || isDurableHumanPrincipal(store, principal.principalId)
       ? humanReviewWitness(principal.principalId, envelope.commandId)

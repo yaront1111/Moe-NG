@@ -18,7 +18,7 @@ import { verifierReceiptId } from "../review/verifier-receipt-contracts.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 import { sameVerifiedWorkspace } from "../repository/verified-workspace-contracts.js";
-import { checkVerifiedWorkspace, runBoundVerification } from "./node-verifier-workspace.js";
+import { SUBMISSION_CHANGED, checkVerifiedWorkspace, runBoundVerification } from "./node-verifier-workspace.js";
 import { recordNodeVerifierFailure } from "./node-verifier-failure-record.js";
 
 /**
@@ -169,6 +169,21 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
       const verified = await runBoundVerification(brief, config.runTest, config.verifiedWorkspace,
         submitted.status === "PRESENT" ? submitted.binding : undefined);
       if (!verified.ok) {
+        // A submission whose evidence no longer matches the node's workspace can never verify:
+        // before this it was refused again on every pass, forever, with nothing staffed (UnAI
+        // 2026-09-19). Nothing was tested, so it is recorded as a failed round that says exactly
+        // that, and the node goes back to a seat to submit again.
+        if (verified.code === "VERIFIER_WORKSPACE_CHANGED" && verified.detail === SUBMISSION_CHANGED
+          && submitted.status === "PRESENT") {
+          const output = `VERIFIER_WORKSPACE_CHANGED: nothing was tested. The review was submitted from `
+            + `${submitted.binding.root} (${submitted.binding.branchRef}) but this node's work is in ${brief.workspace}, `
+            + "or files changed after the submission. Change nothing else and submit the review again.";
+          const sent = recordNodeVerifierFailure(config, nodeRef, latest, { byteCount: Buffer.byteLength(output),
+            exitCode: null, output, sha256: createHash("sha256").update(output).digest("hex") }, authority);
+          reports.push({ detail: sent.ok ? verified.detail : sent.code, nodeRef,
+            outcome: sent.ok ? "FAILED_ROUND_RECORDED" : sent.code });
+          continue;
+        }
         reports.push({ detail: verified.detail, nodeRef, outcome: verified.code });
         continue;
       }
