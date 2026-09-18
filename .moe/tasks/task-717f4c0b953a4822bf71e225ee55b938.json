@@ -1,0 +1,40 @@
+{
+  "id": "task-717f4c0b953a4822bf71e225ee55b938",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: a QA session's wrapper checkpoint commits another live row's new untracked file under its own Moe-Task",
+  "description": "Found by worker-69773bc1 on task-adeabf1f8c9e4e2c8b778491f9e20b71 (parent of this filing). Repro/evidence on moe/work-2026-09-18: worker-69773bc1 created apps/daemon/src/repository/publish-resolve-contracts.test.ts at 23:44:08 +0300; 29s later checkpoint 96db094d (23:44:37, \"wip(task-8bc14883...) [status=DONE role=qa]\", trailers Moe-Task: task-8bc14883ca524cb99c0dfe667d1399cd, Moe-Session: qa-84420029@2026-09-18T12:43:01Z, Moe-Kind: checkpoint) committed that file plus .grok/config.toml; 68f251be (4s later, same trailers) committed apps/daemon/src/orchestrator/agent-wrapper-main.test.ts. A QA session on a DONE row wrote none of these, so the wrapper's measured attribution is claiming peers' new paths in the shared checkout; the owning row's task.commits then lacks its own bytes.",
+  "definitionOfDone": [
+    "A wrapper checkpoint for a session attributes only paths that session wrote (tool-write harvest) or declared; a new untracked path created by another session during its lifetime is left out, proven by an arm that creates a peer path mid-session and asserts the checkpoint commit does not contain it.",
+    "A QA-role session's checkpoint commits no product source path it did not write."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 1024.4,
+  "comments": [
+    {
+      "id": "comment-f55245ab619941c0922cfa8878aec22b",
+      "author": "worker-69773bc1",
+      "content": "CORRECTION to the description's last sentence (worker-69773bc1, filer): the ONLY path MEASURED as another session's file is apps/daemon/src/repository/publish-resolve-contracts.test.ts — I wrote it for task-adeabf1f (committed blob d02386b4 = `git hash-object` of my file). Whether qa-84420029 itself wrote .grok/config.toml (96db094d) or apps/daemon/src/orchestrator/agent-wrapper-main.test.ts (68f251be) is NOT measured; treat those two as leads only. The planner should start from the wrapper's attribution tiers for session qa-84420029's checkpoint (why a path created by worker-69773bc1 29s earlier entered Moe-Paths: 7).",
+      "timestamp": "2026-09-18T20:50:05.674Z"
+    },
+    {
+      "id": "comment-7fb8847ee67b465e83fad9ed2c02deaf",
+      "author": "governor-f32726f9",
+      "content": "GOVERNOR EVIDENCE, possibly the same class, for the planner to measure (not proven the same cause). At 2026-09-18T20:06:32Z the shared checkout's reflog shows `commit (amend)`: a353c62a became 50d7a0a9. a353c62a was a qa checkpoint (Moe-Task task-8bc14883, Moe-Session qa-84420029@12:43Z, Moe-Paths: 7). The amend swept 20 extra files: all 9 in-flight paths of task-78dea88b, all 7 of task-f3182818, apps/daemon/CLAUDE.md and 3 untracked .claude/agents/*.md. The trailer was left at Moe-Paths: 7. The commit was then merged with origin (20fa6949) and pushed. Both rows' own `commits` came out empty. Check whether any wrapper or lander code path runs `git commit --amend` (grep apps/daemon/src and scripts/ for \"amend\"). If one does, it is a second sweep vector beside the one this row names.",
+      "timestamp": "2026-09-18T20:50:07.304Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T20:49:58.544Z",
+  "updatedAt": "2026-09-18T20:50:07.304Z"
+}

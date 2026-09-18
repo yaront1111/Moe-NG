@@ -90,7 +90,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:10:28.284Z",
-  "updatedAt": "2026-09-18T20:40:45.928Z",
+  "updatedAt": "2026-09-18T20:41:22.169Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T19:22:29.745Z",
     "plannedStepCount": 4,
@@ -160,6 +160,21 @@
       "treeId": "665057499d6e0e9943e52c07050a2924a132b299",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "55eea0342738d3dafb23390c8e3b15d64a6d9f1a",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T20:30:23Z",
+      "paths": [
+        ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T20:41:22.169Z",
+      "treeId": "e4d834ae2d00355b95353a66586f0647ec138634",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -170,14 +185,15 @@
     "apps/control-room/src/v2/goals/approve-plan.test.tsx",
     "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
     "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
-    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json",
+    ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-07e6de2a@2026-09-18T20:13:50Z",
-    "at": "2026-09-18T20:27:45.392Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-18T20:30:23Z",
+    "at": "2026-09-18T20:41:22.169Z"
   },
   "declaredFiles": [
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
