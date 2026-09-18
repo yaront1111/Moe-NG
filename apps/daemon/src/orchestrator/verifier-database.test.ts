@@ -49,6 +49,8 @@ class DockerHost {
   migrationOutput = "### MIGRATION 1700000000001-broken (UP) ###\nError!";
   reflectPasswordAsFilename = false;
   recipeCode = 0;
+  /** What the recipe prints before its exit, after the URL line every recipe prints. */
+  recipeOutput = "";
   hangRecipe = false;
   migrated = false;
   nextPid = 100;
@@ -85,7 +87,7 @@ class DockerHost {
         this.recipeEnvironments.push(options.env ?? {});
         this.recipeStarted();
         if (this.hangRecipe) return;
-        child.stdout.write(`${options.env?.DATABASE_URL ?? "no database"}\n`);
+        child.stdout.write(`${options.env?.DATABASE_URL ?? "no database"}\n${this.recipeOutput}`);
         child.emit("close", this.recipeCode);
       }
     });
@@ -164,6 +166,49 @@ describe("verifier disposable database", () => {
     } finally { await runner.close(); }
   });
 
+  it("carries a failed recipe's scrubbed verdict lines in the verdict, and never a delivered value", async () => {
+    // UnAI 2026-09-18, node 11: the seat's own run was green, the verifier's exited 1, and the
+    // finding said {"migrations":"PASSED","recipeExitCode":1} and nothing else.
+    const host = new DockerHost();
+    host.recipeCode = 1;
+    host.recipeOutput = [
+      " ✓ packages/api/src/evidence.test.ts (12 tests) 340ms",
+      "   × publishes the current registry release 41ms",
+      " FAIL  packages/api/src/ops.test.ts > ops > publishes the current registry release",
+      "AssertionError: expected 1 to be 2 // Object.is equality",
+      "Error: connection string was $DATABASE_URL",
+      " Test Files  1 failed | 52 passed (53)",
+      "      Tests  1 failed | 501 passed (502)",
+    ].join("\n");
+    const runner = host.runner();
+    try {
+      const capture = await runner(workspace());
+      expect(capture.exitCode).toBe(1);
+      const verdict = JSON.parse(capture.output) as { migrations: string; recipeExitCode: number; recipeVerdictLines: string[] };
+      expect(verdict.migrations).toBe("PASSED");
+      expect(verdict.recipeVerdictLines).toEqual([
+        "× publishes the current registry release 41ms",
+        "FAIL  packages/api/src/ops.test.ts > ops > publishes the current registry release",
+        "AssertionError: expected 1 to be 2 // Object.is equality",
+        "Test Files  1 failed | 52 passed (53)",
+        "Tests  1 failed | 501 passed (502)",
+      ]);
+      const url = host.recipeEnvironments[0]!.DATABASE_URL!;
+      expect(capture.output.includes(url)).toBe(false);
+      expect(capture.output.includes(new URL(url).password)).toBe(false);
+      expect(capture.output.includes("DATABASE_URL")).toBe(false);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+  it("keeps the verdict value-free for a PASSING recipe: no lines at all", async () => {
+    const host = new DockerHost();
+    host.recipeOutput = " × a stray marker in a passing run\n";
+    const runner = host.runner();
+    try {
+      const capture = await runner(workspace());
+      expect(JSON.parse(capture.output)).toEqual({ migrations: "PASSED", recipeExitCode: 0 });
+    } finally { await runner.close(); }
+  });
   it("removes the database after forced recipe kill and closes idempotently", async () => {
     const host = new DockerHost();
     host.hangRecipe = true;
