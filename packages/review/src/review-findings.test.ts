@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { REVIEW_ESCALATION_ROUND_LIMIT } from "./review-contract.js";
 import type { ReviewFinding, ReviewLineage } from "./review-contract.js";
 import { EMPTY_REVIEW_LINEAGE, recordReviewRound } from "./review-findings.js";
 import type { ReviewRoundInput } from "./review-findings.js";
@@ -227,6 +228,73 @@ describe("round admission did not replace the append-only guard", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
     expect(result.code).toBe("FINDING_LINEAGE_DIGEST_MISMATCH");
+  });
+});
+
+/** Informational: no criterion and no required check fails because of it. */
+const MINOR_NOTE: ReviewFinding = {
+  detail: "editing migrations 0001/0002 changed their recorded digest; a persistent database must be re-provisioned",
+  ruleId: "rule:applied-migration-digest-changed",
+  severity: "MINOR",
+  subject: { kind: "CRITERION", locator: "criterion:migrations" },
+};
+
+/**
+ * A MINOR finding is informational: recorded for reviewers, but it neither reroutes a round nor
+ * counts it as unsuccessful — only CRITICAL/MAJOR block. Measured on UnAI 2026-09-18: one honest
+ * MINOR note per round made every round "unsuccessful", the escalation limit was reached, and
+ * past it the operator continuation could rescue only a round with NO own findings, so the
+ * verifier never ran until the operator ordered the worker to suppress true information.
+ * DRILL: collapsing `blocking` back to `own` in review-findings.ts reds the first, third and
+ * fourth arms here, and leaves the repeated-CRITICAL REJECT_PLAN arm below green.
+ */
+describe("informational MINOR findings do not block or count against the escalation limit", () => {
+  it("a MINOR-only round routes ACCEPT, is not unsuccessful, and still records the finding", () => {
+    const first = recorded(EMPTY_REVIEW_LINEAGE, 1, [MINOR_NOTE]);
+
+    expect(first.routing.route).toBe("ACCEPT");
+    expect(first.routing.layer).toBe("FINDINGS");
+    expect(first.lineage.unsuccessfulRounds).toBe(0);
+    expect(first.lineage.highestRound).toBe(1);
+    // Recorded, not dropped: the note stays visible in the lineage for reviewers.
+    expect(first.lineage.records).toHaveLength(1);
+    expect(first.lineage.records[0]?.finding).toEqual(MINOR_NOTE);
+  });
+
+  it("a MINOR note beside a CRITICAL finding still rejects and counts the round", () => {
+    const first = recorded(EMPTY_REVIEW_LINEAGE, 1, [MINOR_NOTE, MISSING_ORACLE]);
+
+    expect(first.routing.route).toBe("REJECT_IMPLEMENTATION");
+    expect(first.lineage.unsuccessfulRounds).toBe(1);
+    expect(first.lineage.records).toHaveLength(2);
+  });
+
+  it("a repeated MINOR note never routes REJECT_PLAN; only a repeated blocking finding does", () => {
+    const first = recorded(EMPTY_REVIEW_LINEAGE, 1, [MINOR_NOTE]);
+    const second = recorded(first.lineage, 2, [MINOR_NOTE]);
+
+    expect(second.routing.route).toBe("ACCEPT");
+    expect(second.routing.repeatFingerprints).toEqual([]);
+    expect(second.lineage.unsuccessfulRounds).toBe(0);
+  });
+
+  it("past the escalation limit a MINOR-only round is gated exactly like a clean one", () => {
+    // Three blocking rounds reach the limit; the third itself escalates.
+    const one = recorded(EMPTY_REVIEW_LINEAGE, 1, [MISSING_ORACLE]);
+    const two = recorded(one.lineage, 2, [OTHER_SUBJECT]);
+    const three = recorded(two.lineage, 3, [MISSING_ORACLE]);
+    expect(three.lineage.unsuccessfulRounds).toBe(REVIEW_ESCALATION_ROUND_LIMIT);
+    expect(three.routing.route).toBe("ESCALATE");
+
+    // Without an operator continuation both a MINOR-only round and a fully clean round stay
+    // behind the same gate — and neither adds to the counter. With a continuation, both are
+    // rescued by the same `clean && continuation` clause the daemon's escalation path exercises.
+    const minorOnly = recorded(three.lineage, 4, [MINOR_NOTE]);
+    expect(minorOnly.routing.route).toBe("ESCALATE");
+    expect(minorOnly.lineage.unsuccessfulRounds).toBe(REVIEW_ESCALATION_ROUND_LIMIT);
+    const clean = recorded(minorOnly.lineage, 5, []);
+    expect(clean.routing.route).toBe("ESCALATE");
+    expect(clean.lineage.unsuccessfulRounds).toBe(REVIEW_ESCALATION_ROUND_LIMIT);
   });
 });
 
