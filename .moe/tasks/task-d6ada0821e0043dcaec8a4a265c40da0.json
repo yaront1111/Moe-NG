@@ -1,0 +1,107 @@
+{
+  "id": "task-d6ada0821e0043dcaec8a4a265c40da0",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: agent-wrapper-main.test.ts \"wrapper deps\" positive control is red: its anchor no longer exists in agent-wrapper-main.ts",
+  "description": "Found by task-78dea88bfd1f491b9a0b0c3f9c0519fe's full daemon suite at b38a6e5b (worker-952c612b). It is inherited from main, not caused by that row.\nREPRO: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts` gives \"Tests 1 failed | 51 passed (52)\". The failing arm is \"rejects a binary that pins the wrapper deps to /1 (positive control)\", at :402 `expect(pinned).not.toBe(normalised)`. The it.each anchor `\"      deps,\\n      maxAgents: knobs.maxAgents,\"` is absent from agent-wrapper-main.ts, and from origin/main 3630e0c1 too (main's e6d5e260 reshaped that call). Both files are byte-identical to origin/main.\nFIX: re-measure the current wrapper-deps call site and move that anchor pair (from/to) to it. Per the census rule, move the pin; never widen the matcher or delete the arm. Every full `pnpm --filter @moe/daemon test` is red on this one test until then.",
+  "definitionOfDone": [
+    "The 'wrapper deps' it.each row in apps/daemon/src/orchestrator/agent-wrapper-main.test.ts anchors on a string present in agent-wrapper-main.ts, and the arm passes: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts` prints 'Tests 52 passed (52)' (or the measured count), 0 failed.",
+    "The arm still bites: deleting the deps wiring line it pins makes assertPlaneWiring throw (the positive control's own second expect), shown by an in-memory drill."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE AND CONFIRM RED. No writes in this step. Measured at planning on 2026-09-18, HEAD b38a6e5b:\n\n1. The failure. `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts` prints `Tests 1 failed | 51 passed (52)`.\n- The failing arm is \"rejects a binary that pins the wrapper deps to /1 (positive control)\". It fails at its first expect, `expect(pinned).not.toBe(normalised)`.\n- The it.each `from` string at test :395, `\"      deps,\\n      maxAgents: knobs.maxAgents,\"`, occurs 0 times in agent-wrapper-main.ts.\n- Cause: main's e6d5e260 put a comment and a `log:` key between `deps,` and `maxAgents` in the createAgentWrapper({...}) call. That call's keys are alphabetised: claimTtlMs, clock, deps, log, maxAgents.\n\n2. The new anchor. At agent-wrapper-main.ts :320-321 the call site now reads `      clock: () => Date.now(),` followed by `      deps,`.\n- In the CRLF-normalised source, `\"      clock: () => Date.now(),\\n      deps,\"` occurs exactly ONCE.\n- :321 is the file's ONLY line matching /^\\s+deps,$/. It lies inside the createAgentWrapper({ slice (:293-352) that wrapperCall() reads.\n\nWhat to do:\n- Re-run the file and both counts (a node one-liner over the normalised source), and quote the results.\n- If the call site has moved again, re-measure and pin the new neighbour. Never widen the matcher and never delete the arm (census rule).\n- Run `git status --porcelain` on the test file. Record any peer dirt, and never sweep it.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURED at HEAD 55eea034 (moe/work-2026-09-18); both files clean vs HEAD (`git status --porcelain` empty) and byte-identical to origin/main 3630e0c1 (`git diff origin/main --stat` empty). RED: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts` EXIT=1, `Test Files 1 failed (1)`, `Tests 1 failed | 51 passed (52)`; failing arm \"rejects a binary that pins the wrapper deps to /1 (positive control)\" at `expect(pinned).not.toBe(normalised)` (AssertionError ... not to be ... Object.is). COUNTS (node over CRLF-normalised source; source has no CRLF): old anchor `\"      deps,\\n      maxAgents: knobs.maxAgents,\"` = 0; new anchor `\"      clock: () => Date.now(),\\n      deps,\"` = 1; `to` string `\"      clock: () => Date.now(),\\n      deps: v1Deps,\"` = 0 pre-replace. /^\\s+deps,$/ lines: only :321. `clock: () => Date.now()` occurs at :320 (6-space, wrapper call), :345 (8-space, providerPause, followed by `log:` so cannot match), :449 (single-line reclaim, no newline). createAgentWrapper({ slice :293-352; anchor offset lies inside it. Call site unmoved since planning. No writes; no peer dirt on either path.",
+      "startedAt": "2026-09-18T20:43:43.314Z",
+      "completedAt": "2026-09-18T20:44:26.313Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "MOVE THE PIN (GREEN), editing apps/daemon/src/orchestrator/agent-wrapper-main.test.ts only.\n\nIn the it.each table at :392-398, change ONLY the \"wrapper deps\" row to:\n`[\"wrapper deps\", \"      clock: () => Date.now(),\\n      deps,\", \"      clock: () => Date.now(),\\n      deps: v1Deps,\"]`\n\n- Keep two lines of context, as the old row had.\n- The neighbour is now the key BEFORE deps (clock), because the key after it changed.\n- Every other row, assertPlaneWiring, and the helpers stay byte-identical.\n- Use the Edit tool: a bash heredoc collapses the `\\n` escapes.\n\nRe-run the file. Expect `Tests 52 passed (52)` and `Test Files 1 passed (1)`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts"
+      ],
+      "note": "PIN MOVED via Edit tool. `git diff HEAD` = exactly one line changed (:395): `[\"wrapper deps\", \"      deps,\\n      maxAgents: knobs.maxAgents,\", \"      deps: v1Deps,\\n      maxAgents: knobs.maxAgents,\"]` -> `[\"wrapper deps\", \"      clock: () => Date.now(),\\n      deps,\", \"      clock: () => Date.now(),\\n      deps: v1Deps,\"]`. `cat -A` shows the `\\n` escapes as literal backslash-n text (not collapsed), no ^M. Every other it.each row, assertPlaneWiring, wrapperCall/sliceOf/hostCall helpers byte-identical. GREEN: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts` EXIT=0, `Test Files  1 passed (1)`, `Tests  52 passed (52)`.",
+      "startedAt": "2026-09-18T20:44:29.768Z",
+      "completedAt": "2026-09-18T20:44:56.245Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES, DRILL AND ADVERSARIAL REVIEW. Read each leg's OUTPUT, not its exit code.\n\n(A) DoD 1. Quote `Tests 52 passed (52)` (or the measured count) and 0 failed from the step-2 run.\n\n(B) DoD 2: an in-memory drill that touches no production byte.\n- SOURCE is read with readFileSync, so transforming agent-wrapper-main.ts cannot reach it. Transform the TEST FILE instead.\n- Follow Serena memory qa-drill-via-temp-vitest-config-keyed-by-env-var. Write apps/daemon/drill-task-d6ada082.config.ts, outside src, using the Write tool rather than a heredoc.\n- Give it an `enforce: \"pre\"` plugin that acts on the id ending in /orchestrator/agent-wrapper-main.test.ts. Normalise backslashes before matching the id.\n- The plugin replaces the file's single `assertPlaneWiring(SOURCE);` with `assertPlaneWiring(SOURCE.replaceAll(\"\\r\\n\", \"\\n\").replace(\"      clock: () => Date.now(),\\n      deps,\\n\", \"      clock: () => Date.now(),\\n\"));`, which DELETES the deps wiring line.\n- The plugin THROWS if that anchor is absent.\n- Run `DRILL=D1 pnpm --filter @moe/daemon exec vitest run --root . --config drill-task-d6ada082.config.ts src/orchestrator/agent-wrapper-main.test.ts`.\n- \"builds one plane-following deps value from both shipped planes and hands it to every dispatcher\" must go RED at the wrapperCall `toMatch(/^\\s+deps,\\r?$/mu)` expect. Quote that failing line and the count line.\n- Delete the config, and prove it is gone: `ls` must answer No such file.\n\n(C) Run `pnpm --filter @moe/daemon typecheck`; it must exit 0. The daemon tsconfig includes src/**/*.ts, so this compiles the test file.\n\n(D) REGRESSION: run `pnpm --filter @moe/daemon test` and quote its count lines. This arm must no longer appear among the failures.\n- Acquire the full-suite-gate lease first, and prove its holder is live. At planning it was held by a crashed seat, worker-e0435164. Route a stale lease to #governors; never force it.\n- Re-run any other failing file alone before attributing it.\n- Attribute failures under the path-attributed baseline rail. This row owns only the test file.\n\n(E) ADVERSARIAL REVIEW, in the completion record:\n- Is the new `from` unique in the source, and does `String.replace` hit the wrapper call rather than another `deps,`?\n- If a key is later inserted between clock and deps, does the arm fail LOUDLY at its first expect rather than pass vacuously? It does: today's red is exactly that failure.\n- task-eca3780d (WORKING) edits agent-wrapper-main.ts only at :435-436, outside :293-352. State that it does not move this pin.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "(A) DoD1: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts` EXIT=0, `Test Files 1 passed (1)`, `Tests 52 passed (52)`, 0 failed; re-run fresh at HEAD be1f2c6d (test sha256 01f9d33f..., prod b0100fbf..., same bytes as drilled).\n(B) DoD2 in-memory drills, config apps/daemon/drill-task-d6ada082.config.ts (Write tool, enforce:\"pre\", id backslash-normalised, anchors must occur EXACTLY once or the plugin throws DRILL_ANCHOR_*_COUNT_n; each run logs `[drill] Dn transforming .../agent-wrapper-main.test.ts` = generation proof). D0 control (no transform): `Tests 52 passed (52)`. D1 (plan's mutant: main arm's `assertPlaneWiring(SOURCE);` -> source with the `      deps,` wiring line after `clock: () => Date.now(),` DELETED; prod anchor measured once via readFileSync): EXIT=1, `Tests 1 failed | 51 passed (52)`, the ONLY red = \"builds one plane-following deps value from both shipped planes and hands it to every dispatcher\", `AssertionError: expected 'createAgentWrapper({\\n      nodeMissi…' to match /^\\s+deps,\\r?$/mu` at :378 `expect(wrapperCall(source)).toMatch(/^\\s+deps,\\r?$/mu)`. D2 (extra: delete that wrapper clause from assertPlaneWiring): EXIT=1, `Tests 1 failed | 51 passed (52)`, the ONLY red = \"rejects a binary that pins the wrapper deps to /1 (positive control)\" at its SECOND expect `expect(() => assertPlaneWiring(pinned)).toThrow()` (\"expected [Function] to throw an error\"); its first expect passed, so the new `from` matched and the pin is caught by the wrapper clause alone. Config deleted (`rm` exit 0, separate call); `ls apps/daemon/drill-task-d6ada082.config.ts` -> No such file or directory; sha256 of both files identical before/after drills.\n(C) `pnpm --filter @moe/daemon typecheck`: `$ tsc --project tsconfig.json` ran, EXIT=0, 0 `error TS`.\n(D) full-suite-gate lease: FREE at claim (planning's stale holder gone), acquired 20:47:29Z, released right after the run. `pnpm --filter @moe/daemon test` at HEAD 68f251be: `Test Files 764 passed (764)`, `Tests 12548 passed | 21 skipped (12569)`, EXIT=0, zero FAIL lines — the wrapper-deps arm no longer red; path-attributed delta empty. Root lane / control-room not run: this row changes no file they include (daemon package only).\n(E) ADVERSARIAL: new `from` count 1 in normalised source, offset inside the createAgentWrapper({ slice :293-352; other `clock: () => Date.now()` sites are :345 (8-space, followed by `log:`) and :449 (single-line reclaim), neither can match a 2-line anchor ending `\\n      deps,`; D2 proves the replaced `deps,` is the wrapper call's (no other clause sees it). A future key inserted between clock and deps -> replace no-ops -> first expect fails loudly (today's red exactly), never vacuous. task-eca3780d (now BLOCKED per be1f2c6d) plans only the :435-436 comment (its step-6), outside :293-352: does not move this pin; agent-wrapper-main.ts unchanged 68f251be..be1f2c6d. SHARED-TREE: peer QA checkpoint 68f251be (task-8bc14883, qa-84420029) swept this row's exact one-line edit before my wrapper committed (see comment-e080d75d). Peer dirt seen, untouched: untracked apps/daemon/src/repository/publish-resolve-contracts.{ts,js} (landed later by 7986045b, task-adeabf1f).",
+      "startedAt": "2026-09-18T20:44:56.892Z",
+      "completedAt": "2026-09-18T20:54:53.154Z"
+    }
+  ],
+  "planRevision": 7,
+  "status": "REVIEW",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1023.4,
+  "comments": [
+    {
+      "id": "comment-e080d75d24d4410398f28186128ddfb0",
+      "author": "worker-952c612b",
+      "content": "BYTES LOCATION (for QA). This row's whole delivery is ONE line: apps/daemon/src/orchestrator/agent-wrapper-main.test.ts :395, the \"wrapper deps\" it.each row, `\"      deps,\\n      maxAgents: knobs.maxAgents,\"` / `\"      deps: v1Deps,\\n      maxAgents: knobs.maxAgents,\"` -> `\"      clock: () => Date.now(),\\n      deps,\"` / `\"      clock: () => Date.now(),\\n      deps: v1Deps,\"`. I made the edit (Edit tool) at 55eea034; before my session committed anything, a PEER QA checkpoint swept it: 68f251be `wip(task-8bc14883...) [status=DONE role=qa]`, Moe-Session qa-84420029, whose ENTIRE diff is exactly that one line (`git show 68f251be --stat` = 1 file, 1+/1-). So HEAD 68f251be already carries this row's bytes and my wrapper's completion commit will likely find nothing to commit for that path (expect a NO-COMPLETION-COMMIT / nothing outcome). Verify with `git show 68f251be -- apps/daemon/src/orchestrator/agent-wrapper-main.test.ts`. The test file's sha256 at HEAD = 01f9d33fc1d1243afaea2717730552b7d94a0039b75a3db6ba1ec5ac37bb4d37 (identical before and after the drills). No other path is owned or touched; the drill config apps/daemon/drill-task-d6ada082.config.ts was created and deleted in-session (ls: No such file).",
+      "timestamp": "2026-09-18T20:48:05.156Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T20:38:32.809Z",
+  "updatedAt": "2026-09-18T20:55:22.344Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-18T20:40:02.710Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 1,
+    "executedStepCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-c7fb990e",
+    "worker-952c612b"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T20:43:17.431Z",
+  "planningNotes": {
+    "approachesConsidered": "1. Pin on the key BEFORE deps: `clock: () => Date.now(),\\n      deps,`. CHOSEN. It has the same two-line specificity as the old anchor, it is code rather than prose, and it is unique in the normalised source.\n2. Pin the bare `      deps,\\n`. Rejected. It is unique today, but a shorter anchor is the widened matcher the census rule forbids.\n3. Pin on the comment line after deps (\"// The claim keepalive's lines...\"). Rejected: comment text is the most likely thing to be reworded.\n4. Restore the old production ordering (deps next to maxAgents). Rejected. e6d5e260's alphabetised keys and the log comment are deliberate; the test follows production, not the reverse.\n5. A slice-scoped replace inside wrapperCall(). This would survive any neighbour insertion, but it changes the arm's design. That is not this row's job; record it as a follow-up comment only if the reviewer asks.",
+    "codebaseInsights": "Measured 2026-09-18 by architect-c7fb990e at HEAD b38a6e5b, which contains origin/main 3630e0c1.\n\nREPRO: the targeted run printed `Tests 1 failed | 51 passed (52)`. The failure is `AssertionError: expected '#!/usr/bin/env node...' not to be ...` from `expect(pinned).not.toBe(normalised)`: String.replace found no `from`, so pinned === normalised. The other five it.each rows pass.\n\nSOURCE, agent-wrapper-main.ts, which is LF on disk:\n- createAgentWrapper({ runs from :293 to :352.\n- :319 claimTtlMs, :320 `clock: () => Date.now(),`, :321 `deps,`, :322-323 a comment, :324 `log: ...`, :325 `maxAgents: knobs.maxAgents,`.\n- Counts over the normalised text: the proposed anchor `\"      clock: () => Date.now(),\\n      deps,\"` appears 1 time, the old anchor 0 times, and /^\\s+deps,$/ matches one line (:321).\n\nTEST, agent-wrapper-main.test.ts:\n- SOURCE is readFileSync(new URL(\"./agent-wrapper-main.ts\")) at :170.\n- wrapperCall() slices from `createAgentWrapper({` to `\\n    });`.\n- assertPlaneWiring() starts at :370, and its wrapper clause is `expect(wrapperCall(source)).toMatch(/^\\s+deps,\\r?$/mu)`.\n- The it.each table is at :392-398, with \"wrapper deps\" at :395.\n- `assertPlaneWiring(SOURCE);` occurs once, in the main arm at :388, which is the drill anchor.\n- The daemon tsconfig includes src/**/*.ts, so the test file is typechecked by `pnpm --filter @moe/daemon typecheck`.\n\nOVERLAP: no other open row plans an edit to the test file. task-eca3780d (WORKING, worker-07e6de2a) edits agent-wrapper-main.ts only in a comment at :435-436, outside the pinned slice. Both paths were clean at planning.\n\nEPIC-FINAL: isEpicFinal is true only because this row has the highest order (1023.4). Nine siblings are WORKING, and the epic's architectureNotes leave its hardening row as an open, deliberate decision. This row does not take on a whole-epic pass. Its regression leg is the owned package's full suite, which is the leg this bug reds.",
+    "risks": "1. Escapes: the `from`/`to` strings and the drill replacement carry `\\n`/`\\r` escapes. Write them with Edit/Write. A bash heredoc collapses them into real control characters, and the anchor then silently fails to match.\n2. The drill must never mutate agent-wrapper-main.ts on disk. The source is read by readFileSync, so the drill transforms the test module in memory, and the config is deleted and proven gone.\n3. The full-suite-gate lease holder may be a crashed seat. Prove the holder is live before parking behind it, and route a stale lease to the governor.\n4. The shared checkout can gain a peer hunk in the test file. Run `git diff HEAD -- <file>` before editing, and never sweep a foreign hunk.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-18T20:43:19.588Z",
+  "workStartedAt": "2026-09-18T20:43:43.314Z",
+  "reviewStartedAt": "2026-09-18T20:55:22.342Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-wrapper-main.test.ts",
+    "exitCode": 0,
+    "outputTail": "HEAD be1f2c6d\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  52 passed (52)\n   Start at  23:55:01\n   Duration  8.43s (transform 6.79s, setup 0ms, import 8.28s, tests 57ms, environment 0ms)",
+    "reportedAt": "2026-09-18T20:55:22.342Z",
+    "source": "agent-reported"
+  },
+  "filesModified": [
+    "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts"
+  ],
+  "completionSummary": "Moved the \"wrapper deps\" positive-control pin in apps/daemon/src/orchestrator/agent-wrapper-main.test.ts :395 (one line, census rule: pin moved, matcher not widened, arm kept). from/to is now `\"      clock: () => Date.now(),\\n      deps,\"` / `\"      clock: () => Date.now(),\\n      deps: v1Deps,\"`. The old anchor (\"deps,\\n maxAgents\") was gone since main's e6d5e260 put a comment and a `log:` key between them. The new anchor occurs once in the source, inside the createAgentWrapper({ slice :293-352 (:321 is the file's only /^\\s+deps,$/ line). No production byte changed.\nBYTES: a peer QA checkpoint, 68f251be (task-8bc14883), swept this exact one-line diff before my wrapper committed. See comment-e080d75d and `git show 68f251be`. The completion commit may be empty.\nGATES:\n- Targeted file: 1 failed | 51 passed before, 52/52 passed after (fresh at HEAD be1f2c6d).\n- `pnpm --filter @moe/daemon typecheck`: exit 0, 0 errors.\n- Full `pnpm --filter @moe/daemon test` at 68f251be: Test Files 764 passed (764), Tests 12548 passed | 21 skipped (12569), 0 failed. The full-suite-gate lease was free, acquired, and released after the run.\nDRILLS (in memory, via a temp vitest config that was deleted, ls: No such file; sha256 unchanged):\n- D0 control: 52/52.\n- D1: deleting the deps wiring line reds only the main arm, at :378 `toMatch(/^\\s+deps,\\r?$/mu)`.\n- D2: deleting that wrapper clause reds only the \"wrapper deps\" control, at its second expect `toThrow()`. Its first expect still passed, so the new anchor hits the wrapper call's deps.\nREVIEW: if a key is later inserted between clock and deps, the arm fails loudly at its first expect (today's red). task-eca3780d touches only the :435-436 comment, outside the slice. Details are in the step-3 note."
+}
