@@ -112,6 +112,25 @@ back a deployment. Those are refused at the transport with
 acts: this wire authenticates with your operator credential, so an MCP caller
 that reached them would be indistinguishable from you in the browser.
 
+\`moe mcp demo --as-operator\` is how YOU hand one such session your own seat
+(in the client config, add \`"--as-operator"\` as a fourth argument). That
+session can then decide approvals, answer an exhausted review or a
+clarification and close or cancel a goal, AS YOU: nothing checks it a second
+time, because the credential is yours. It can also change settings:
+\`project.set_agent_provider\` (which vendor receives your source),
+\`deployment.set_target\`, \`environment.unset_variable\`,
+\`monitoring.set_probe_interval\`, \`monitoring.retire_environment\`,
+\`graph.supersede\`, \`integration.accept_output\` and
+\`resource.confirm_released\`. Each such act is written to the project's
+\`.moe\\logs\` as \`MCP_OPERATOR_ACT_DELEGATED\` when it is ATTEMPTED, before
+the daemon answers, so a refused attempt has a line too; \`--as-operator\`
+refuses to start while that log is off. Deploys, rollbacks, release and
+preview decisions, secret values and criterion evidence stay refused on this
+wire with or without the flag. Moe never SERVES any of it to the agents
+\`moe start\` runs. That is a rule Moe keeps, not a wall around them: a coding
+agent has a shell in the project directory, where \`moe.config.json\` holds
+your credential.
+
 One warning: stdout on this wire carries JSON-RPC. Everything \`moe mcp\`
 itself has to say — the project it opened, and any refusal — goes to stderr.
 

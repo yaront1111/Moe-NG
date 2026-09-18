@@ -180,7 +180,10 @@ CONFIGURED operator principal. A paired browser session is a durable HUMAN
 principal and is still refused `OPERATOR_PRINCIPAL_REQUIRED` at layer
 `DAEMON_AUTHORIZATION`, and that refusal writes no receipt — nothing is
 half-committed. Both kinds are also excluded from the MCP roster, so an agent
-holding the operator bootstrap credential cannot reach them.
+holding the operator bootstrap credential cannot reach them. The one exception
+is the owner's own `moe mcp <dir> --as-operator` session, which is handed the
+decision kinds by name and logs each attempt as `MCP_OPERATOR_ACT_DELEGATED`
+in the project's `.moe/logs`; no seat and no default `moe mcp` session is.
 
 **The four refusal codes, and what to do about each.** All four are recorded on
 a REFUSED receipt at layer `DAEMON_DEPLOY_ENGINE` and render verbatim on the
@@ -1053,7 +1056,8 @@ is refused `REPOSITORY_RECOVERY_HUMAN_REQUIRED`.
 ### Closing a goal (your decision, the daemon's evidence)
 
 Closing is human-only and operator-only, like approval and publishing: the
-wrapper skips `goal.close`, and it is never reachable over MCP. Needs you shows
+wrapper skips `goal.close`, and no seat reaches it over MCP (only the owner's
+`moe mcp --as-operator` session does). Needs you shows
 a "Ready to close" card for a goal whose contract is fully verified, and its
 Close control asks twice before it sends.
 
@@ -1176,8 +1180,9 @@ fingerprint.
 **Typing one.** `Set` (or `Replace` on a variable that is already set) opens one
 field, `type="password"` and `autocomplete="off"` so a password manager does not
 capture it. The browser spends `environment.set_variable`; `Unset` spends
-`environment.unset_variable`. Both are operator-only and never reachable over
-MCP. **The screen never echoes the value back — including after a refusal.** A
+`environment.unset_variable`. Both are operator-only and never reachable by a
+seat over MCP; `set_variable` is refused on EVERY MCP entry because its payload
+carries the value, while the owner's `moe mcp --as-operator` session may unset. **The screen never echoes the value back — including after a refusal.** A
 rejected submit clears the field, so correcting a typo means typing the whole
 value again; that is deliberate, because a repopulated field is how a secret
 ends up in a screenshot.

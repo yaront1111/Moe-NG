@@ -14,9 +14,13 @@ import type { StoreDependencyProvider } from "./daemon-store-foundation-composit
 import { createFoundationReceiptPublisher } from "./host/foundation-receipts.js";
 import type { FoundationPublishResult } from "./host/foundation-receipts.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
-import { wiredMcpPayloadProperties, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
+import {
+  MCP_DELEGABLE_OPERATOR_KINDS, operatorDelegateMcpPayloadProperties, operatorDelegateMcpToolKinds,
+  wiredMcpPayloadProperties, wiredMcpToolKinds,
+} from "./mcp-tool-allowlist.js";
 import { createDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
 import { diagnosticProjectRoot } from "./diagnostics/diagnostic-project-root.js";
+import { readDiagnosticSettings } from "./diagnostics/diagnostic-settings.js";
 import { mcpDispatchFaultReporter, mcpFaultFrameReporter } from "./mcp-dispatch-fault-report.js";
 import type { McpFaultFrame } from "./mcp-fault-frame.js";
 import { credentialValues } from "./orchestrator/credential-scrub.js";
@@ -119,7 +123,16 @@ export function createStdioHost(seam: StdioHostSeam): StdioHost {
 /** What the stdio composition needs from the process: the seat's credential, the provider the
  *  store env resolved to, and where a tool call that threw is reported. */
 export interface StdioServerComposition {
+  /**
+   * `moe mcp --as-operator` (owner decision 2026-09-18): the owner hands THIS session their own
+   * seat, so it is served `operatorDelegateMcpToolKinds()`. A PARAMETER, never an environment
+   * variable: a variable is inherited by every child this process spawns, and this must reach
+   * nobody else.
+   */
+  readonly asOperator?: boolean | undefined;
   readonly credential: string;
+  /** Told of every delegated operator act BEFORE it is dispatched; see `disclosingDelegatedActs`. */
+  readonly onDelegatedAct?: ((act: DelegatedOperatorAct) => void) | undefined;
   readonly onDispatchFault: McpDispatchFaultObserver;
   /** Where a fault frame ANSWERED to the seat is reported; absent means the seat alone sees it. */
   readonly onFaultFrame?: (frame: McpFaultFrame) => void;
@@ -136,13 +149,18 @@ export function composeStdioServer(
   composition: StdioServerComposition,
 ): ReturnType<typeof createStdioMcpServer> {
   const { credential, onDispatchFault, provider } = composition;
+  const asOperator = composition.asOperator === true;
+  // Fail closed: the delegate roster is never served without the record of its use.
+  if (asOperator && composition.onDelegatedAct === undefined) {
+    throw new Error("asOperator composes no delegated-act observer");
+  }
   const subscriptions = provider.subscriptions?.();
   if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
 
   return createStdioMcpServer({
     credential,
     onDispatchFault,
-    port: createMcpDispatchPort({
+    port: disclosingDelegatedActs(asOperator ? composition.onDelegatedAct : undefined, createMcpDispatchPort({
       affordances: provider.affordances?.(),
       // Both planes and the plane READER are composed once here; which plane a
       // dispatch runs on is the reader's answer at that dispatch, not at start.
@@ -158,31 +176,112 @@ export function composeStdioServer(
       ...(composition.onFaultFrame === undefined ? {} : { onFaultFrame: composition.onFaultFrame }),
       subscriptions,
       v2Deps: provider.provideV2?.(),
-    }),
+    })),
     // The JSON type of every integer payload key, so a seat reads it off the schema instead
     // of off a refusal (review.submit round, 2026-09-18).
-    payloadProperties: wiredMcpPayloadProperties(),
+    payloadProperties: asOperator ? operatorDelegateMcpPayloadProperties() : wiredMcpPayloadProperties(),
     serverName: "moe-next",
     // Advertise only what this daemon wires: an agent never sees a tool that
     // could only ever refuse.
-    toolAllowlist: wiredMcpToolKinds(),
+    toolAllowlist: asOperator ? operatorDelegateMcpToolKinds() : wiredMcpToolKinds(),
   });
 }
 
-async function main(): Promise<void> {
+/** One operator-only act an outside session performed on the owner's behalf. */
+export interface DelegatedOperatorAct {
+  readonly commandId: string | null;
+  readonly kind: string;
+  readonly targetAggregateId: string | null;
+}
+
+/** The diagnostics event every delegated operator act lands under, on the project's log plane. */
+export const MCP_OPERATOR_ACT_DELEGATED = "MCP_OPERATOR_ACT_DELEGATED";
+
+type DispatchPort = ReturnType<typeof createMcpDispatchPort>;
+
+/**
+ * The durable record that an operator act arrived over `moe mcp --as-operator` rather than from
+ * the owner's own browser. The command ledger records WHO (the operator principal, which this
+ * entry authenticates as) and cannot say HOW; this says how, server-side, before the dispatch,
+ * from the bytes this process itself built -- never from anything the client can assert. A
+ * malformed body is left to the daemon's decoder, which refuses it by name.
+ *
+ * It records an ATTEMPT, not an outcome: it is written before the daemon answers, so a refused
+ * or replayed command has a line too. Join it to the command ledger by `commandId` to learn
+ * what the daemon decided.
+ */
+export function disclosingDelegatedActs(
+  observe: ((act: DelegatedOperatorAct) => void) | undefined,
+  port: DispatchPort,
+): DispatchPort {
+  if (observe === undefined) return port;
+  const text = (value: unknown): string | null => typeof value === "string" ? value : null;
+  return Object.freeze({
+    ...port,
+    // Stdio has one identity per process, so this port's dispatch takes the bytes and nothing else.
+    dispatchCommandBytes: (bytes: Uint8Array): ReturnType<DispatchPort["dispatchCommandBytes"]> => {
+      let envelope: Record<string, unknown> = {};
+      try {
+        const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+        if (typeof parsed === "object" && parsed !== null) envelope = parsed as Record<string, unknown>;
+      } catch { /* the daemon's decoder owns the refusal */ }
+      const kind = text(envelope["commandKind"]);
+      if (kind !== null && MCP_DELEGABLE_OPERATOR_KINDS.includes(kind)) {
+        observe({
+          commandId: text(envelope["commandId"]),
+          kind,
+          targetAggregateId: text(envelope["targetAggregateId"]),
+        });
+      }
+      return port.dispatchCommandBytes(bytes);
+    },
+  });
+}
+
+/** What the CLI verb hands this entry in-process; the bin's own self-invocation passes nothing. */
+export interface McpMainOptions {
+  readonly asOperator?: boolean | undefined;
+  /**
+   * The project the CLI verb resolved. Without it the log root is inferred from the store path
+   * and then the cwd, and a client starts this process from a cwd of its OWN: the delegated-act
+   * record would land in the client's folder instead of the project's `.moe/logs`.
+   */
+  readonly projectRoot?: string | undefined;
+}
+
+/** `--as-operator` was asked for while the log plane that records its use is off or too quiet. */
+export const MCP_OPERATOR_AUDIT_UNAVAILABLE = "MCP_OPERATOR_AUDIT_UNAVAILABLE";
+
+async function main(options: McpMainOptions = {}): Promise<void> {
   const credential = readBootstrapCredential();
   const config = readStoreDependencyEnv(process.env);
+  const projectRoot = options.projectRoot ?? diagnosticProjectRoot(config.storePath, process.cwd());
+  // BEFORE the store or the log plane is opened, so a refusal leaves nothing behind: the record is
+  // a `warn` on the FILE sink, and MOE_LOG=off or MOE_LOG_LEVEL=error would drop every one of them
+  // while the session went on deciding as the operator.
+  if (options.asOperator === true) {
+    const settings = readDiagnosticSettings(process.env, projectRoot);
+    if (!settings.enabled || settings.level === "error") {
+      throw new Error(`${MCP_OPERATOR_AUDIT_UNAVAILABLE}: --as-operator needs the log file on at `
+        + "warn or lower (MOE_LOG, MOE_LOG_LEVEL), because that is where each delegated act is recorded");
+    }
+  }
   // This process is spawned by the agent's own CLI, so its stderr is the client's MCP log and
   // nothing else; the file sink under the project's .moe/logs is where a tool call that threw
   // becomes visible to the operator. The session credential is scrubbed with the rest.
   const diagnostics = createDiagnosticRuntime({
     env: process.env,
-    projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
+    projectRoot,
     secrets: [...credentialValues(process.env), credential],
   });
   const provider = createStoreDependencies({ ...config, diagnostics: diagnostics.emitterFor("command") });
+  const delegated = diagnostics.emitterFor("mcp-stdio");
   const server = composeStdioServer({
+    asOperator: options.asOperator,
     credential,
+    // `warn`: the console sink prints it at its default threshold, and the guard above proved the
+    // file sink keeps it.
+    onDelegatedAct: (act) => { delegated.warn(MCP_OPERATOR_ACT_DELEGATED, { fields: { ...act } }); },
     onDispatchFault: mcpDispatchFaultReporter(diagnostics.emitterFor("mcp-stdio")),
     onFaultFrame: mcpFaultFrameReporter(diagnostics.emitterFor("mcp-stdio")),
     provider,
