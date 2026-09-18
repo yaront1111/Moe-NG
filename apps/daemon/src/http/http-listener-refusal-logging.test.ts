@@ -1,8 +1,11 @@
+import { request as httpRequest } from "node:http";
+
 import { expect, it } from "vitest";
 
+import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { startControlRoomListener } from "./http-listener.js";
 import {
-  authenticator, decisionPort, recordingHandler, registryOf,
+  authenticator, decisionPort, envelopeObject, recordingHandler, registryOf,
 } from "./http-test-fixtures.js";
 
 /**
@@ -123,4 +126,57 @@ it("writes no LISTENER_SLOW line at the default threshold for a request answered
     await fetch(`${origin}/no/such/route`);
     expect(lines.filter((line) => line.startsWith("LISTENER_SLOW "))).toEqual([]);
   });
+});
+
+/** node:http, not fetch: undici drops the Origin header this listener's gate requires. */
+function postCommand(origin: string, csrf: string): Promise<number> {
+  const payload = JSON.stringify(envelopeObject());
+  return new Promise<number>((resolve, reject) => {
+    const request = httpRequest(`${origin}/command`, {
+      headers: {
+        "content-length": String(Buffer.byteLength(payload)),
+        "content-type": "application/json",
+        origin,
+        "x-moe-csrf": csrf,
+        "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
+        "x-moe-session-credential": "sess-good",
+      },
+      method: "POST",
+    }, (response) => {
+      response.resume();
+      response.on("end", () => { resolve(response.statusCode ?? 0); });
+    });
+    request.on("error", reject);
+    request.end(payload);
+  });
+}
+
+it("names a frame the daemon answered about its OWN fault, which is not a listener refusal", async () => {
+  // The decision port answers what the durable store answers when it is locked: a 503 frame
+  // with the store's code. The control room shows it; the listener used to write nothing.
+  const lines: string[] = [];
+  const listener = await startControlRoomListener({
+    csrfToken: "refusal-log-csrf",
+    deps: {
+      authenticator: authenticator(),
+      decisions: {
+        decide: () => ({
+          outcome: "REFUSED",
+          refusal: { code: "OUTCOME_UNKNOWN", detail: "database is locked", httpStatus: 503, layer: "DURABLE_STORE" },
+        }),
+      },
+      registry: registryOf("goal.create", recordingHandler().handler, ["title"]),
+    },
+    log: (line) => { lines.push(line); },
+  });
+  if (!listener.ok) throw new Error(listener.code);
+  try {
+    const status = await postCommand(listener.origin, "refusal-log-csrf");
+    expect(status).toBe(503);
+    expect(refusals(lines)).toEqual([]);
+    expect(lines.filter((line) => line.startsWith("LISTENER_FAULT_FRAME ")))
+      .toEqual(["LISTENER_FAULT_FRAME POST /command OUTCOME_UNKNOWN DURABLE_STORE 503"]);
+  } finally {
+    await listener.close();
+  }
 });

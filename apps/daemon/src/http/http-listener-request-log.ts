@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { refusalTagOf } from "./http-refusal-tag.js";
+import { faultFrameTagOf, refusalTagOf } from "./http-refusal-tag.js";
 
 /**
  * THE RESPONSE SIDE OF THE ONE PER-REQUEST LINE. The listener writes a line before dispatch
@@ -9,8 +9,10 @@ import { refusalTagOf } from "./http-refusal-tag.js";
  * whose CSRF token drifted got 403 on every call while the daemon's output read as an ordinary
  * list of paths). A request that took longer than `slowRequestMs` names its status and
  * duration — a store that has gone slow shows up here first, on the reads the control room
- * polls, long before anything refuses. A handler that THREW is reported with its cause,
- * host-side, never in the client's 500.
+ * polls, long before anything refuses. A frame the daemon answered that reports its OWN fault
+ * (`faultFrameOf`) names its code and layer, because the control room shows that code while the
+ * daemon's output would read as an ordinary served request. A handler that THREW is reported
+ * with its cause, host-side, never in the client's 500.
  *
  * Nothing here may turn an answered request into a failed one: every log call is fenced, and
  * `onThrown` runs whether or not the sink accepted the line.
@@ -52,6 +54,10 @@ export function logServedRequest(input: ServedRequestLogInput): void {
     const refusal = refusalTagOf(response);
     if (refusal !== null) {
       say(log, `LISTENER_REFUSED ${method} ${path} ${refusal} ${String(response.statusCode)}`);
+    }
+    const fault = faultFrameTagOf(response);
+    if (fault !== null) {
+      say(log, `LISTENER_FAULT_FRAME ${method} ${path} ${fault.code} ${fault.layer} ${String(response.statusCode)}`);
     }
     const elapsed = input.now() - startedAt;
     if (elapsed >= input.slowRequestMs) {

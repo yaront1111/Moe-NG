@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { describe, expect, it } from "vitest";
 
-import { tagRefusal } from "./http-refusal-tag.js";
+import { tagFaultFrame, tagRefusal } from "./http-refusal-tag.js";
 import { SLOW_REQUEST_MS, logServedRequest } from "./http-listener-request-log.js";
 
 /**
@@ -89,6 +89,13 @@ describe("logServedRequest", () => {
       "LISTENER_REFUSED GET /goals LISTENER_STORE_UNAVAILABLE 503",
       "LISTENER_SLOW GET /goals 503 3500ms",
     ]);
+  });
+
+  it("names the code and layer of a frame that reports the daemon's own fault", async () => {
+    const h = harness({ status: 503, url: "/command" });
+    tagFaultFrame(h.response, { code: "OUTCOME_UNKNOWN", layer: "DURABLE_STORE" });
+    await h.run();
+    expect(h.lines).toEqual(["LISTENER_FAULT_FRAME GET /command OUTCOME_UNKNOWN DURABLE_STORE 503"]);
   });
 
   it("stays silent one millisecond under the threshold", async () => {
