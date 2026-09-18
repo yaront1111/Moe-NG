@@ -89,15 +89,20 @@ describe("the TLS docker commands", () => {
     expect(command).toHaveLength(7);
   });
 
-  it("turns ssl on by ALTER SYSTEM + reload, stopping on the first error", () => {
+  it("turns ssl on by ALTER SYSTEM + reload, one -c per statement, stopping on the first error", () => {
     const command = tlsEnableCommand("moe-verifier-x", "app", "app");
     expect(command.slice(0, 4)).toEqual(["exec", "--user", "postgres", "moe-verifier-x"]);
     expect(command).toContain("ON_ERROR_STOP=1");
-    const sql = command[command.length - 1]!;
-    expect(sql).toContain("ALTER SYSTEM SET ssl = 'on'");
-    expect(sql).toContain("ssl_cert_file = 'server.crt'");
-    expect(sql).toContain("ssl_key_file = 'server.key'");
-    expect(sql).toContain("pg_reload_conf()");
+    // ALTER SYSTEM refuses inside a transaction block, and psql runs ONE -c string as one
+    // transaction (measured live 2026-09-18) — so every statement must be its own -c.
+    const statements = command.flatMap((arg, index) => command[index - 1] === "-c" ? [arg] : []);
+    expect(statements).toEqual([
+      "ALTER SYSTEM SET ssl = 'on'",
+      "ALTER SYSTEM SET ssl_cert_file = 'server.crt'",
+      "ALTER SYSTEM SET ssl_key_file = 'server.key'",
+      "SELECT pg_reload_conf()",
+    ]);
+    expect(statements.some((statement) => statement.includes(";"))).toBe(false);
   });
 
   it("extracts only the public certificate, never the key", () => {
