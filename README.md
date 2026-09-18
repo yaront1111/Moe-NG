@@ -128,7 +128,11 @@ entry points, environment, and knobs.
   `apps/daemon/src/mcp-main.ts`; the wrapper uses one trusted loopback HTTP host
   and per-agent bearer credentials. A seat reads the PRD by page and the
   approved contract by id; the human-only kinds (approvals, clarification
-  answers, goal closure, publishing, cutover) are never reachable over MCP.
+  answers, goal closure, publishing, cutover) are never reachable by a seat
+  over MCP. `moe mcp <dir> --as-operator` is how the owner hands ONE outside
+  stdio session the decision kinds among them; publishing, cutover, deploys,
+  release decisions, secret values and criterion evidence stay refused on
+  every MCP entry.
 - **Wrapper** (`apps/daemon/src/orchestrator/agent-wrapper-main.ts`): staffs
   READY, unclaimed non-human steps (planning and coding) with a scoped agent
   session and a real `claude -p` process authenticated with the operator's own

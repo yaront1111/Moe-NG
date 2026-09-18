@@ -23,10 +23,11 @@ import { MOE_CLI_MCP_UNAVAILABLE, runMcp } from "./moe-cli-mcp.js";
 import type { CliIo } from "./moe-cli-main.js";
 import { MOE_CONFIG_FILENAME, MOE_CONFIG_SCHEMA_VERSION, MOE_CONFIG_UNREADABLE } from "./moe-init.js";
 
-const entry = vi.hoisted(() => ({ calls: 0, fail: null as string | null }));
+const entry = vi.hoisted(() => ({ calls: 0, fail: null as string | null, options: [] as unknown[] }));
 vi.mock("../mcp-main.js", () => ({
-  runMcpMain: async (): Promise<void> => {
+  runMcpMain: async (options?: unknown): Promise<void> => {
     entry.calls += 1;
+    entry.options.push(options);
     if (entry.fail !== null) throw new Error(entry.fail);
     return Promise.resolve();
   },
@@ -43,6 +44,7 @@ afterEach(() => {
   for (const key of ENV_KEYS) delete process.env[key];
   entry.calls = 0;
   entry.fail = null;
+  entry.options.length = 0;
 });
 
 function project(config: string | null): string {
@@ -66,7 +68,7 @@ interface Sinks {
   readonly stdout: readonly string[];
 }
 
-async function drive(cwd: string, targetDir: string): Promise<Sinks> {
+async function drive(cwd: string, targetDir: string, asOperator = false): Promise<Sinks> {
   const diagnostics: string[] = [];
   const stdout: string[] = [];
   const io = {
@@ -82,7 +84,9 @@ async function drive(cwd: string, targetDir: string): Promise<Sinks> {
     startManager: async () => 0,
     startStack: async () => 0,
   } satisfies CliIo;
-  const code = await runMcp({ command: "mcp", ok: true, targetDir }, io);
+  const code = await runMcp({
+    command: "mcp", ok: true, targetDir, ...(asOperator ? { asOperator: true as const } : {}),
+  }, io);
   return { code, diagnostics: Object.freeze(diagnostics), stdout: Object.freeze(stdout) };
 }
 
@@ -130,6 +134,21 @@ describe("runMcp", () => {
     const root = project(validConfig(absolute));
     expect((await drive(root, "demo")).code).toBe(0);
     expect(process.env["MOE_STORE_PATH"]).toBe(absolute);
+  });
+
+  it("hands --as-operator and the RESOLVED project root to the entry, and says so on stderr only", async () => {
+    // The flag is the whole delegation and the root is where its record lands: a handoff that
+    // dropped either would serve the wrong roster, or log under the client's cwd, in silence.
+    const root = project(validConfig("store.sqlite"));
+    const plain = await drive(root, "demo");
+    const delegated = await drive(root, "demo", true);
+    expect(entry.options).toEqual([
+      { asOperator: false, projectRoot: join(root, "demo") },
+      { asOperator: true, projectRoot: join(root, "demo") },
+    ]);
+    expect(plain.diagnostics.join("\n")).not.toContain("--as-operator");
+    expect(delegated.diagnostics.join("\n")).toContain("MCP_OPERATOR_ACT_DELEGATED");
+    expect(delegated.stdout).toEqual([]);
   });
 
   it("hands the operator secret to BOTH credential variables and logs neither", async () => {

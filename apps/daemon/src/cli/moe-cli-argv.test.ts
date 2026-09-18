@@ -142,11 +142,23 @@ describe("parseCliArgv refuses by name", () => {
   });
 
   /** Pairing is a browser concept; it means nothing on a JSON-RPC stdio wire. */
-  it("refuses --operator-stdin on mcp, which accepts no options at all", () => {
+  it("refuses --operator-stdin on mcp, whose one option is --as-operator", () => {
     const parsed = refused(["mcp", "--operator-stdin"]);
     expect(parsed.code).toBe(MOE_CLI_UNKNOWN_OPTION);
     expect(parsed.detail).toBe("--operator-stdin");
-    expect(parsed.message).toContain("options for this command: none");
+    expect(parsed.message).toContain("--as-operator");
+  });
+
+  /** The delegation is a NAMED opt-in: absent means absent, never `asOperator: false`. */
+  it("admits --as-operator on mcp, in either position, and on no other command", () => {
+    expect(accepted(["mcp", "demo", "--as-operator"])).toEqual({
+      asOperator: true, command: "mcp", ok: true, targetDir: "demo",
+    });
+    expect(accepted(["mcp", "--as-operator"])).toEqual({
+      asOperator: true, command: "mcp", ok: true, targetDir: ".",
+    });
+    expect(Object.hasOwn(accepted(["mcp", "demo"]), "asOperator")).toBe(false);
+    expect(refused(["start", "demo", "--as-operator"]).code).toBe(MOE_CLI_UNKNOWN_OPTION);
   });
 
   it("refuses a second positional argument rather than silently ignoring it", () => {

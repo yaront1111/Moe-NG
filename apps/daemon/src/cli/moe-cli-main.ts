@@ -84,6 +84,7 @@ const USAGE = Object.freeze([
   "  moe init [dir] [--force]   scaffold a store, mint an operator credential, write the config",
   "  moe start [dir] [--operator-stdin]   start one project and print its plain control-room origin",
   "  moe mcp [dir]             serve this project to a headless MCP client over stdio (no browser, no pairing)",
+  "  moe mcp [dir] --as-operator   the same, and that client may decide approvals, escalations and goal closure AS YOU",
   "  moe recover-review [dir] [--operator-stdin]   drain a blocked review runtime, recover it, and restart",
   "  moe recover-replan [dir] [--operator-stdin]   release a retired replan after preserving its reviewed commit, and restart",
   "  moe projects [--operator-stdin]      open the Windows manager at its plain loopback origin",
@@ -215,8 +216,11 @@ async function runRecoverReview(invocation: CliRecoverReview | CliRecoverReplan,
 
 export async function runMoeCli(io: CliIo): Promise<number> {
   const invocation = parseCliArgv(io.argv);
+  // On `mcp` stdout IS the JSON-RPC wire, so even a refusal to start goes to stderr: a client
+  // that mistyped a flag must read a diagnostic, not a line of prose where a frame belongs.
+  const say = io.argv[0] === "mcp" ? io.diagnostic : io.log;
   if (!invocation.ok) {
-    io.log(invocation.message);
+    say(invocation.message);
     return 1;
   }
   if (invocation.command === "version") {
@@ -232,8 +236,8 @@ export async function runMoeCli(io: CliIo): Promise<number> {
   // which Node it wants.
   const unsupported = checkNodeVersion(io.nodeVersion);
   if (unsupported !== null) {
-    io.log(unsupported.message);
-    io.log("moe: install Node >=24.16 <25 — https://nodejs.org/en/download");
+    say(unsupported.message);
+    say("moe: install Node >=24.16 <25 — https://nodejs.org/en/download");
     return 1;
   }
   if (invocation.command === "init") return runInit(invocation, io);

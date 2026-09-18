@@ -223,6 +223,19 @@ describe("moe init", () => {
     expect(result.code).toBe(1);
     expect(result.lines.join("\n")).toContain(`${MOE_CLI_NODE_UNSUPPORTED}: v22.14.0`);
   });
+
+  /** On `mcp`, stdout is the JSON-RPC wire: even a refusal to start must stay off it. */
+  it("refuses a mistyped mcp flag, and an unsupported Node under mcp, on stderr only", async () => {
+    const root = temp();
+    const mistyped = await run(root, ["mcp", "demo", "--as-operater"]);
+    expect(mistyped.code).toBe(1);
+    expect(mistyped.lines).toEqual([]);
+    expect(mistyped.diagnostics.join("\n")).toContain("--as-operater");
+    const oldNode = await run(root, ["mcp", "demo"], { nodeVersion: "v22.14.0" });
+    expect(oldNode.code).toBe(1);
+    expect(oldNode.lines).toEqual([]);
+    expect(oldNode.diagnostics.join("\n")).toContain(MOE_CLI_NODE_UNSUPPORTED);
+  });
 });
 
 describe("moe start", () => {

@@ -33,10 +33,13 @@ export interface CliStart {
 }
 
 /**
- * Serves one project to a headless MCP client over stdio. It takes no options:
- * pairing is a browser concept, and this wire has no browser on the far end.
+ * Serves one project to a headless MCP client over stdio. Pairing is a browser
+ * concept, and this wire has no browser on the far end, so it takes ONE option:
+ * `--as-operator`, by which the owner hands that client their own seat.
  */
 export interface CliMcp {
+  /** The owner delegates the operator-only decision kinds to this one session. */
+  readonly asOperator?: true;
   readonly command: "mcp";
   readonly ok: true;
   readonly targetDir: string;
@@ -83,6 +86,7 @@ const DEFAULT_TARGET_DIR = ".";
 const VERSION_WORDS = Object.freeze(["--version", "-v", "version"]);
 const HELP_WORDS = Object.freeze(["--help", "-h", "help"]);
 const OPERATOR_STDIN = "--operator-stdin";
+const AS_OPERATOR = "--as-operator";
 
 function refuse(code: CliArgvRefusalCode, detail: string, message: string): CliArgvRefused {
   return Object.freeze({ code, detail, message, ok: false });
@@ -156,11 +160,14 @@ export function parseCliArgv(argv: readonly string[]): CliInvocation {
     });
   }
   if (head === "mcp") {
-    const bad = unknownOption(parts, []);
+    const bad = unknownOption(parts, [AS_OPERATOR]);
     if (bad !== null) return bad;
     const target = targetOf(parts);
     if (typeof target !== "string") return target;
-    return Object.freeze({ command: "mcp", ok: true, targetDir: target });
+    return Object.freeze({
+      ...(parts.options.includes(AS_OPERATOR) ? { asOperator: true as const } : {}),
+      command: "mcp", ok: true, targetDir: target,
+    });
   }
   if (head === "projects") {
     const bad = unknownOption(parts, [OPERATOR_STDIN]);

@@ -43,7 +43,8 @@ export async function runMcp(invocation: CliMcp, io: CliIo): Promise<number> {
   // `mcp-main.ts` reads its whole contract from the environment: the store trio
   // plus the caller's own credential. Both credential variables take the
   // operator secret, so this session dispatches with operator authority — which
-  // is precisely why operator-only kinds are held off the advertised roster.
+  // is precisely why operator-only kinds are held off the advertised roster,
+  // unless the owner passed `--as-operator` and so delegated them by name.
   // A relative storePath resolves against the project root, never the cwd.
   process.env["MOE_STORE_PATH"] = resolve(projectRoot, config.storePath);
   process.env["MOE_PROJECT_ID"] = config.projectId;
@@ -54,9 +55,13 @@ export async function runMcp(invocation: CliMcp, io: CliIo): Promise<number> {
   // in no line this verb ever writes.
   io.diagnostic(`moe mcp: project ${config.projectId} -> ${projectRoot}`);
   io.diagnostic("moe mcp: serving stdio JSON-RPC on stdout; diagnostics on stderr; no browser, no pairing");
+  if (invocation.asOperator === true) {
+    io.diagnostic("moe mcp: --as-operator: this session may decide approvals, escalations, clarifications and "
+      + "goal closure AS THE OPERATOR; each attempt is logged MCP_OPERATOR_ACT_DELEGATED in this project's .moe/logs");
+  }
   try {
     const { runMcpMain } = await import("../mcp-main.js");
-    await runMcpMain();
+    await runMcpMain({ asOperator: invocation.asOperator === true, projectRoot });
   } catch (error) {
     io.diagnostic(`${MOE_CLI_MCP_UNAVAILABLE}: ${error instanceof Error ? error.message : "startup failed"}`);
     return 1;

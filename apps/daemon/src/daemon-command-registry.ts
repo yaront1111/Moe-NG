@@ -500,6 +500,14 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       // so an MCP caller holding that credential would authenticate AS the operator here and
       // receive a witness indistinguishable from a browser operator's. The roster exclusion,
       // not this comparison, is what keeps that call from ever arriving.
+      //
+      // THE OWNER'S EXCEPTION (2026-09-18): `moe mcp --as-operator` serves the hand-kept
+      // delegate roster in `mcp-tool-allowlist.ts` to one stdio session the owner starts, and
+      // on THAT entry such a call does arrive. The witness minted for it still carries no origin fact and
+      // means "the operator's credential", not "a human at the browser". The only record of how
+      // it arrived is the MCP_OPERATOR_ACT_DELEGATED diagnostics line `mcp-main.ts` writes when
+      // the act is attempted, joined here by `commandId`. Every seat and every default
+      // `moe mcp` session is still refused at the transport, exactly as above.
       // Its own edge, from a request shape disjoint from `requestOf`'s envelope record: the
       // service takes generation PORTS no bootstrap handler signature can carry, which is why
       // the kind is not a `BootstrapCommandKind` (see daemon-command-vocabulary.js). One clock
