@@ -12,9 +12,11 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { refuse, refuseInvalidInput, serialize } from "../adapter-refusals.js";
+import { containDispatchThrow } from "../dispatch-fault.js";
+import type { McpDispatchFaultObserver, McpDispatchFaultStage } from "../dispatch-fault.js";
 import {
   STDIO_TOOL_ENTRIES,
   STDIO_TOOL_INDEX,
@@ -77,35 +79,6 @@ export interface HttpDispatchPort {
 
 const encoder = new TextEncoder();
 
-/** Every adapter-side refusal routes through the registry, never through invented codes. */
-function refuse(error: RuntimeError): never {
-  throw new McpError(error.transport.mcpCode, error.code, error);
-}
-
-function refuseInvalidInput(): never {
-  refuse(createRuntimeError({ code: "INPUT_INVALID" }));
-}
-
-/**
- * A broken daemon boundary is never reflected back: anything the port throws becomes the stable
- * `UNKNOWN_ERROR`, so host paths and connection strings in an arbitrary `Error` message cannot
- * reach an MCP client's logs.
- */
-function refuseUnknown(): never {
-  refuse(createRuntimeError({ code: "UNKNOWN_ERROR" }));
-}
-
-function serialize(value: unknown): string {
-  let text: string | undefined;
-  try {
-    text = JSON.stringify(value);
-  } catch {
-    refuseInvalidInput();
-  }
-  if (text === undefined) refuseInvalidInput();
-  return text;
-}
-
 /** Digest binds the request to the payload bytes exactly as this adapter serialises them. */
 function payloadDigest(payload: unknown): string {
   return createHash("sha256").update(encoder.encode(serialize(payload ?? null))).digest("hex");
@@ -148,13 +121,15 @@ export function buildEnvelopeBytes(
  *
  * Both port calls share one containment: a credential store that THROWS is a broken daemon
  * boundary and becomes `UNKNOWN_ERROR` rather than a raw SDK error carrying the throw's message,
- * while a refusal the port RETURNS is already an `McpError` and passes through intact.
+ * while a refusal the port RETURNS is already an `McpError` and passes through intact. The
+ * throw itself is reported to `observe`, host-side, with the stage it hit.
  */
 export async function decodeAndDispatch(
   port: HttpDispatchPort,
   entry: StdioToolEntry,
   bytes: Uint8Array,
   signal: AbortSignal | undefined,
+  observe?: McpDispatchFaultObserver,
 ): Promise<Uint8Array> {
   const isCommand = entry.surface === "command";
   const decoded = isCommand
@@ -165,15 +140,18 @@ export async function decodeAndDispatch(
     credential: decoded.envelope.sessionCredential,
     ...(signal === undefined ? {} : { signal }),
   };
+  let stage: McpDispatchFaultStage = "authenticate";
   try {
     const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
     if (!auth.ok) refuse(auth.error);
+    stage = "dispatch";
     return await (isCommand
       ? port.dispatchCommandBytes(bytes, context)
       : port.dispatchQueryBytes(bytes, context));
   } catch (error) {
-    if (error instanceof McpError) throw error;
-    refuseUnknown();
+    containDispatchThrow(
+      error, { stage, surface: entry.surface, toolKind: entry.kind, transport: "http" }, observe,
+    );
   }
 }
 
@@ -189,6 +167,7 @@ async function callTool(
   args: Readonly<Record<string, unknown>> | undefined,
   signal: AbortSignal | undefined,
   allowed: ReadonlySet<string>,
+  observe: McpDispatchFaultObserver | undefined,
 ): Promise<string> {
   const entry = STDIO_TOOL_INDEX.get(toolLabel);
   if (entry === undefined) refuseInvalidInput();
@@ -198,11 +177,14 @@ async function callTool(
     entry,
     buildEnvelopeBytes(entry, credential, args ?? {}),
     signal,
+    observe,
   );
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(response);
-  } catch {
-    refuseUnknown();
+  } catch (error) {
+    containDispatchThrow(error, {
+      stage: "response-decode", surface: entry.surface, toolKind: entry.kind, transport: "http",
+    }, observe);
   }
 }
 
@@ -219,6 +201,7 @@ export function createHttpMcpServer(
   port: HttpDispatchPort,
   serverName: string,
   listedTools: typeof HTTP_LISTED_TOOLS = HTTP_LISTED_TOOLS,
+  observe?: McpDispatchFaultObserver,
 ): Server {
   const server = new Server(
     { name: serverName, version: "0.0.0" },
@@ -240,6 +223,7 @@ export function createHttpMcpServer(
             request.params.arguments,
             extra.signal,
             allowed,
+            observe,
           ),
           type: "text" as const,
         },

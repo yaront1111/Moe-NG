@@ -24,6 +24,7 @@ import { closeAllDaemonSessions } from "./http-shutdown.js";
 import { createHttpAdapterLifecycle, settleHttpResponseOnClose } from "./http-adapter-lifecycle.js";
 import { trackHttpInflightRequests } from "./http-inflight-requests.js";
 import type { HttpInflightRequests } from "./http-inflight-requests.js";
+import type { McpDispatchFaultObserver } from "../dispatch-fault.js";
 import { createHttpMcpServer, httpListedTools } from "./http-tool-bridge.js";
 import type { HttpDispatchPort } from "./http-tool-bridge.js";
 
@@ -70,6 +71,12 @@ export interface HttpAdapterOptions {
   readonly enableJsonResponse?: boolean;
   /** Clock for idle bookkeeping, epoch milliseconds. Injectable so reaping is testable. */
   readonly now?: () => number;
+  /**
+   * Host-side disclosure of a dispatch port that THROWS inside a tool call. The client still
+   * receives exactly `UNKNOWN_ERROR`; the throw's message, errno code and stack go here and
+   * nowhere else. Absent means the fault is contained silently, as it always was.
+   */
+  readonly onDispatchFault?: McpDispatchFaultObserver;
   readonly serverName?: string;
   readonly sessionIdFactory?: () => string;
   /** Milliseconds a session may sit idle before the next initialize reaps it. */
@@ -167,7 +174,7 @@ async function openSessionTransport(
   signal: AbortSignal,
 ): Promise<OpenedSession> {
   const server = createHttpMcpServer(
-    options.dispatchPort, options.serverName ?? "moe-runtime", listedTools,
+    options.dispatchPort, options.serverName ?? "moe-runtime", listedTools, options.onDispatchFault,
   );
   const latch = createSessionCloseLatch();
   const origin = request.headers.get("origin");

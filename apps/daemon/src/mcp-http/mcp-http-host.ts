@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 
 import { createHttpMcpAdapter } from "@moe/mcp";
-import type { HttpMcpAdapter } from "@moe/mcp";
+import type { HttpMcpAdapter, McpDispatchFaultObserver } from "@moe/mcp";
 
 import { describeBindFailure } from "../http/bind-failure-detail.js";
 import type { AffordancePort } from "../http/affordance-contract.js";
@@ -54,6 +54,11 @@ export interface McpHttpHostOptions {
   /** JSON bodies instead of SSE frames. Deterministic; the parity fixtures use it. */
   readonly enableJsonResponse?: boolean;
   readonly host?: string;
+  /**
+   * Host-side disclosure of a tool call that THREW inside the dispatch. The seat still receives
+   * exactly `UNKNOWN_ERROR`; the throw goes here. Absent means contained silently, as before.
+   */
+  readonly onDispatchFault?: McpDispatchFaultObserver;
   readonly port?: number;
   /** The daemon's committed subscription seam, handed through to the dispatch port. */
   readonly subscriptions: SubscriptionPort;
@@ -163,6 +168,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
       ...(options.enableJsonResponse === undefined
         ? {}
         : { enableJsonResponse: options.enableJsonResponse }),
+      ...(options.onDispatchFault === undefined ? {} : { onDispatchFault: options.onDispatchFault }),
       sessionPort: createMcpHttpSessionPort(options.deps.authenticator),
       serverName: "moe-next",
       // Same roster as the stdio entry, from the same derivation.

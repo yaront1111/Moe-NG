@@ -22,6 +22,9 @@ its own: a caller that injects no dependency provider is refused, never served a
   transport through.
 - `createDaemonCommandPorts` (`daemon-command-registry.ts`) and `createMcpDispatchPort`
   (`mcp-dispatch-port.ts`) are the two dispatch fronts over the same durable pipeline.
+  A dispatch that THROWS behind either MCP transport is `UNKNOWN_ERROR` to the seat and
+  `MCP_DISPATCH_THREW` on the diagnostics plane (`mcp-dispatch-fault-report.ts`), wired by
+  all three MCP entries; grep that name before blaming a seat for a tool it "misused".
 - `createStoreDependencies` / `readStoreDependencyEnv` (`daemon-store-dependencies.ts`) is
   the shipped provider `--dependencies=` points at; it re-exports `agentCapabilitiesFor`
   because the agent wrapper has always imported it from that path.

@@ -4,6 +4,10 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
+import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
+import { diagnosticProjectRoot } from "../diagnostics/diagnostic-project-root.js";
+import { mcpDispatchFaultReporter } from "../mcp-dispatch-fault-report.js";
+import { credentialValues } from "../orchestrator/credential-scrub.js";
 import {
   MCP_HTTP_HOST_ENV,
   createMcpHttpHost,
@@ -30,6 +34,13 @@ import {
 
 async function main(): Promise<void> {
   const config = readStoreDependencyEnv(process.env);
+  // Same plane as the wrapper and the stdio entry: MOE_LOG_* knobs, the project's .moe/logs,
+  // every credential in this environment scrubbed.
+  const diagnostics = createDiagnosticRuntime({
+    env: process.env,
+    projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
+    secrets: credentialValues(process.env),
+  });
   const provider = createStoreDependencies(config);
   const subscriptions = provider.subscriptions?.();
   if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
@@ -41,6 +52,7 @@ async function main(): Promise<void> {
     deps: provider.provide(),
     documents: provider.goalSource?.(),
     graph: provider.graph?.(),
+    onDispatchFault: mcpDispatchFaultReporter(diagnostics.emitterFor("mcp-http")),
     port: readHttpPort(process.env),
     subscriptions,
     v2Deps: provider.provideV2?.(),

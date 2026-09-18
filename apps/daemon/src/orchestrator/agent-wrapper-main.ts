@@ -50,6 +50,7 @@ import { createPassLogger } from "./wrapper-pass-log.js";
 import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
 import { diagnosticProjectRoot } from "../diagnostics/diagnostic-project-root.js";
 import { teeDiagnosticLine } from "../diagnostics/diagnostic-line-tee.js";
+import { mcpDispatchFaultReporter } from "../mcp-dispatch-fault-report.js";
 
 export {
   createWrapperStopSignal,
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
   });
   const seatDiagnostics = diagnostics.emitterFor("seat");
   const passDiagnostics = diagnostics.emitterFor("wrapper");
+  const mcpDiagnostics = diagnostics.emitterFor("mcp");
   const provider = createStoreDependencies(config);
   let verifierStore: SqliteEventStore | undefined;
   let verifierRunner: VerifierProcessRunner | undefined;
@@ -361,6 +363,9 @@ async function main(): Promise<void> {
       // The seats' only MCP host is THIS one: without the graph reader every graph_get a
       // seat made refused INPUT_INVALID, whatever the brief told it to send (2026-09-05).
       graph: provider.graph?.(),
+      // A seat's tool call that THROWS host-side used to vanish: UNKNOWN_ERROR to the seat and
+      // nothing here. It now lands as MCP_DISPATCH_THREW on this wrapper's diagnostics plane.
+      onDispatchFault: mcpDispatchFaultReporter(mcpDiagnostics),
       subscriptions,
       v2Deps,
     });

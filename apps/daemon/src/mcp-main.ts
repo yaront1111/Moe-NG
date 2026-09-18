@@ -13,6 +13,10 @@ import { createFoundationReceiptPublisher } from "./host/foundation-receipts.js"
 import type { FoundationPublishResult } from "./host/foundation-receipts.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
+import { createDiagnosticRuntime } from "./diagnostics/diagnostic-runtime.js";
+import { diagnosticProjectRoot } from "./diagnostics/diagnostic-project-root.js";
+import { mcpDispatchFaultReporter } from "./mcp-dispatch-fault-report.js";
+import { credentialValues } from "./orchestrator/credential-scrub.js";
 
 /**
  * The agent-facing entry: one MCP stdio server per agent session, exactly the
@@ -112,12 +116,21 @@ export function createStdioHost(seam: StdioHostSeam): StdioHost {
 async function main(): Promise<void> {
   const credential = readBootstrapCredential();
   const config = readStoreDependencyEnv(process.env);
+  // This process is spawned by the agent's own CLI, so its stderr is the client's MCP log and
+  // nothing else; the file sink under the project's .moe/logs is where a tool call that threw
+  // becomes visible to the operator. The session credential is scrubbed with the rest.
+  const diagnostics = createDiagnosticRuntime({
+    env: process.env,
+    projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
+    secrets: [...credentialValues(process.env), credential],
+  });
   const provider = createStoreDependencies(config);
   const subscriptions = provider.subscriptions?.();
   if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
 
   const server = createStdioMcpServer({
     credential,
+    onDispatchFault: mcpDispatchFaultReporter(diagnostics.emitterFor("mcp-stdio")),
     port: createMcpDispatchPort({
       affordances: provider.affordances?.(),
       // Both planes and the plane READER are composed once here; which plane a
@@ -156,6 +169,7 @@ async function main(): Promise<void> {
     stop: async () => {
       await server.close();
       provider.close();
+      diagnostics.close();
     },
     storePath: config.storePath,
     write: (line) => { process.stderr.write(`${line}\n`); },

@@ -17,6 +17,7 @@ import {
   CONFORMANCE_QUERY_KIND,
   CONFORMANCE_QUERY_RESPONSE_BYTES,
 } from "../dispatch-conformance.js";
+import type { McpDispatchFault } from "../dispatch-fault.js";
 import { STDIO_TOOL_ENTRIES } from "../stdio/stdio-tool-schemas.js";
 import type { StdioToolEntry } from "../stdio/stdio-tool-schemas.js";
 import { buildEnvelopeBytes, decodeAndDispatch } from "./http-tool-bridge.js";
@@ -106,5 +107,61 @@ describe("http tool bridge authenticate containment", () => {
       code: "SESSION_EXPIRED",
       recoveryCommands: ["session.renew", "session.rotate"],
     });
+  });
+});
+
+describe("http tool bridge dispatch fault disclosure", () => {
+  it.each([
+    ["command", CONFORMANCE_COMMAND_KIND, CONFORMANCE_COMMAND_ARGS],
+    ["query", CONFORMANCE_QUERY_KIND, CONFORMANCE_QUERY_ARGS],
+  ])("reports a throwing %s dispatch to the observer with the verbatim kind and the transport", async (
+    surface,
+    kind,
+    args,
+  ) => {
+    const secret = "connect ECONNREFUSED 127.0.0.1:65000";
+    const faults: McpDispatchFault[] = [];
+    const port: HttpDispatchPort = {
+      authenticate: () => ({ ok: true }),
+      dispatchCommandBytes(): never {
+        throw Object.assign(new Error(secret), { code: "ECONNREFUSED" });
+      },
+      dispatchQueryBytes(): never {
+        throw Object.assign(new Error(secret), { code: "ECONNREFUSED" });
+      },
+    };
+    const entry = entryFor(kind);
+    const thrown = await thrownBy(() => decodeAndDispatch(
+      port, entry, buildEnvelopeBytes(entry, CREDENTIAL, args), undefined,
+      (fault) => { faults.push(fault); },
+    ));
+
+    expect((thrown as McpError).data).toMatchObject({ code: "UNKNOWN_ERROR" });
+    expect(JSON.stringify((thrown as McpError).data)).not.toContain("ECONNREFUSED");
+    expect(faults).toHaveLength(1);
+    expect(faults[0]).toMatchObject({
+      stage: "dispatch",
+      surface,
+      thrown: { code: "ECONNREFUSED", message: secret },
+      toolKind: kind,
+      transport: "http",
+    });
+  });
+
+  it("reports nothing for a refusal the port RETURNED", async () => {
+    const faults: McpDispatchFault[] = [];
+    const port: HttpDispatchPort = {
+      authenticate: () => ({ error: createRuntimeError({ code: "SESSION_EXPIRED" }), ok: false }),
+      dispatchCommandBytes: () => CONFORMANCE_COMMAND_RESPONSE_BYTES,
+      dispatchQueryBytes: () => CONFORMANCE_QUERY_RESPONSE_BYTES,
+    };
+    const entry = entryFor(CONFORMANCE_COMMAND_KIND);
+    const thrown = await thrownBy(() => decodeAndDispatch(
+      port, entry, buildEnvelopeBytes(entry, CREDENTIAL, CONFORMANCE_COMMAND_ARGS), undefined,
+      (fault) => { faults.push(fault); },
+    ));
+
+    expect((thrown as McpError).data).toMatchObject({ code: "SESSION_EXPIRED" });
+    expect(faults).toEqual([]);
   });
 });

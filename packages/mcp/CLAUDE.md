@@ -24,6 +24,10 @@ injected dispatch port.
 - `HttpSessionPort` → `apps/daemon/src/mcp-http/mcp-http-session-port.ts`.
 - `toolAllowlist` on both option bags takes runtime KINDS, never tool labels; the roster
   comes from `apps/daemon/src/mcp-tool-allowlist.ts` (`wiredMcpToolKinds()`).
+- `onDispatchFault` on both option bags (`McpDispatchFaultObserver`, `dispatch-fault.ts`) →
+  `apps/daemon/src/mcp-dispatch-fault-report.ts`, composed by `mcp-main.ts`,
+  `mcp-http/mcp-http-main.ts` and `orchestrator/agent-wrapper-main.ts` (through
+  `McpHttpHostOptions.onDispatchFault`) as `MCP_DISPATCH_THREW` on the diagnostics plane.
 - `STDIO_TOOL_INDEX` / `toolLabelForKind` are also read by
   `tests/integration/portability/portability-cases.ts`.
 
@@ -60,7 +64,12 @@ injected dispatch port.
   `new McpError(error.transport.mcpCode, error.code, error)`. Unknown tool label →
   `INPUT_INVALID`; known but outside the allowlist → `CAPABILITY_DENIED`, before envelope
   construction; a port that THROWS → `UNKNOWN_ERROR`, so a store's message never reaches
-  client logs, while a refusal the port RETURNS passes through intact.
+  client logs, while a refusal the port RETURNS passes through intact. The throw itself goes
+  HOST-SIDE: `containDispatchThrow` (`dispatch-fault.ts`) hands `onDispatchFault` the verbatim
+  kind, the stage (`authenticate` / `dispatch` / `response-decode`) and the described throw;
+  a returned refusal is never reported, and an observer that throws is swallowed so the
+  refusal stands. `adapter-refusals.ts` holds the `refuse*` / `serialize` helpers both
+  transports share.
 - **An allowlist refuses rather than drops**: `allowlistedToolEntries` throws
   `MCP_TOOL_ALLOWLIST_UNKNOWN_KIND` / `MCP_TOOL_ALLOWLIST_EMPTY` at CONSTRUCTION, so a
   drifted roster is a startup failure, not a tool that quietly vanished.
@@ -108,7 +117,7 @@ injected dispatch port.
 - `distribution-inventory.ts` ships `mcp-bridge` as exactly `["packages/mcp/src/index.ts"]`
   (mirrored in `distribution-packaging.test.ts`); `release-version-surfaces.test.ts` pins
   this `package.json`.
-- `http-server.ts` is 375 lines against the repo's split-before-400 rail;
+- `http-server.ts` is 382 lines against the repo's split-before-400 rail;
   `http-request-screen.ts`, `http-resume.ts`, `http-adapter-lifecycle.ts` and
   `http-inflight-requests.ts` were carved out of it. New behaviour goes in a sibling.
 - `tsconfig.json` pins `types: ["node"]` with `skipLibCheck` because the SDK's types drag

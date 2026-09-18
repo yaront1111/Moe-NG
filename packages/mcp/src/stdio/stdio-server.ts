@@ -7,14 +7,15 @@ import {
   decodeRuntimeCommandEnvelopeBytes,
   decodeRuntimeQueryEnvelopeBytes,
 } from "@moe/contracts";
-import type { RuntimeError } from "@moe/contracts";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { refuse, refuseInvalidInput, serialize } from "../adapter-refusals.js";
+import { containDispatchThrow } from "../dispatch-fault.js";
+import type { McpDispatchFaultObserver, McpDispatchFaultStage } from "../dispatch-fault.js";
 import {
   STDIO_TOOL_ENTRIES,
   STDIO_TOOL_INDEX,
@@ -28,6 +29,12 @@ export const MOE_SESSION_CREDENTIAL_ENV = "MOE_SESSION_CREDENTIAL";
 export interface StdioServerOptions {
   /** Bootstrap session credential, held in closure and never logged or echoed. */
   readonly credential: string;
+  /**
+   * Host-side disclosure of a port that THROWS. The client still receives exactly
+   * `UNKNOWN_ERROR`; what was thrown — message, errno code, stack — goes here and nowhere
+   * else. Absent means the fault is contained silently, as it always was.
+   */
+  readonly onDispatchFault?: McpDispatchFaultObserver;
   readonly port: StdioDispatchPort;
   readonly serverName?: string;
   /**
@@ -53,34 +60,6 @@ export function readBootstrapCredential(
     throw new Error(`${MOE_SESSION_CREDENTIAL_ENV} is unset or empty; refusing to start`);
   }
   return value;
-}
-
-/** Every adapter-side refusal routes through the registry, never through invented codes. */
-function refuse(error: RuntimeError): never {
-  throw new McpError(error.transport.mcpCode, error.code, error);
-}
-
-function refuseInvalidInput(): never {
-  refuse(createRuntimeError({ code: "INPUT_INVALID" }));
-}
-
-/**
- * A broken daemon boundary is never reflected back: anything the port throws becomes the stable
- * `UNKNOWN_ERROR`, so host paths and stack text in an arbitrary `Error` never reach client logs.
- */
-function refuseUnknown(): never {
-  refuse(createRuntimeError({ code: "UNKNOWN_ERROR" }));
-}
-
-function serialize(value: unknown): string {
-  let text: string | undefined;
-  try {
-    text = JSON.stringify(value);
-  } catch {
-    refuseInvalidInput();
-  }
-  if (text === undefined) refuseInvalidInput();
-  return text;
 }
 
 /** Digest binds the request to the payload bytes exactly as this adapter serialises them. */
@@ -131,25 +110,29 @@ function buildQueryEnvelopeBytes(
  * roundtrip can express. Both port calls share one containment: a credential store that THROWS
  * is a broken daemon boundary and becomes `UNKNOWN_ERROR` rather than a raw SDK error carrying
  * the throw's message, while a refusal the port RETURNS is already an `McpError` and passes
- * through intact.
+ * through intact. The throw itself is reported to `observe`, host-side, with the stage it hit.
  */
 export async function decodeAndDispatch(
   port: StdioDispatchPort,
   entry: StdioToolEntry,
   bytes: Uint8Array,
+  observe?: McpDispatchFaultObserver,
 ): Promise<Uint8Array> {
   const isCommand = entry.surface === "command";
   const decoded = isCommand
     ? decodeRuntimeCommandEnvelopeBytes(bytes)
     : decodeRuntimeQueryEnvelopeBytes(bytes);
   if (!decoded.ok) refuse(decoded.error);
+  let stage: McpDispatchFaultStage = "authenticate";
   try {
     const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
     if (!auth.ok) refuse(auth.error);
+    stage = "dispatch";
     return await (isCommand ? port.dispatchCommandBytes(bytes) : port.dispatchQueryBytes(bytes));
   } catch (error) {
-    if (error instanceof McpError) throw error;
-    refuseUnknown();
+    containDispatchThrow(
+      error, { stage, surface: entry.surface, toolKind: entry.kind, transport: "stdio" }, observe,
+    );
   }
 }
 
@@ -172,11 +155,13 @@ async function callTool(
     entry.surface === "command"
       ? buildCommandEnvelopeBytes(entry.kind, options.credential, supplied)
       : buildQueryEnvelopeBytes(entry.kind, options.credential, supplied);
-  const response = await decodeAndDispatch(options.port, entry, bytes);
+  const response = await decodeAndDispatch(options.port, entry, bytes, options.onDispatchFault);
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(response);
-  } catch {
-    refuseUnknown();
+  } catch (error) {
+    containDispatchThrow(error, {
+      stage: "response-decode", surface: entry.surface, toolKind: entry.kind, transport: "stdio",
+    }, options.onDispatchFault);
   }
 }
 
