@@ -33,25 +33,25 @@ export interface AgentSpawnerOptions {
    * How often a LIVE seat that has printed nothing for a whole interval says so, and the cadence
    * of the liveness tick (probe + silence verdict) while it is on. 0 turns the NOTICE off only:
    * the tick then runs at the default cadence (60 s, never slower than `silenceMs`), so the
-   * silence kill is unaffected. Only the notice is optional; hang detection is not.
+   * silence kill is unaffected. Only the notice is optional; the silence kill is not.
    */
   readonly quietNoticeMs?: number;
   /**
    * What the wrapper can see of a seat that prints nothing: its descendants and the tree's CPU
-   * time. Absent, silence is judged on output alone and every notice says so. A probe that
-   * answers `{ ok: false, reason }` (or throws) grants no liveness for that tick; the reason
-   * reaches the notice and the kill line, and `warn` is called once per seat on the first
-   * failure. Production hands over `createSeatActivityProbe(process.platform)`; a test, a fake.
+   * time. Absent, every notice says so and those ticks count no silence — only the absolute cap
+   * can end the seat. A probe that answers `{ ok: false, reason }` (or throws) is neither
+   * activity nor silence for that tick; the reason reaches the notice, and `warn` is called
+   * once per seat on the first failure. Production hands over `createSeatActivityProbe`; a test, a fake.
    */
   readonly probeActivity?: SeatActivityProbe | undefined;
   /**
-   * Kill a seat that has shown NO ACTIVITY (no output, no tool child, flat CPU) for this long:
-   * the hang detector. Distinct from `timeoutMs`, the absolute cap behind it.
+   * Kill a seat that has shown NO ACTIVITY (no output, no tool child, no CPU growth) for a
+   * whole window of observed ticks. Distinct from `timeoutMs`, the absolute cap behind it.
    */
   readonly silenceMs?: number;
   /**
    * Warning-level lines (today: the first liveness-probe failure of a seat). The wrapper tees
-   * these at "warn" so a broken probe is visible before it kills anything; absent, `log`.
+   * these at "warn" so a broken probe is visible while the seat is still alive; absent, `log`.
    */
   readonly warn?: ((line: string) => void) | undefined;
   /** Fatal containment failures halt the owning runtime; they are never ordinary agent exits. */
@@ -69,8 +69,8 @@ export interface AgentSpawnerOptions {
   /**
    * The ABSOLUTE cap on one agent process: killed at this age whatever it is doing, and the kill
    * line names the last activity seen. This is the backstop for a provably ACTIVE seat that
-   * still does not finish (a tool loop that never converges). A HUNG agent is not this timer's
-   * job: `silenceMs` kills it, far sooner, on no output, no tool child and flat CPU.
+   * still does not finish (a tool loop that never converges, or a hung seat that still burns
+   * CPU). Observed stillness is `silenceMs`'s job; this timer bounds everything else.
    */
   readonly timeoutMs?: number;
   /** Platform override for the kill strategy (win32 needs a tree kill). */

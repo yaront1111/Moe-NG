@@ -37,18 +37,18 @@ const DAEMON_DIR = fileURLToPath(new URL("../..", import.meta.url));
 
 /**
  * The ABSOLUTE cap, mirrored in wrapper-knobs.ts (MOE_AGENT_TIMEOUT_MS). Two hours, not the
- * claim TTL it used to equal: the silence watch below now owns hang detection, so this only has
- * to bound a seat that is provably ACTIVE and still not finishing (a tool loop that never
- * converges), and a working node's verification lane runs far longer than 30 minutes (UnAI
- * 2026-09-18: node 6 killed at exactly 30 min with a tool child alive, node 5 done with 59 s to
- * spare). A hung agent no longer waits for this to free its slot.
+ * claim TTL it used to equal: this bounds a seat that is still ACTIVE and not finishing (a
+ * tool loop that never converges, or a hung seat that still burns CPU). A working node's
+ * verification lane runs far longer than 30 minutes (UnAI 2026-09-18: node 6 killed at exactly
+ * 30 min with a tool child alive, node 5 done with 59 s to spare). Observed stillness is the
+ * silence watch; a hung seat that still burns CPU lives until this cap.
  */
 const DEFAULT_AGENT_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 /**
  * The SILENCE cap, mirrored in wrapper-knobs.ts (MOE_AGENT_SILENCE_MS): no output, no tool
- * child and flat CPU for this long is a hung seat. Twenty minutes clears the longest single
- * model turn seen live with room to spare, and is short of the old 30-minute cap that was the
- * only thing ending a hang before.
+ * child and no CPU growth, observed for a whole window. Twenty minutes clears the longest
+ * single model turn seen live with room to spare, and is short of the old 30-minute cap that
+ * was the only thing ending a hang before.
  */
 const DEFAULT_AGENT_SILENCE_MS = 20 * 60 * 1000;
 const DEFAULT_KILL_GRACE_MS = 5_000;
@@ -448,15 +448,14 @@ function spawnRuntime(
         // A seat already being terminated is judged no further: one kill, one line.
         if (settled || terminating) return;
         const age = now() - startedAt;
-        // A broken probe (PowerShell timing out, WMI down, `ps` missing) grants no liveness, so
-        // it would kill a silent-but-working seat at the silence threshold. Say so ONCE, at
-        // warning level, on the first failed tick — long before that kill, so the operator can
-        // see the probe is broken while the seat is still alive.
+        // A broken probe (PowerShell timing out, WMI down, `ps` missing) cannot see the tree, so
+        // those ticks count no silence; only the absolute cap can kill until a tick sees it again.
+        // Say so ONCE, at warning, on the first failed tick, while the seat is still alive.
         if (tick.probeFailure !== undefined && !probeFailureWarned) {
           probeFailureWarned = true;
           warn(`[wrapper] ${request.workItemId} liveness probe failed: ${tick.probeFailure};`
-            + " the tree is unobserved, so silence is judged on output alone (the seat prints nothing"
-            + ` until it finishes) and a working seat may be killed as silent in ${String(Math.max(0, silenceMs - tick.silentMs))}ms`);
+            + " the tree is unobserved, so no silence is counted until the probe sees it again, and until then only"
+            + ` the absolute cap (${formatDuration(timeoutMs)}) can kill this seat`);
         }
         if (silenceMs > 0 && tick.silentMs >= silenceMs) {
           log(`[wrapper] ${request.workItemId} killing: silent ${formatDuration(tick.silentMs)}`

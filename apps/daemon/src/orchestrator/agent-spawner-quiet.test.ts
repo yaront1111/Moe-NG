@@ -318,15 +318,15 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     await h.start.close();
   });
 
-  it("counts CPU growth as activity, so a silent seat that is computing is not a hung seat", async () => {
+  it("counts any CPU growth as activity, so a silent seat that is computing is not a hung seat", async () => {
     let cpuMs = 0;
-    const h = seat(() => { cpuMs += 400; return { cpuMs, descendants: 2 }; });
+    const h = seat(() => { cpuMs += 125; return { cpuMs, descendants: 2 }; });
     await admit(h);
 
     h.advance(SILENCE + 5 * MINUTE);
 
     expect(killLines(h.lines)).toEqual([]);
-    expect(h.lines.filter((l) => l.includes("seat quiet")).at(-1)).toContain("no output; no tool child; cpu +0.4s");
+    expect(h.lines.filter((l) => l.includes("seat quiet")).at(-1)).toContain("no output; no tool child; cpu +125ms");
 
     h.spawned[0]?.emitter.emit("close", 0, null);
     await drain();
@@ -336,7 +336,7 @@ describe("a seat judged on liveness, not on the clock alone", () => {
   it("kills at the absolute cap whatever the seat is doing, and names the last activity", async () => {
     // Computing at every tick for the whole two hours: never silent, still capped.
     let cpuMs = 0;
-    const h = seat(() => { cpuMs += 400; return { cpuMs, descendants: 2 }; });
+    const h = seat(() => { cpuMs += 125; return { cpuMs, descendants: 2 }; });
     await admit(h);
 
     h.advance(CAP);
@@ -348,7 +348,7 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     // The cap timer was armed before the tick interval, so at 2h it fires first: the last
     // activity on record is the tick one minute earlier.
     expect(killed[0]).toBe("[wrapper] project.register@proj-1 agent exceeded 7200000ms; killing:"
-      + " absolute cap 2h0m reached (last activity: cpu +0.4s at 15:11:04Z)");
+      + " absolute cap 2h0m reached (last activity: cpu +125ms at 15:11:04Z)");
 
     h.spawned[0]?.emitter.emit("close", null, "SIGKILL");
     await drain();
@@ -420,15 +420,21 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     await h.start.close();
   });
 
-  it("judges on output alone, and says so, when no probe was handed over", async () => {
+  it("counts no silence, and says so, when no probe was handed over", async () => {
     const h = seat(undefined);
     await admit(h);
 
-    h.advance(SILENCE);
+    h.advance(SILENCE + 5 * MINUTE);
 
+    expect(killLines(h.lines)).toEqual([]);
     expect(h.lines.filter((l) => l.includes("seat quiet")).at(-1)).toContain("no output; no activity probe");
-    expect(killLines(h.lines)[0]).toContain("killing: silent 20m0s (no output, no activity probe since 13:12:04Z)");
     expect(h.warnings).toEqual([]);
+
+    h.advance(CAP - SILENCE - 5 * MINUTE);
+    expect(killLines(h.lines)).toEqual([
+      "[wrapper] project.register@proj-1 agent exceeded 7200000ms; killing:"
+        + " absolute cap 2h0m reached (last activity: seat start at 13:12:04Z)",
+    ]);
 
     h.spawned[0]?.emitter.emit("close", null, "SIGKILL");
     await drain();
@@ -436,37 +442,40 @@ describe("a seat judged on liveness, not on the clock alone", () => {
   });
 
   /**
-   * A PROBE THAT FAILS EVERY TICK (PowerShell timing out, WMI down, `ps` missing) grants no
-   * liveness, so it kills a silent-but-working seat at the silence threshold — sooner than the
-   * old cap ever did. That is the fail-closed choice, kept; what it must never be is SILENT about
-   * itself: the reason the probe gave is in every notice and in the kill line, and the first
-   * failure is a warning-level line long before any kill.
+   * A PROBE THAT FAILS EVERY TICK (PowerShell timing out, WMI down, `ps` missing) cannot see the
+   * tree, so those ticks are neither activity nor silence. Only the absolute cap can end the seat
+   * while the probe is blind. The reason the probe gave is in every notice, and the first failure
+   * is a warning-level line — not because a silence kill is coming, but so the operator can see
+   * the probe is broken while the seat is still alive.
    */
-  it("names the probe's failure reason in the notice, the kill line, and one early warning", async () => {
+  it("names the probe's failure reason in the notice and one early warning, and kills only at the cap", async () => {
     const h = seat(() => ({ ok: false, reason: "powershell.exe timed out after 30000ms (SIGTERM)" }));
     await admit(h);
 
     h.advance(MINUTE);
-    // The warning is on the FIRST failed tick, nineteen minutes before the kill it foretells.
     expect(h.warnings).toEqual([
       "[wrapper] project.register@proj-1 liveness probe failed: powershell.exe timed out after 30000ms (SIGTERM);"
-        + " the tree is unobserved, so silence is judged on output alone (the seat prints nothing until it"
-        + " finishes) and a working seat may be killed as silent in 1140000ms",
+        + " the tree is unobserved, so no silence is counted until the probe sees it again, and until then only"
+        + " the absolute cap (2h0m) can kill this seat",
     ]);
     expect(h.groupKills).toEqual([]);
     const quiet = h.lines.filter((l) => l.includes("seat quiet"));
     expect(quiet.length).toBe(1);
+    expect(quiet[0]).toContain("1200000ms to silence kill");
     expect(quiet[0]).toContain("no output; tree unobserved: powershell.exe timed out after 30000ms (SIGTERM)");
     expect(quiet[0]).not.toContain("answered nothing");
 
-    h.advance(SILENCE - MINUTE);
-    // Killed at the threshold (fail-closed), the line saying WHY the tree was never seen.
+    h.advance(SILENCE + 4 * MINUTE);
+    expect(h.groupKills).toEqual([]);
+    expect(killLines(h.lines)).toEqual([]);
+
+    h.advance(CAP - SILENCE - 5 * MINUTE);
+    // Unobserved for the whole life: only the absolute cap fires, last activity is still seat start.
     expect(h.groupKills).toEqual([-4242]);
     expect(killLines(h.lines)).toEqual([
-      "[wrapper] project.register@proj-1 killing: silent 20m0s (no output, tree unobserved: powershell.exe"
-        + " timed out after 30000ms (SIGTERM) since 13:12:04Z); absolute cap 2h0m not reached (age 20m0s)",
+      "[wrapper] project.register@proj-1 agent exceeded 7200000ms; killing:"
+        + " absolute cap 2h0m reached (last activity: seat start at 13:12:04Z)",
     ]);
-    // Warned ONCE per seat, however many ticks failed.
     expect(h.warnings.length).toBe(1);
 
     h.spawned[0]?.emitter.emit("close", null, "SIGKILL");
@@ -474,15 +483,45 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     await h.start.close();
   });
 
-  it("warns with the thrown message when the probe throws, and still kills on silence", async () => {
+  it("warns with the thrown message when the probe throws, and counts no silence", async () => {
     const h = seat(() => { throw new Error("ps: not found"); });
     await admit(h);
 
-    h.advance(SILENCE);
+    h.advance(SILENCE + 5 * MINUTE);
 
     expect(h.warnings.length).toBe(1);
-    expect(h.warnings[0]).toContain("liveness probe failed: probe threw: ps: not found");
-    expect(killLines(h.lines)[0]).toContain("(no output, tree unobserved: probe threw: ps: not found since 13:12:04Z)");
+    expect(h.warnings[0]).toContain(
+      "liveness probe failed: probe threw: ps: not found; the tree is unobserved, so no silence is counted",
+    );
+    expect(killLines(h.lines)).toEqual([]);
+    expect(h.groupKills).toEqual([]);
+    expect(h.lines.filter((l) => l.includes("seat quiet")).at(-1))
+      .toContain("no output; tree unobserved: probe threw: ps: not found");
+
+    h.spawned[0]?.emitter.emit("close", 0, null);
+    await drain();
+    await h.start.close();
+  });
+
+  it("a probe that fails only at tick 6 moves the silence kill to 20 min after that tick", async () => {
+    let ticks = 0;
+    const h = seat(() => {
+      ticks += 1;
+      if (ticks === 6) return { ok: false, reason: "powershell.exe timed out after 30000ms (SIGTERM)" };
+      return { cpuMs: 1_000, descendants: 2 };
+    });
+    await admit(h);
+
+    h.advance(SILENCE + 5 * MINUTE);
+    expect(h.groupKills).toEqual([]);
+
+    h.advance(MINUTE);
+    expect(killLines(h.lines)).toEqual([
+      "[wrapper] project.register@proj-1 killing: silent 20m0s"
+        + " (no output, no tool child, cpu unchanged since 13:18:04Z); absolute cap 2h0m not reached (age 26m0s)",
+    ]);
+    expect(h.groupKills).toEqual([-4242]);
+    expect(h.warnings.length).toBe(1);
 
     h.spawned[0]?.emitter.emit("close", null, "SIGKILL");
     await drain();
@@ -492,7 +531,7 @@ describe("a seat judged on liveness, not on the clock alone", () => {
   /**
    * quietNoticeMs 0 used to disarm the whole tick, so a caller that only wanted the notice off
    * also lost the silence kill and was back to the wall-clock cap alone. The notice and the
-   * liveness tick are now decoupled: the notice is optional, hang detection is not.
+   * liveness tick are now decoupled: the notice is optional, the silence kill is not.
    */
   it("still kills a silent no-child seat at silenceMs when the quiet notice is turned off", async () => {
     const h = seat(() => ({ cpuMs: 1_000, descendants: 2 }), { quietNoticeMs: 0 });

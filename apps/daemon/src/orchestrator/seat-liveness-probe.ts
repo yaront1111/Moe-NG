@@ -27,9 +27,9 @@ export interface SeatActivitySample {
 
 /**
  * The probe could not see the tree, and SAYS WHY: a PowerShell timeout, a non-zero exit with
- * its stderr tail, a missing `ps`, or whatever was thrown. The reason reaches the quiet notice,
- * the kill line and a once-per-seat warning, because a probe that fails every tick grants no
- * liveness (fail-closed) and would otherwise kill a working seat with no line saying why.
+ * its stderr tail, a missing `ps`, or whatever was thrown. The reason reaches the quiet notice
+ * and a once-per-seat warning. Unobserved ticks count no silence; only the absolute cap can
+ * end the seat until a tick sees the tree again.
  */
 export interface SeatProbeFailure {
   readonly ok: false;
@@ -189,7 +189,7 @@ function windowsPowerShell(environment: NodeJS.ProcessEnv): string {
 /**
  * The real probe for one platform. It never throws: a throwing or timing-out command, a table
  * without the seat, or a nonsense pid answers `{ ok: false, reason }`, and the caller reports
- * the tree as unobserved WITH that reason, keeping the seat's own output as its remaining signal.
+ * the tree as unobserved WITH that reason. Unobserved ticks count no silence (epic rail 4).
  */
 export function createSeatActivityProbe(
   platform: NodeJS.Platform = process.platform,

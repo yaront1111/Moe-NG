@@ -16,36 +16,26 @@
  * The one blind spot is a seat that has had a tool child open at every tick since its first —
  * that seat is judged on CPU growth and output alone, which is exactly the judgement a tool child
  * that has burned no CPU for the whole silence window deserves.
+ *
+ * CPU is evidence, never a threshold (human ruling 2026-09-18, task-eca3780d comment-6d395077).
+ * Measured on this host through this probe, in ms of tree CPU per ~60 s (comment-a96f4b63): a hung
+ * `claude -p` burns 125-547; a working one with no tool child burns 219-1219. The bands overlap,
+ * so any growth counts as activity, and a hung seat that still burns CPU is bounded only by the
+ * absolute cap. A wasted wait is recoverable; a killed working seat loses its context.
  */
 import { describeThrownForProbe, isProbeFailure, probeFailure } from "./seat-liveness-probe.js";
 import type { SeatActivityProbe, SeatProbeAnswer } from "./seat-liveness-probe.js";
 
-/**
- * An idle Node event loop accrues single-digit milliseconds of CPU per minute (timers, GC); a CLI
- * parsing a streamed model response, or any tool child doing work, accrues hundreds. Growth below
- * this floor per tick is "unchanged", so a hung seat cannot keep itself alive on housekeeping.
- *
- * UNMEASURED against a working `claude -p` turn that has no tool child (a long model response
- * being streamed and parsed): the figure is the idle-loop number with a margin, not a reading
- * from such a turn. TO CALIBRATE on a live seat: read that seat's `[wrapper] <item> seat quiet:`
- * lines (the wrapper console, or `<project>/.moe/logs` where the SEAT_LINE records land). The
- * tick runs every min(MOE_WRAPPER quiet notice 60 s, MOE_AGENT_SILENCE_MS), so each line's cpu
- * field is the tree's CPU growth over ONE tick, judged against this floor: `cpu +N.Ns` is at or
- * above it, `cpu unchanged` is below it. Compare the lines whose tick saw `no tool child` during
- * a turn known to be working (the seat later delivers) with the lines from a known hang: a
- * working turn must read `cpu +…` on every tick and a hang `cpu unchanged` on every tick. If a
- * working no-tool-child tick ever reads `cpu unchanged`, run the probe's own command
- * (WINDOWS_TREE_SCRIPT in PowerShell, or `ps -A -o pid=,ppid=,time=`) twice, one tick apart,
- * sum the seat tree's CPU each time, and lower this floor below the smallest working delta seen
- * while keeping it above the idle figure. The value is deliberately not changed here.
- */
-export const CPU_ACTIVITY_FLOOR_MS = 250;
-
 export interface SeatLivenessOptions {
-  readonly cpuActivityFloorMs?: number;
   readonly now: () => number;
   readonly pid: number | undefined;
-  /** Absent means the wrapper judges on output alone, and says so in every notice. */
+  /**
+   * Absent means the tree is unobserved this tick (same as a missing pid). A silence kill needs a
+   * whole window of ticks that SAW the tree still; a tick that could not see it is neither activity
+   * nor silence, and it restarts the count (epic rail 4: unverifiable evidence gains no authority).
+   * A probe that fails on every tick, or at least once in every window, leaves only the absolute
+   * cap; one transient failure delays a kill by at most one window.
+   */
   readonly probe: SeatActivityProbe | undefined;
 }
 
@@ -54,7 +44,8 @@ export interface SeatLivenessTick {
   readonly detail: string;
   /**
    * Set when the probe could not see the tree this tick: the bounded reason (timeout, exit code
-   * and stderr tail, thrown message). No liveness was granted for it; the spawner warns once.
+   * and stderr tail, thrown message). Unobserved is neither activity nor silence: it restarts the
+   * observed-silence count. The spawner warns once.
    */
   readonly probeFailure: string | undefined;
   /** Since the last OUTPUT byte; what the quiet notice reports. */
@@ -90,13 +81,19 @@ export function formatClock(epochMs: number): string {
   return `${new Date(epochMs).toISOString().slice(11, 19)}Z`;
 }
 
+/** Sub-second growth as whole ms rounded UP so a real quantum never reads as zero; else `N.Ns`. */
+function formatCpuGrowth(ms: number): string {
+  if (ms < 1_000) return `${String(Math.ceil(ms))}ms`;
+  return `${(ms / 1_000).toFixed(1)}s`;
+}
+
 const isThenable = (value: unknown): value is PromiseLike<unknown> =>
   typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
 
 export function createSeatLiveness(options: SeatLivenessOptions): SeatLiveness {
-  const floor = options.cpuActivityFloorMs ?? CPU_ACTIVITY_FLOOR_MS;
   const startedAt = options.now();
   let lastActivityAt = startedAt;
+  let lastUnobservedAt = startedAt;
   let lastActivityKind = "seat start";
   let lastOutputAt = startedAt;
   let bytesSinceTick = 0;
@@ -117,9 +114,11 @@ export function createSeatLiveness(options: SeatLivenessOptions): SeatLiveness {
     const parts: string[] = [bytes > 0 ? `output ${String(bytes)} bytes` : "no output"];
     let failure: string | undefined;
     if (answer === undefined) {
+      // Unobserved: neither activity nor silence. Restarts the observed-silence count.
+      lastUnobservedAt = at;
       parts.push("no activity probe");
     } else if (isProbeFailure(answer)) {
-      // FAIL-CLOSED: an unobserved tree grants no liveness, and the reason rides in every line.
+      lastUnobservedAt = at;
       failure = answer.reason;
       parts.push(`tree unobserved: ${failure}`);
     } else {
@@ -132,21 +131,22 @@ export function createSeatLiveness(options: SeatLivenessOptions): SeatLiveness {
       const cpuDelta = previousCpuMs === undefined ? undefined : sample.cpuMs - previousCpuMs;
       previousCpuMs = sample.cpuMs;
       if (cpuDelta === undefined) parts.push("cpu baseline taken");
-      else if (cpuDelta >= floor) parts.push(`cpu +${(cpuDelta / 1_000).toFixed(1)}s`);
+      else if (cpuDelta > 0) parts.push(`cpu +${formatCpuGrowth(cpuDelta)}`);
       else if (cpuDelta < 0) parts.push("cpu rebased (a process left the tree)");
       else parts.push("cpu unchanged");
       // A live tool child outranks CPU as the named activity: it is what an operator looks for.
       if (toolChildren > 0) {
         lastActivityAt = at;
         lastActivityKind = parts[1]!;
-      } else if (cpuDelta !== undefined && (cpuDelta >= floor || cpuDelta < 0)) {
+      } else if (cpuDelta !== undefined && cpuDelta !== 0) {
         lastActivityAt = at;
         lastActivityKind = parts[2]!;
       }
     }
     stillness = parts.join(", ");
+    const silenceAnchor = Math.max(lastActivityAt, lastUnobservedAt);
     return Object.freeze({
-      detail: parts.join("; "), probeFailure: failure, quietMs: at - lastOutputAt, silentMs: at - lastActivityAt,
+      detail: parts.join("; "), probeFailure: failure, quietMs: at - lastOutputAt, silentMs: at - silenceAnchor,
     });
   };
 
@@ -176,7 +176,7 @@ export function createSeatLiveness(options: SeatLivenessOptions): SeatLiveness {
   return Object.freeze({
     lastActivity: () => `${lastActivityKind} at ${formatClock(lastActivityAt)}`,
     noteOutput,
-    stillness: () => `${stillness} since ${formatClock(lastActivityAt)}`,
+    stillness: () => `${stillness} since ${formatClock(Math.max(lastActivityAt, lastUnobservedAt))}`,
     tick,
   });
 }
