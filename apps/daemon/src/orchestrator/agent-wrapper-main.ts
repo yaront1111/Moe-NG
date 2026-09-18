@@ -24,6 +24,7 @@ import { createAgentWrapper } from "./agent-wrapper.js";
 import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { credentialValues } from "./credential-scrub.js";
 import { createRepositoryDeliveryRuntime } from "./repository-delivery-runtime.js";
+import { createSeatActivityProbe } from "./seat-liveness-probe.js";
 import { createReviewAwareNodeMissions } from "./wrapper-review-missions.js";
 import { loadPayloadHints } from "./wrapper-payload-hints.js";
 import { createCompilerMissionInputs, createDesignBriefResolver }
@@ -76,8 +77,10 @@ import { resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
  * (default 2), MOE_WRAPPER_INTERVAL_MS (default 15000), MOE_WRAPPER_ONCE=1 for
  * a single pass, MOE_WRAPPER_MAX_ITEM_ATTEMPTS (default 3) staffing tries per
  * unmoved item before it is reported STAFFING_ATTEMPTS_EXHAUSTED instead of
- * respawned, and MOE_AGENT_TIMEOUT_MS (default 30 min) the hard lifetime of
- * one agent process, from which the agent's bearer TTL is derived. The trusted
+ * respawned, MOE_AGENT_SILENCE_MS (default 20 min) how long a seat may show no
+ * activity — no output, no tool child, flat CPU — before it is killed as hung,
+ * and MOE_AGENT_TIMEOUT_MS (default 2 h) the absolute lifetime of one agent
+ * process whatever it is doing, from which the agent's bearer TTL is derived. The trusted
  * wrapper hosts MCP on loopback; each agent receives only its scoped bearer,
  * never the operator credential or store path.
  *
@@ -414,7 +417,19 @@ async function main(): Promise<void> {
         event: "SEAT_LINE",
         write: (line) => { process.stdout.write(`${line}\n`); },
       }),
+      // The OS view of a seat that prints nothing (`claude -p` says nothing until it finishes):
+      // tool children and tree CPU. Silence kills a hung seat; the cap bounds a working one.
+      probeActivity: createSeatActivityProbe(process.platform),
+      silenceMs: knobs.agentSilenceMs,
       timeoutMs: knobs.agentTimeoutMs,
+      // A probe that cannot see the tree (PowerShell timing out, `ps` missing) grants no liveness
+      // and would kill a working seat as silent; its first failure per seat is filed at WARN.
+      warn: teeDiagnosticLine({
+        emitter: seatDiagnostics,
+        event: "SEAT_PROBE_FAILED",
+        level: "warn",
+        write: (line) => { process.stderr.write(`${line}\n`); },
+      }),
     });
     secureSpawn = agentSpawner;
 

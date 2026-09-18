@@ -7,7 +7,12 @@
  * is idle. Refuse by name at startup instead.
  */
 export interface WrapperKnobs {
-  /** Hard lifetime of one agent process; the same value the spawner enforces. */
+  /**
+   * How long a seat may show NO ACTIVITY (no output, no tool child, flat CPU) before the
+   * spawner kills it. The hang detector; `agentTimeoutMs` is the absolute cap behind it.
+   */
+  readonly agentSilenceMs: number;
+  /** Absolute lifetime of one agent process whatever it is doing; the same value the spawner enforces. */
   readonly agentTimeoutMs: number;
   /** work.claim lifetime per staffing: the reap horizon when a child dies without releasing. */
   readonly claimTtlMs: number;
@@ -33,8 +38,19 @@ const DEFAULT_MAX_AGENTS = 2;
 const DEFAULT_INTERVAL_MS = 15_000;
 /** Below this the loop is a busy-wait against SQLite, not a poll. */
 const MIN_INTERVAL_MS = 100;
-/** Mirrors agent-spawner.ts DEFAULT_AGENT_TIMEOUT_MS; the spawner is handed this value. */
-const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+/**
+ * Mirrors agent-spawner.ts DEFAULT_AGENT_TIMEOUT_MS; the spawner is handed this value. Two
+ * hours: it is the ABSOLUTE cap behind the silence watch, not the hang detector it used to be,
+ * so it only needs to outlast a working node's longest verification lane (UnAI 2026-09-18: a
+ * node was killed at exactly the old 30 min with a tool child alive). It is still what the
+ * bearer TTL is derived from, so the session now outlives a two-hour seat by construction.
+ */
+const DEFAULT_AGENT_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+/**
+ * Mirrors agent-spawner.ts DEFAULT_AGENT_SILENCE_MS: no output, no tool child and flat CPU for
+ * twenty minutes is a hung seat. Set it at or above the timeout to leave only the absolute cap.
+ */
+const DEFAULT_AGENT_SILENCE_MS = 20 * 60 * 1000;
 const CLAIM_TTL_MS = 30 * 60 * 1000;
 /**
  * Added on top of the longer horizon so the bearer is still live when the
@@ -68,6 +84,7 @@ export function readWrapperKnobs(
   // default), so it is refused by name HERE, before the spawner ever reads it.
   const agentTimeoutMs = integer(env, "MOE_AGENT_TIMEOUT_MS", DEFAULT_AGENT_TIMEOUT_MS, 1);
   return Object.freeze({
+    agentSilenceMs: integer(env, "MOE_AGENT_SILENCE_MS", DEFAULT_AGENT_SILENCE_MS, 1),
     agentTimeoutMs,
     claimTtlMs: CLAIM_TTL_MS,
     intervalMs: integer(env, "MOE_WRAPPER_INTERVAL_MS", DEFAULT_INTERVAL_MS, MIN_INTERVAL_MS),

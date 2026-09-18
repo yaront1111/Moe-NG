@@ -71,11 +71,27 @@ its own: a caller that injects no dependency provider is refused, never served a
   then exact own-key check against `moe-work-request/1`) and may never learn routing, auth or
   persistence.
 - **Wrapper knobs are refused by name.** `wrapper-knobs.ts` rejects a non-integer
-  `MOE_WRAPPER_INTERVAL_MS` / `MOE_WRAPPER_MAX_AGENTS` / `MOE_AGENT_TIMEOUT_MS` with
-  `WRAPPER_ENV_INVALID`, because `setTimeout(fn, NaN)` becomes a tight loop against SQLite and
-  `active < NaN` staffs nothing while the log says idle. `sessionTtlMs` is *derived*
-  (`max(claimTtl, agentTimeout) + 60 s`) so the bearer outlives the child's own release.
-  `MOE_NODE_TREES=1` and `MOE_WRAPPER_ONCE=1` are the two `=== "1"` flags.
+  `MOE_WRAPPER_INTERVAL_MS` / `MOE_WRAPPER_MAX_AGENTS` / `MOE_AGENT_TIMEOUT_MS` /
+  `MOE_AGENT_SILENCE_MS` with `WRAPPER_ENV_INVALID`, because `setTimeout(fn, NaN)` becomes a
+  tight loop against SQLite and `active < NaN` staffs nothing while the log says idle.
+  `sessionTtlMs` is *derived* (`max(claimTtl, agentTimeout) + 60 s`) so the bearer outlives the
+  child's own release. `MOE_NODE_TREES=1` and `MOE_WRAPPER_ONCE=1` are the two `=== "1"` flags.
+- **A seat is killed on SILENCE, and only backstopped by the cap.** `claude -p` prints nothing
+  until it finishes, so bytes-on-stdout is 0 for a seat's whole life. `seat-liveness-probe.ts`
+  looks at the OS once per tick (win32: PowerShell CIM `Win32_Process`; POSIX: `ps`) for the
+  seat's descendants and tree CPU; `seat-liveness.ts` calls a seat active on output, on a live
+  tool child (descendants above the smallest count seen — the launcher chain, cmd.exe → model),
+  or on CPU growth ≥ `CPU_ACTIVITY_FLOOR_MS` per tick. `MOE_AGENT_SILENCE_MS` (20 min) kills
+  after no activity; `MOE_AGENT_TIMEOUT_MS` (2 h) kills regardless. Each kill line names which
+  limit fired and the last activity seen; the quiet notice carries the same three facts. The
+  tick runs at `min(quietNoticeMs || 60 s, silenceMs)`; `quietNoticeMs: 0` silences the notice
+  only, never the kill. A probe that cannot see the tree answers `{ ok: false, reason }` (a
+  bounded timeout / exit + stderr tail / thrown message), grants no liveness (fail-closed), puts
+  `tree unobserved: <reason>` in the notice and the kill line, and the spawner's `warn` sink
+  (teed at WARN as `SEAT_PROBE_FAILED`) says so once per seat on the first failed tick, before
+  any kill. `CPU_ACTIVITY_FLOOR_MS` is unmeasured against a no-tool-child model turn; its
+  comment holds the calibration recipe. Any new `MOE_*` knob the wrapper reads must also join
+  `PROJECT_STACK_ENVIRONMENT_KEYS` in `packages/runner` or the Windows broker drops it silently.
 - **`moe up` supervises, it does not modify.** It reads one canonical line,
   `listening on http://127.0.0.1:<port>`, suppresses any daemon line matching its
   `SENSITIVE_DAEMON_LINE` pattern, and on Windows relies on Ctrl-C or a child exit because an

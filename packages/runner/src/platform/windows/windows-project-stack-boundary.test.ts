@@ -249,7 +249,7 @@ describe("the curated Windows project-stack request", () => {
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).toEqual([
       ...ALLOWED_ENVIRONMENT_KEYS,
       ...PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS,
-      "MOE_AGENT_COMMAND", "MOE_AGENT_TIMEOUT_MS", "MOE_DAEMON_CREDENTIAL",
+      "MOE_AGENT_COMMAND", "MOE_AGENT_SILENCE_MS", "MOE_AGENT_TIMEOUT_MS", "MOE_DAEMON_CREDENTIAL",
       "MOE_FOUNDATION_WORKSPACE_CATALOG",
       // Whether the daemon may answer an exhausted review itself, and how often per node. The
       // wrapper reads both at startup, so off this roster the owner could state the policy and

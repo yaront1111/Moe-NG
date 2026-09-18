@@ -42,6 +42,9 @@ export const PROJECT_STACK_ENVIRONMENT_KEYS = Object.freeze([
   ...ALLOWED_ENVIRONMENT_KEYS,
   ...PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS,
   "MOE_AGENT_COMMAND",
+  // The seat's silence cap (hang detector) beside its absolute cap. Both are read by the wrapper
+  // at startup, so off this roster a launcher could set them and the seats would never know.
+  "MOE_AGENT_SILENCE_MS",
   "MOE_AGENT_TIMEOUT_MS",
   "MOE_DAEMON_CREDENTIAL",
   // R3-4: Foundation daemon inputs are admitted only to the project stack host.

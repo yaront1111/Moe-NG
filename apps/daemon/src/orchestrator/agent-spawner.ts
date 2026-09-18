@@ -16,6 +16,8 @@ import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpa
   SpawnAttempt } from "./agent-spawn-contract.js";
 import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
 import { spawnSeatFor } from "./agent-provider-resolve.js";
+import { createSeatLiveness, formatDuration } from "./seat-liveness.js";
+import type { SeatLivenessTick } from "./seat-liveness.js";
 import { createOutputTail } from "./seat-output-tail.js";
 import { spawnWindowsTreeKill } from "./seat-tree-kill.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
@@ -33,20 +35,49 @@ export type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpa
  */
 const DAEMON_DIR = fileURLToPath(new URL("../..", import.meta.url));
 
-/** Default agent lifetime: the claim TTL, so a hung agent frees its slot no later
- *  than its claim's reap horizon rather than holding a maxAgents slot forever. */
-const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+/**
+ * The ABSOLUTE cap, mirrored in wrapper-knobs.ts (MOE_AGENT_TIMEOUT_MS). Two hours, not the
+ * claim TTL it used to equal: the silence watch below now owns hang detection, so this only has
+ * to bound a seat that is provably ACTIVE and still not finishing (a tool loop that never
+ * converges), and a working node's verification lane runs far longer than 30 minutes (UnAI
+ * 2026-09-18: node 6 killed at exactly 30 min with a tool child alive, node 5 done with 59 s to
+ * spare). A hung agent no longer waits for this to free its slot.
+ */
+const DEFAULT_AGENT_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+/**
+ * The SILENCE cap, mirrored in wrapper-knobs.ts (MOE_AGENT_SILENCE_MS): no output, no tool
+ * child and flat CPU for this long is a hung seat. Twenty minutes clears the longest single
+ * model turn seen live with room to spare, and is short of the old 30-minute cap that was the
+ * only thing ending a hang before.
+ */
+const DEFAULT_AGENT_SILENCE_MS = 20 * 60 * 1000;
 const DEFAULT_KILL_GRACE_MS = 5_000;
 /**
- * How often a LIVE seat that has printed nothing says so.
+ * The liveness cadence: how often a LIVE seat is probed, judged for silence, and, when it has
+ * printed nothing for a whole interval, reported.
  *
  * A seat used to be observed exactly once in its whole life — the lifetime `setTimeout` below,
  * 30 minutes by default. A hung seat therefore spent half an hour in total silence and then
  * produced one line saying it had timed out, which is the recorded live symptom. `outputSeen`
  * was computed on every chunk and read only at settlement, so the silence was knowable at every
- * instant and observed at none.
+ * instant and observed at none. The notice then said "0 bytes seen" for every seat's whole
+ * life, because `claude -p` prints nothing until it finishes — see seat-liveness-probe.ts.
  */
 const DEFAULT_QUIET_NOTICE_MS = 60_000;
+/**
+ * A lenient env read for callers that hand over no option. This is NOT the refusing site: the
+ * wrapper (agent-wrapper-main.ts) reads MOE_AGENT_TIMEOUT_MS and MOE_AGENT_SILENCE_MS through
+ * wrapper-knobs.ts, which refuses a malformed value BY NAME (WRAPPER_ENV_INVALID) before this
+ * runtime exists, and hands the parsed numbers over as options. Only a direct caller that names
+ * no option reaches this read (tests, tests/security hostile cases), and for such a caller the
+ * default is the right answer to an environment it never asked to be read. Coercing here rather
+ * than refusing is the pre-existing MOE_AGENT_TIMEOUT_MS shape, kept on purpose so this layer
+ * cannot grow a second, drifting spelling of the knob contract.
+ */
+function positiveIntegerEnv(name: string, fallback: number): number {
+  const parsed = Number(process.env[name] ?? "");
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 /** The env var a codex seat reads its scoped MCP bearer from (never argv, never
  *  a file); injected per child, invisible to the claude seat's config path. */
 export const CODEX_BEARER_VARIABLE = "MOE_AGENT_MCP_BEARER";
@@ -64,14 +95,22 @@ function spawnRuntime(
   CONFIG_DIRS.add(configDir);
   const spawn = options.spawn ?? nodeSpawn;
   const log = options.log ?? ((line: string): void => { process.stdout.write(`${line}\n`); });
-  const envTimeout = Number(process.env["MOE_AGENT_TIMEOUT_MS"] ?? "");
-  const timeoutMs = options.timeoutMs
-    ?? (Number.isSafeInteger(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_AGENT_TIMEOUT_MS);
+  // A warning-level line (a broken liveness probe); the wrapper tees it at "warn", a direct
+  // caller sees it beside every other line.
+  const warn = options.warn ?? log;
+  const timeoutMs = options.timeoutMs ?? positiveIntegerEnv("MOE_AGENT_TIMEOUT_MS", DEFAULT_AGENT_TIMEOUT_MS);
+  const silenceMs = options.silenceMs ?? positiveIntegerEnv("MOE_AGENT_SILENCE_MS", DEFAULT_AGENT_SILENCE_MS);
   const platform = options.platform ?? process.platform;
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   // INJECTED so the quiet notice is testable without waiting a real minute.
   const now = options.now ?? ((): number => Date.now());
   const quietNoticeMs = options.quietNoticeMs ?? DEFAULT_QUIET_NOTICE_MS;
+  // THE TICK IS NOT THE NOTICE. quietNoticeMs 0 silences the notice; it must not also disarm the
+  // silence kill (it did: the tick ran only when a notice was wanted). The liveness tick runs at
+  // the notice cadence, or the default cadence when the notice is off, and never slower than
+  // the silence threshold itself, so a kill is never late by a whole interval.
+  const tickMs = Math.min(quietNoticeMs > 0 ? quietNoticeMs : DEFAULT_QUIET_NOTICE_MS,
+    silenceMs > 0 ? silenceMs : Number.POSITIVE_INFINITY);
   const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);
   const active = new Set<{
     readonly done: Promise<SeatExitReport | void>;
@@ -241,15 +280,13 @@ function spawnRuntime(
       // Set on the first byte from either stream, so the exit facts state directly whether
       // the seat ever spoke rather than inferring it from a bounded tail.
       let outputSeen = false;
-      // The instants the quiet notice is computed from. Never used to settle anything: a silent
-      // seat is reported, never killed early — the lifetime timer alone owns that decision.
+      // Output, tool children and CPU growth all feed one account of when the seat was last seen
+      // doing anything; the silence kill below reads it, the absolute cap ignores it.
       const startedAt = now();
-      let lastOutputAt = startedAt;
-      let outputBytes = 0;
+      const liveness = createSeatLiveness({ now, pid: child.pid, probe: options.probeActivity });
       const tee = (sink: NodeJS.WritableStream) => (chunk: Buffer): void => {
         outputSeen = true;
-        lastOutputAt = now();
-        outputBytes += chunk.length;
+        liveness.noteOutput(chunk.length);
         sink.write(chunk);
         tail.push(chunk);
       };
@@ -396,21 +433,56 @@ function spawnRuntime(
         if (child.pid === undefined) failProcess("SPAWN_ERROR", null, null);
         else beginTermination();
       });
+      // THE ABSOLUTE CAP fires whatever the seat is doing; the line says so, and says what it was
+      // doing, so a kill of a working seat reads differently from a kill of a hung one.
       timer = setTimeout(() => {
-        log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing`);
+        log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing:`
+          + ` absolute cap ${formatDuration(timeoutMs)} reached (last activity: ${liveness.lastActivity()})`);
         beginTermination();
       }, timeoutMs);
       if (typeof timer.unref === "function") timer.unref();
-      if (quietNoticeMs > 0) {
+      // THE LIVENESS TICK: one probe, one silence verdict, and (when warranted) one notice. The
+      // tick runs synchronously when the probe answers synchronously, so a fake clock drives it.
+      let probeFailureWarned = false;
+      const judge = (tick: SeatLivenessTick): void => {
+        // A seat already being terminated is judged no further: one kill, one line.
+        if (settled || terminating) return;
+        const age = now() - startedAt;
+        // A broken probe (PowerShell timing out, WMI down, `ps` missing) grants no liveness, so
+        // it would kill a silent-but-working seat at the silence threshold. Say so ONCE, at
+        // warning level, on the first failed tick — long before that kill, so the operator can
+        // see the probe is broken while the seat is still alive.
+        if (tick.probeFailure !== undefined && !probeFailureWarned) {
+          probeFailureWarned = true;
+          warn(`[wrapper] ${request.workItemId} liveness probe failed: ${tick.probeFailure};`
+            + " the tree is unobserved, so silence is judged on output alone (the seat prints nothing"
+            + ` until it finishes) and a working seat may be killed as silent in ${String(Math.max(0, silenceMs - tick.silentMs))}ms`);
+        }
+        if (silenceMs > 0 && tick.silentMs >= silenceMs) {
+          log(`[wrapper] ${request.workItemId} killing: silent ${formatDuration(tick.silentMs)}`
+            + ` (${liveness.stillness()}); absolute cap ${formatDuration(timeoutMs)} not reached`
+            + ` (age ${formatDuration(age)})`);
+          beginTermination();
+          return;
+        }
+        // Only when a notice was asked for, and only when the seat has actually printed nothing
+        // for a whole interval. A seat producing output says nothing here, so these lines mean
+        // exactly one thing when they do appear.
+        if (quietNoticeMs <= 0 || tick.quietMs < quietNoticeMs) return;
+        log(`[wrapper] ${request.workItemId} seat quiet: ${String(tick.quietMs)}ms since last output`
+          + ` (age ${String(age)}ms, ${String(Math.max(0, silenceMs - tick.silentMs))}ms to silence kill,`
+          + ` ${String(timeoutMs - age)}ms to absolute cap, pid ${String(child.pid ?? "none")};`
+          + ` ${tick.detail})`);
+      };
+      let probing = false;
+      if (Number.isFinite(tickMs)) {
         quietTimer = setInterval(() => {
-          const silentMs = now() - lastOutputAt;
-          // Only when it has actually been silent for a whole interval. A seat producing output
-          // says nothing here, so these lines mean exactly one thing when they do appear.
-          if (silentMs < quietNoticeMs) return;
-          log(`[wrapper] ${request.workItemId} seat quiet: ${String(silentMs)}ms since last`
-            + ` output (age ${String(now() - startedAt)}ms, ${String(timeoutMs - (now() - startedAt))}ms`
-            + ` to timeout, pid ${String(child.pid ?? "none")}, ${String(outputBytes)} bytes seen)`);
-        }, quietNoticeMs);
+          if (probing || settled) return;
+          const outcome = liveness.tick();
+          if (!(outcome instanceof Promise)) { judge(outcome); return; }
+          probing = true;
+          void outcome.then((tick) => { probing = false; judge(tick); });
+        }, tickMs);
         if (typeof quietTimer.unref === "function") quietTimer.unref();
       }
       // A child can exit after spawn() succeeds but before stdin is written.
