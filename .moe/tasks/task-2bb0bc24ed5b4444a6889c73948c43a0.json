@@ -98,7 +98,7 @@
     }
   ],
   "planRevision": 13,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -118,16 +118,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T06:48:51.208Z",
-  "updatedAt": "2026-09-18T08:23:02.330Z",
+  "updatedAt": "2026-09-18T08:33:09.627Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T07:55:12.153Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-18T08:33:09.627Z",
+    "wallClockMs": 2277474
   },
   "contextFetchedBy": [
     "architect-73d103f8",
-    "worker-6433dce1"
+    "worker-6433dce1",
+    "qa-84420029"
   ],
   "stepsCompleted": [
     "step-1",
@@ -156,7 +159,45 @@
     "apps/daemon/src/review/governance-decision-ledger.test.ts",
     "apps/daemon/src/review/governance-decision-ledger.ts",
     "apps/daemon/src/orchestrator/wrapper-governance-pass.ts",
+    "apps/daemon/src/orchestrator/wrapper-governance-pass.test.ts",
+    ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json"
+  ],
+  "completionSummary": "Legacy governance rows no longer blind the ledger. governance-decision-ledger.ts recordOf admits exactly 2 key sets: RECORD_KEYS (13) and RECORD_KEYS minus findingSubject (12, derived by filter). The 12-key row is upcast with findingSubject \"LEGACY:unrecorded\". Any other key set, version or JSON still returns null.\n\nwrapper-governance-pass.ts maps each `why` via Readonly<Record<HumanNeededWhy,string>>. A 5th union member is TS2741. LEDGER_UNREADABLE now logs \"the daemon could not read its governance decision history from the store, a store problem and not a model that declined to answer\". The other 3 lines are byte-identical.\n\nDoD1: pre-fix RED `expected null to be 2` at ledger.test.ts:306. Legacy arms green. 5-case fail-closed table (unknown key, 13 keys with a wrong name, 12 keys missing rationale, old shape with bad version, not-json). Decider arm: {asked:0, LEDGER_UNREADABLE} vs a control that reaches the advisor.\n\nDoD2: pass arm asserts the 4 exact lines as a set.\n\nDoD3: live copy of UnAI store (probe source in comment-239f2f1a). Pre-fix fundedOn null, fixed 2. decide = BOUND_SPENT at bound 1 (advisor asked 0). NO_ANSWER at bound 10 (asked 1). Live store size/mtime unchanged.\n\nDrills in-memory: A (revert) and B (any 12-key) both RED; ledger SHA unchanged.\n\nDoD4: scoped 27/313 passed. typecheck exit 0 (19 projects). Full daemon suite 13 failed | 732 passed (745), all foreign; serial re-run identical: 12 strip-only parameter-property at agent-spawn-contract.ts:79, plus wrapper-review-missions (identical with HEAD blobs served). Owned delta empty.\n\nLater orchestrator run: moe-up-main.test.ts:924 negative control red after a PEER removed that parameter property (dirty agent-spawn-contract.ts, not mine).\n\nFollow-ups: UnAI default bound 1 means node 257b0697 will log bound spent; log dedupe; exact-key reader census; read-side value validation.",
+  "commits": [
+    {
+      "sha": "a4a12223ce27236f7de8e487a46c86ae17a1b895",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-6433dce1@2026-09-18T07:58:24Z",
+      "paths": [
+        ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json",
+        "apps/daemon/src/orchestrator/wrapper-governance-pass.test.ts",
+        "apps/daemon/src/orchestrator/wrapper-governance-pass.ts",
+        "apps/daemon/src/review/governance-decision-ledger.test.ts",
+        "apps/daemon/src/review/governance-decision-ledger.ts"
+      ],
+      "recordedBy": "worker-6433dce1",
+      "recordedAt": "2026-09-18T08:23:17.093Z",
+      "treeId": "1d796b1dfd1f8c7e494d1a8f0b4fb8414f855c3c",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/review/governance-decision-ledger.test.ts",
+    "apps/daemon/src/orchestrator/wrapper-governance-pass.ts",
+    "apps/daemon/src/review/governance-decision-ledger.ts",
     "apps/daemon/src/orchestrator/wrapper-governance-pass.test.ts"
   ],
-  "completionSummary": "Legacy governance rows no longer blind the ledger. governance-decision-ledger.ts recordOf admits exactly 2 key sets: RECORD_KEYS (13) and RECORD_KEYS minus findingSubject (12, derived by filter). The 12-key row is upcast with findingSubject \"LEGACY:unrecorded\". Any other key set, version or JSON still returns null.\n\nwrapper-governance-pass.ts maps each `why` via Readonly<Record<HumanNeededWhy,string>>. A 5th union member is TS2741. LEDGER_UNREADABLE now logs \"the daemon could not read its governance decision history from the store, a store problem and not a model that declined to answer\". The other 3 lines are byte-identical.\n\nDoD1: pre-fix RED `expected null to be 2` at ledger.test.ts:306. Legacy arms green. 5-case fail-closed table (unknown key, 13 keys with a wrong name, 12 keys missing rationale, old shape with bad version, not-json). Decider arm: {asked:0, LEDGER_UNREADABLE} vs a control that reaches the advisor.\n\nDoD2: pass arm asserts the 4 exact lines as a set.\n\nDoD3: live copy of UnAI store (probe source in comment-239f2f1a). Pre-fix fundedOn null, fixed 2. decide = BOUND_SPENT at bound 1 (advisor asked 0). NO_ANSWER at bound 10 (asked 1). Live store size/mtime unchanged.\n\nDrills in-memory: A (revert) and B (any 12-key) both RED; ledger SHA unchanged.\n\nDoD4: scoped 27/313 passed. typecheck exit 0 (19 projects). Full daemon suite 13 failed | 732 passed (745), all foreign; serial re-run identical: 12 strip-only parameter-property at agent-spawn-contract.ts:79, plus wrapper-review-missions (identical with HEAD blobs served). Owned delta empty.\n\nLater orchestrator run: moe-up-main.test.ts:924 negative control red after a PEER removed that parameter property (dirty agent-spawn-contract.ts, not mine).\n\nFollow-ups: UnAI default bound 1 means node 257b0697 will log bound spent; log dedupe; exact-key reader census; read-side value validation."
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-6433dce1@2026-09-18T07:58:24Z",
+    "at": "2026-09-18T08:23:17.093Z"
+  },
+  "completedAt": "2026-09-18T08:33:09.627Z",
+  "reviewCompletedAt": "2026-09-18T08:33:09.627Z",
+  "reviewSummary": "Reviewed completion commit a4a12223 (moe/work-2026-09-18); owned files + decider unchanged through HEAD fde61f37.\n\nDoD1: #51 shape confirmed from d2be4f09 (12 RECORD_KEYS, same version literal); LEGACY_ROW matches. Arms: legacy counts (fundedOn 2, then 3 after record v5); legacy read back whole (toStrictEqual, \"LEGACY:unrecorded\"); 5-case fail-closed table, length pinned; decider arm asked 0 / LEDGER_UNREADABLE vs control asked 1 / NO_ANSWER.\nDoD2: Readonly<Record<why,string>>; pass arm pins all 4 exact lines as a set.\n\nDRILLS (in-memory %TEMP% vitest transform, anchors throw, zero disk mutation):\nA reader reverted to 13-key-only: 3 red incl \"expected null to be 2\" = the recorded pre-fix red.\nB any-12-key admitted: missing-rationale case red.\nC LEDGER_UNREADABLE mapped to NO_ANSWER's line: pass arm red.\nE version gate deleted: bad-version case red.\nG decider ledger gate deleted: decider arm + pass arm red.\nControl on same config: 2 files / 25 passed.\n\nDoD3 re-run by QA on a fresh copy of UnAI store.sqlite + -wal + -shm, probe source from comment-239f2f1a verbatim: rows 4994/5031/5032 = 12 keys, 5271/5310 = 13; pre-fix blob f9b167d9 fundedOn null, fixed 2; decide bound 1 = BOUND_SPENT asked 0, bound 10 = NO_ANSWER asked 1. Live store sizes/mtimes identical before and after; scratch deleted.\n\nDoD4: recorded command re-run verbatim exit 0, \"Test Files 27 passed (27) / Tests 313 passed (313)\" (an earlier run had 1 red in a peer's then-dirty review-refusal-vocabulary arm; row modules absent from that test's graph, dirt later withdrawn). Orchestrator suite: 2 of 92 files / 3 of 1187 tests red, all foreign — moe-up-main strip-only negative control (peer 147c62fe removed a parameter property) and wrapper-review-missions x2 (identical with the row's pre-fix blobs served; row modules absent from its graph). pnpm typecheck exit 0, 19 of 20 projects. Importer census: only orchestrator + review. Ledger file 285 lines."
 }
