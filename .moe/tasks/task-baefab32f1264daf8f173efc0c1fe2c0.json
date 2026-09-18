@@ -11,9 +11,52 @@
     "Gates quoted with their `Test Files N passed` count lines: the daemon tests for src/repository/** and src/orchestrator/node-publisher*, and `pnpm typecheck`."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "planRevision": 0,
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE PREREQUISITE AND RE-MEASURE, then stop. (a) Read task-78dea88b's completionSummary via get_context.epicSiblings and confirm it is DONE; then re-read node-publisher.ts's fresh-publish block, git-publication-port.ts and publication-effect-contracts.ts at YOUR tree, because that row rewrote all three — record the new anchors in the step note, since every later step names code by what it does rather than by line. (b) Confirm the hazard is unchanged: `sed -n '20,30p;139,172p' apps/daemon/src/repository/publish-ledger.ts` shows `REMOTE_BOUND_KEYS` of exactly three keys, `decodeBinding` refusing a different key set, and `readProjectRemote` folding ONLY `REMOTE_BOUND_EVENT_TYPE` events. (c) Census the port: `git grep -ln PublicationGitPort -- apps tests`, and list every fake. If a fake exists that is not in planningNotes insight 6, note it — the method is optional precisely so no fake needs an edit, but confirm that holds for every one. (d) `git status --porcelain` the owned paths and note any peer dirt; never sweep it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED then GREEN — the read. In apps/daemon/src/repository/git-publication-port.test.ts first add arms driving a new `measureDefaultBranch(candidate)` through the injected runner, each asserting BY VALUE: output `ref: refs/heads/master\\tHEAD` followed by a sha line yields `{ ok: true, defaultBranch: \"master\" }`; a successful run with NO `ref:` line yields `{ ok: true, defaultBranch: null }` — the remote answered and advertises no default; a non-zero exit yields a NAMED refusal; a `null` exit (timeout or kill) yields a named refusal; a malformed `ref:` line and one naming something other than `refs/heads/<branch>` each yield a named refusal — never a guessed branch and never a throw. Add one arm asserting the argv contains `--symref` and does NOT contain `--refs`, because `--refs` excludes symrefs and would silently report no default for every remote. Confirm RED. Then add `measureDefaultBranch` to git-publication-port.ts on the same `isolated(...)` and `publicationCredentialArguments(...)` path `observe` uses, running `ls-remote --symref -- <remoteUrl> HEAD`, and declare it as an OPTIONAL method on `PublicationGitPort` in apps/daemon/src/repository/publication-effect-contracts.ts, so every existing fake keeps type-checking unchanged. Confirm GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/git-publication-port.ts",
+        "apps/daemon/src/repository/git-publication-port.test.ts",
+        "apps/daemon/src/repository/publication-effect-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "RED then GREEN — the additive record and its reader, in a NEW module so publish-ledger.ts stays at its 250 lines. In a NEW apps/daemon/src/repository/remote-default-branch.test.ts first add arms, each asserting the exact value: (DoD 1, THE HAZARD ARM) a `RepositoryRemoteBound` payload of TODAY'S exact three-key shape, committed beside a new measurement event on the same aggregate, still decodes through `readProjectRemote` unchanged; (DoD 2) `readRemoteDefaultBranch` returns the measured branch for the matching remoteUrl, null for a remote never measured, null for a measurement that recorded a null default, and null when the LATEST measurement names a DIFFERENT remoteUrl — including the rebind-back case, remote A measured, then B measured, then asked about A. Confirm RED. Then create apps/daemon/src/repository/remote-default-branch.ts: a new event type on `remoteAggregateId(projectId)` carrying `{ remoteUrl, defaultBranch, measuredAt }`, decoded with its OWN exact key set so a malformed record reads as absent; a writer fenced on `store.getAggregateVersion(...)` exactly as publish-services.ts's `bindingLeg` is, for the reason its comment gives; and `readRemoteDefaultBranch(store, projectId, remoteUrl): string | null` taking the LATEST measurement. Create its one-line bridge apps/daemon/src/repository/remote-default-branch.js as `export * from \"./remote-default-branch.ts\";` — plain-node entries now load the daemon graph without transform flags, so a missing bridge is a runtime failure. Do NOT edit publish-ledger.ts, REMOTE_BOUND_KEYS or publish-receipt-contracts.ts. Confirm GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/repository/remote-default-branch.ts",
+        "apps/daemon/src/repository/remote-default-branch.js",
+        "apps/daemon/src/repository/remote-default-branch.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Measure on every fresh publish. In apps/daemon/src/orchestrator/node-publisher.ts, inside the fresh-intent block — where task-78dea88b now observes the pre-push tip and records the transmission — call the port's OPTIONAL `measureDefaultBranch?.(candidate)`, INDEPENDENT of the push outcome, so a project whose first push is refused still learns its default. Record the result with step 3's writer ONLY on a successful read; a refusal is NOT a fact about the remote and must never overwrite an earlier good measurement. A port without the method measures nothing, which leaves the default unknown — the safe fallback. A replayed intent never measures, so recovery stays observe-only and the wrapper makes no network call per pass. A fenced write that loses to a concurrent rebind is dropped, not retried in a loop: the next fresh publish measures again. Do not let a measurement failure or a failed write change the publish's own outcome — the push, the observe and task-78dea88b's resolve rule must behave exactly as they did. The file must stay under 250 lines. In apps/daemon/src/orchestrator/node-publisher.test.ts add arms, by value: a fresh publish calls the measurement exactly once and records the answer; a REFUSED push still measures; a measurement refusal records NOTHING and leaves an earlier recorded default intact; a replayed intent never calls it; and a port without the method publishes exactly as before.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "DoD 4 and the gates. (A) Prove the measurement never runs in the synchronous publish command or the polled preview read. It is true by construction — neither module holds the publication port — so prove the construction rather than only asserting an outcome: `git grep -n \"measureDefaultBranch\" -- apps` must show hits ONLY in git-publication-port.ts, publication-effect-contracts.ts, node-publisher.ts and their tests, and in neither publish-services.ts nor apps/daemon/src/http/repository-remote-read.ts; quote that grep. (B) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts`, count line quoted — the approved-test file is IN the gate to prove this row left it passing UNCHANGED. Read the OUTPUT, not the exit code. (C) `pnpm typecheck`, projects counted — this is what proves the optional method left every fake valid. (D) ADVERSARIAL REVIEW in the completion record: Can a transient network failure ever erase a good measurement? Can a measurement for one remote ever be answered for another, including after a rebind back? Does anything now make a network call per wrapper pass? Could a failed measurement or a lost write change a publish's outcome or its single transmission? Does the `ref:` parser accept a symref naming something other than a branch? Attribute any red in the full `pnpm --filter @moe/daemon test` by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -26,5 +69,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:57:08.262Z",
-  "updatedAt": "2026-09-18T12:57:08.262Z"
+  "updatedAt": "2026-09-18T19:20:24.838Z",
+  "dependsOn": [
+    "task-78dea88bfd1f491b9a0b0c3f9c0519fe"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-18T19:17:58.900Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T19:20:22.652Z",
+  "planningNotes": {
+    "codebaseInsights": "Filed by me earlier today as leaf 1 of the owner-chosen OPTION A for task-4ba1e00a. dependsOn task-78dea88b (auto-resolve), because four rows edit node-publisher.ts and the shared checkout's whole-file commits would otherwise sweep a peer's hunk. Measured at HEAD 2026-09-18; the step-1 re-measure is binding because task-78dea88b is mid-flight and rewriting the same files.\n\n(1) task-78dea88b IS ALREADY IN FLIGHT (source read). apps/daemon/src/repository/git-publication-port.ts now declares `PUBLISH_PUSH_REJECTED` and `push` returns `publicationRefused(pushed.code === null ? \"PUBLISH_PUSH_UNKNOWN\" : PUBLISH_PUSH_REJECTED)` — that row's step 2. node-publisher.ts's fresh-publish block will also have gained a pre-push observe and a transmission record by the time this row runs.\n\n(2) THE REUSE SEAM. git-publication-port.ts (93 lines): `isolated(candidate, effect)` makes a temporary bare repository sized to the candidate's object format; `publicationCredentialArguments(configRunner, candidate)` supplies the authentication; `observe` (:74-86) is the template for an authenticated read. Both take a CANDIDATE, which node-publisher holds on every fresh publish.\n\n(3) `--refs` EXCLUDES SYMREFS. `observe` runs `ls-remote --refs -- <remoteUrl> <ref>`, which by definition never reports HEAD's symref. The default-branch read must run `ls-remote --symref -- <remoteUrl> HEAD` and parse the line `ref: refs/heads/<name>\\tHEAD`. Copying observe's argv would silently answer 'no default' for every remote.\n\n(4) THE HAZARD, AND WHY THE NEW EVENT IS SAFE. apps/daemon/src/repository/publish-ledger.ts:25 `REMOTE_BOUND_KEYS = [\"boundAt\", \"boundBy\", \"remoteUrl\"]`, and `decodeBinding` (:153-172) refuses any payload whose key set differs. `readProjectRemote` (:139-151) folds ONLY `REMOTE_BOUND_EVENT_TYPE` events — `if (event.eventType !== REMOTE_BOUND_EVENT_TYPE) continue;` — so a NEW event type on the same aggregate is invisible to it. The additive design is therefore safe by construction, and `RepositoryRemoteBound` stays byte-for-byte unchanged.\n\n(5) THE AGGREGATE AND ITS FENCE. `remoteAggregateId(projectId)` (publish-receipt-contracts.ts:104). publish-services.ts `bindingLeg` (:128-143) commits `RepositoryRemoteBound` fenced on `store.getAggregateVersion(aggregateId)` — its comment explains `versionOf` would read 0 because `readDurableLedger` never tracks this aggregate. The new event uses the same fence.\n\n(6) THE PORT CENSUS — and why the new method is OPTIONAL. `PublicationGitPort` is declared at apps/daemon/src/repository/publication-effect-contracts.ts:3. `git grep -ln PublicationGitPort` returns node-publisher-approved.test.ts, node-publisher.test.ts, release-decide-service.test.ts, node-publisher.ts, git-publication-port.ts and the contracts file. A REQUIRED new method would stop every fake type-checking, and node-publisher-approved.test.ts must pass UNCHANGED under task-78dea88b's DoD. An OPTIONAL method keeps every fake valid.\n\n(7) FILE SIZES. publish-ledger.ts is exactly 250 lines, so the new event, writer and reader go in a NEW module rather than growing it; git-publication-port.ts (93) has room for the read."
+  },
+  "planApprovedAt": "2026-09-18T19:20:24.838Z"
 }

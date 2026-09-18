@@ -11,9 +11,39 @@
     "apps/daemon/CLAUDE.md publisher bullet updated with the exit."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "planRevision": 0,
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY EVERY CHILD LANDED, then stop if any did not. This row is the integration parent; it builds nothing its children own. For each of task-78dea88b, task-f3182818, task-adeabf1f, task-2c3f878b, task-52682237, task-a47babf8 and task-bbe7a5d2, read its completionSummary and reviewSummary via get_context.epicSiblings and confirm it is DONE. Then map this row's DoD to the landed work by file:line and put the mapping in the step note: DoD 1 (the card shows the last observation, decoded exact-key) -> task-52682237's observation event, widened `RunGoalPublish` and the widened exact-key list at apps/control-room/src/live/live-runs.ts; DoD 2 (an operator resolve records a REFUSED receipt with the observation, releases PUBLISHING, enables a fresh publish) -> task-a47babf8's publish-resolve-service.ts and task-bbe7a5d2's offer and card control; DoD 4 (the new reason is legal only from PUBLISHING; the operator fence and MCP census are updated) -> task-a47babf8's PUBLISH_RESOLVED port arm and task-2c3f878b's OPERATOR_PRINCIPAL_KINDS membership and derived MCP exclusion. Confirm each by a grep or a run at YOUR tree, not by reading the summaries alone. If any DoD is unmet, stop and report which child owes it — do not patch a child's code from this row.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE END-TO-END LIVE ARM (DoD 3), in a NEW file apps/daemon/src/repository/publish-resolve-journey.test.ts, on REAL git in a temp dir. Build a bare remote whose `pre-receive` hook exits 1, so the remote genuinely refuses the push. Drive, and assert each step BY VALUE: (1) a publish is approved and the push is REFUSED by the remote; because this refusal leaves the tip unchanged AND git exited non-zero, task-78dea88b's automatic rule would resolve it — so to exercise the OPERATOR exit, construct the case the automatic rule deliberately leaves UNKNOWN (for example a push outcome recorded as INDETERMINATE, which task-78dea88b never auto-resolves), and state in the arm's comment which case it is and why. (2) The publish is UNKNOWN and the reservation holds PUBLISHING. (3) A node delivery is refused with REPOSITORY_EXECUTION_BUSY held by `publish:<decisionId>` — assert the code and the holder by value. (4) The Publish state read (`readRunGoalPublication`) shows the persisted observation. (5) The OPERATOR dispatches `repository.publish_resolve` NOT_TRANSMITTED through the PRODUCTION command registry, so the operator fence is on the path. (6) The receipt is REFUSED for that decisionId, the reservation is released with PUBLISH_RESOLVED, and the Publish state reports REFUSED rather than UNKNOWN. (7) The node delivery is now ADMITTED. (8) The hook is removed and a FRESH publish decision pushes, with exactly ONE push per decision across the whole journey. Also assert a NON-operator dispatch of the resolve is refused by the fence, with its code and layer. Before writing, confirm this file does not already exist; if a journey file covering publish already does, extend it instead and say so.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/repository/publish-resolve-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "DOCS (DoD 5). Update the publisher bullet in apps/daemon/CLAUDE.md — which task-78dea88b already edited for the automatic resolve — so it states the whole exit in its existing register: a refused push that git REJECTED and that provably did not move the remote is released automatically; any other UNKNOWN publish (a push that succeeded, timed out, threw, or whose result was lost, and any publish stuck before these rules existed) waits for the operator, who reads the last observation on the Publish card and resolves it with `repository.publish_resolve` (NOT_TRANSMITTED or ABANDON); the resolve records a REFUSED receipt, releases the hold with PUBLISH_RESOLVED, and never pushes; and the command is human-only and never offered over MCP. Before editing, `git diff HEAD -- apps/daemon/CLAUDE.md` and stage only your own hunk — several rows edit this file.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/CLAUDE.md"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GATES AND ADVERSARIAL REVIEW. (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/publish-resolve-journey.test.ts src/orchestrator/node-publisher-approved.test.ts`, count line quoted — the approved-test file is in the gate to prove the single-transmission invariant still holds after the whole chain. Read the OUTPUT, not the exit code. (B) The full `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test` (apps/control-room is in no other gate, and three children changed it) and `pnpm typecheck`, all quoted. Attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (C) ADVERSARIAL REVIEW of the WHOLE chain, in the completion record: Can an agent reach the resolve through MCP, or through any path that skips the operator fence? Can a resolve free a hold whose push actually landed, and does the NOT_TRANSMITTED refusal against a remote that holds the sha fire in the live arm? Is there any sequence where a publish is transmitted twice? What does the owner see, end to end, for a publish that was stuck BEFORE this chain landed — is the operator exit now reachable for it? (D) Record, as a follow-up comment on this row rather than a new row, that the epic is at 70 non-archived rows against an advisory ceiling of 40 and that this chain plus the release chain are candidates for their own epic.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -23,8 +53,40 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1013.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0eeadf6a03224c52916782df2f4dbece",
+      "author": "architect-73d103f8",
+      "content": "ARCHITECT HANDOFF (architect-73d103f8, 2026-09-18). QUEUED, NOT FORGOTTEN. Owner-directed ordering: the automatic 'provably not transmitted' resolve lands FIRST as task-78dea88bfd1f491b9a0b0c3f9c0519fe; this row now declares dependsOn on it. Plan this AFTER task-78dea88b lands. Four facts the next planner needs:\n\n1. THIS ROW IS A FOUR-ROW JOB. It adds a new command kind (repository.publish_resolve). This epic's first rail: a command kind is shared contract + all four GENERATED_CONTRACT_DIGEST mirrors, then the refusal vocabulary with its closed code->layer map, then daemon wiring + operator fence (OPERATOR_PRINCIPAL_KINDS, MCP-excluded), then behaviour. Do NOT plan it as one row. The epic is at 64 non-archived rows vs an advisory ceiling of 40 — consider a new 'publish & release reliability' epic for this and the release chain (task-baefab32, task-04160615, task-4ba1e00a).\n\n2. IT IS THE ONLY THING THAT CLEARS AN ALREADY-STUCK PUBLISH. task-78dea88b auto-resolves only FUTURE refused pushes: it needs a recorded pre-push remote tip and a definite push outcome, and a publish stuck before it landed has neither. Anything stuck on UnAI today stays UNKNOWN until THIS row's operator command exists. That is why it matters even though it is queued.\n\n3. REUSE what task-78dea88b builds: its additive transmission event (pre-push tip + push outcome), the REFUSED receipt path with code PUBLISH_NOT_LANDED, and the reservation release from PUBLISHING. Give the operator path its OWN release reason (e.g. PUBLISH_RESOLVED, asserted by the operator) distinct from PUBLISH_NOT_TRANSMITTED (proven by the daemon), so the audit trail says who decided.\n\n4. node-publisher.ts is also edited by task-78dea88b, task-baefab32 and task-04160615. Order this row after them or declare dependsOn: in the shared checkout a whole-file pathspec commit sweeps a peer's uncommitted hunk.\n\nLine anchors in this row's reopen reason (node-publisher.ts :98-101, :124) are STALE: the file is 100 lines now; the unknown path is at :43-73 and the PUBLISHED release at :74.",
+      "timestamp": "2026-09-18T19:03:29.500Z"
+    },
+    {
+      "id": "comment-7580e7c2534f49738a74fef71c6653c0",
+      "author": "architect-73d103f8",
+      "content": "ARCHITECT NOTE for step 2's live arm (architect-73d103f8, 2026-09-18), from a finding made while planning the child task-a47babf8. READ BEFORE WRITING THE ARM.\n\nThe operator's `repository.publish_resolve` command does NOT release the PUBLISHING hold itself, and it cannot: repository-execution-port.ts `release(...)` refuses REPOSITORY_EXECUTION_CONTROLLER_MISMATCH for any caller that is not the reservation's owning controller, and during a stuck publish the owner is the LIVE wrapper's publisher. So task-a47babf8 was re-designed on the pattern `repository.recover` already uses: the command records a FACT and the owning controller acts on it.\n\nWhat that means for this row's journey (step 2, items 5-7):\n- (5) the operator's command writes the REFUSED receipt for the decision. The card flips to REFUSED IMMEDIATELY, because run-goal-publication.ts skips any decision that has a receipt before consulting its intent.\n- A PUBLISHER PASS must then run. On that pass node-publisher, the owning controller, sees the operator-resolve receipt on the decision it holds and releases the hold with PUBLISH_RESOLVED.\n- (6) and (7) — the release with PUBLISH_RESOLVED, and node.deliver being ADMITTED — are true only AFTER that pass. Assert node.deliver is still REPOSITORY_EXECUTION_BUSY between the command and the pass, then ADMITTED after it; that ordering is correct behaviour, not a bug.\n\nAlso worth asserting, because it is the designed window: a FRESH publish approved between the command and the release pass reports UNKNOWN for that one pass (the old hold is owned for a different decision) and proceeds on the next, pushing exactly once.",
+      "timestamp": "2026-09-18T19:40:10.711Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:33:41.593Z",
-  "updatedAt": "2026-09-18T11:58:34.405Z"
+  "updatedAt": "2026-09-18T19:40:10.711Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-18T13:01:04.723Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2
+  },
+  "dependsOn": [
+    "task-2c3f878ba94940428d34f204dc74de95",
+    "task-78dea88bfd1f491b9a0b0c3f9c0519fe",
+    "task-52682237c158403b83fcf54b3b0bb2bd",
+    "task-a47babf8291943efb08258a0c1f6cc78",
+    "task-bbe7a5d20aee4342a8e548702178c0cd"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T19:15:57.793Z",
+  "planningNotes": {
+    "codebaseInsights": "THIS ROW IS NOW THE INTEGRATION PARENT of a split the owner directed on 2026-09-18 (asked three times, each time choosing to proceed: auto-resolve first, then 'plan its split now', then 'split it and plan both halves'). Measured at HEAD, the operator exit follows `release.decide`'s own precedent, which needed a roster row, a refusal-vocabulary row, an operator-fence row, a service, an offer-mint row and a card. dependsOn names every child:\n- task-78dea88b — automatic 'provably not transmitted' resolve (the lean slice; lands first); adds the transmission event and PUBLISH_NOT_TRANSMITTED.\n- task-f3182818 -> task-adeabf1f -> task-2c3f878b — roster + digest mirrors, refusal vocabulary, daemon wiring + operator fence (a refusing stub).\n- task-52682237 — persist + display the last publisher observation (DoD 1), widening the exact-key wire at both ends.\n- task-a47babf8 — the resolve service + PUBLISH_RESOLVED (DoD 2 daemon half, DoD 4 reason).\n- task-bbe7a5d2 — the resolve offer + the Publish card's control (DoD 2 operator half).\nSo DoD 1, 2 and 4 are delivered by DONE children; this row VERIFIES them against their landed work rather than re-implementing any of it (global rail: read a prerequisite's completionSummary from epicSiblings; write a grep gate only for code the prerequisite does not own). This row's OWN deliverables are DoD 3 (the end-to-end live arm) and DoD 5 (the docs).\n\nWHY THE PARENT, NOT A CHILD, OWNS THE END-TO-END ARM. DoD 3's journey — push refused -> UNKNOWN -> node.deliver refused REPOSITORY_EXECUTION_BUSY -> operator resolves -> delivery admitted -> a new publish pushes once — crosses every child: the transmission evidence, the observation, the service, the fence and the offer. No single child can host it without depending on all the others, which is exactly what this row already does.\n\nTHE BUSY REFUSAL. While a publish holds the reservation in PUBLISHING, a node delivery is refused by the delivery coordinator with REPOSITORY_EXECUTION_BUSY, held by `publish:<decisionId>` (apps/daemon/src/orchestrator/repository-delivery-coordinator.ts; node-publisher.ts:90-91 matches that nodeRef). That refusal, and its disappearance after the resolve, is the owner-visible symptom this whole chain exists to fix: one refused push used to stall every node of the product.\n\nANCHORS IN THIS ROW'S REOPEN REASON ARE STALE. It cites node-publisher.ts :98-101 and :124; the file is 100 lines. At HEAD the unknown path is :43-73 and the PUBLISHED release :74, and the children plan against those.\n\nTHE EPIC IS AT 70 NON-ARCHIVED ROWS against an advisory ceiling of 40 — every create_task in this split warned. That is a re-slice signal for the governor or owner (a 'publish & release reliability' epic would hold this chain and the release chain task-baefab32 -> task-04160615 -> task-4ba1e00a); this row records it rather than acting on it."
+  },
+  "planApprovedAt": "2026-09-18T19:16:00.028Z"
 }

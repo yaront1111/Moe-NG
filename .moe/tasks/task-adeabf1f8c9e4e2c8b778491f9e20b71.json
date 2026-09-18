@@ -1,0 +1,77 @@
+{
+  "id": "task-adeabf1f8c9e4e2c8b778491f9e20b71",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "repository.publish_resolve's refusal vocabulary: a closed code-to-layer map with a derived roster",
+  "description": "ROW 2 of 4 for task-21be6e9055984413a651ce6ee331e2c8 (\"An UNKNOWN publish effect has no operator exit\"), filed by architect-73d103f8 on 2026-09-18. Depends on task-f3182818e7924be996d3543798a9d444 (row 1, which puts `repository.publish_resolve` on the shared runtime roster). Row 3 (daemon wiring + operator fence) and task-21be6e90 (the behaviour) depend on this row. Precedent: `preview.decide`'s task-40e52fa8 and `release.decide`'s refusal map.\n\nWHAT IT LANDS. A NEW daemon-local contracts module, apps/daemon/src/repository/publish-resolve-contracts.ts, copying the EXACT pattern of apps/daemon/src/release/release-decide-contracts.ts: the command-kind constant; a closed `PUBLISH_RESOLVE_CODE_LAYER_MAP` mapping every refusal the resolve path can mint to the one layer that mints it; a code roster DERIVED from the map's keys, never restated beside it; and a refusal type CORRELATED per code (a distributed mapped type, so a hand-built literal pairing a code with the wrong layer is a compile error, as release-decide-contracts.ts documents). Use DECLARED layer constants, never bare layer strings: a bare `layer: \\\"X\\\"` literal at a refusal site is known to red the TASK-LV security census arms. Name the map with a `_MAP` tail, not `_LAYERS`, exactly as release-decide-contracts.ts explains, or a roster scanner demands a backfill.\n\nTHE INITIAL CODE SET, for the behaviour row to mint (this row's planner may refine it with a stated reason, and must keep it CLOSED):\n- a refusal when the named decision is NOT in the UNKNOWN state (already PUSHED or REFUSED, or never intended) — nothing to resolve;\n- a refusal when the recorded observation shows the remote DOES hold the approved sha, so asserting NOT_TRANSMITTED would be false;\n- a refusal when the decision id names no publish request at all.\nEach at the layer that actually detects it (the daemon's prerequisite read for the first two).\n\nOUT OF SCOPE: registering the command, its payload keys and the operator fence (row 3); minting these refusals and the resolve behaviour (task-21be6e90). This row adds a vocabulary nothing dispatches yet, and its consumer edge is declared by row 3 and task-21be6e90 via dependsOn.",
+  "definitionOfDone": [
+    "apps/daemon/src/repository/publish-resolve-contracts.ts exports the kind constant, a closed `PUBLISH_RESOLVE_CODE_LAYER_MAP`, a roster DERIVED from its keys, and a per-code correlated refusal type plus its constructor, following release-decide-contracts.ts's pattern; its one-line .js bridge sits beside it.",
+    "A BIDIRECTIONAL roster arm asserts set-equality between the map's keys and the derived roster (never a subset, and not by iterating the roster alone), and a per-code arm asserts each code maps to its exact declared layer constant by value.",
+    "A compile-time arm (a `// @ts-expect-error` line checked by `pnpm typecheck`) proves a code paired with the wrong layer does not type-check.",
+    "No bare layer string literal appears at any refusal site; the TASK-LV security census arms stay green.",
+    "Gates quoted with `Test Files N passed` count lines: the new contracts test via `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/publish-resolve-contracts.test.ts`, and `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE THE TEMPLATE, then stop. (a) Read apps/daemon/src/release/release-decide-contracts.ts in full and record its five parts in the step note (kind constant; frozen `_CODE_LAYER_MAP`; roster derived from the map's keys; correlated per-code refusal type as a distributed mapped type; one constructor taking a code and an optional detail and NO layer). (b) Confirm the three declared layer constants still exist with those values — `git grep -n \"GOAL_PREREQUISITE_LAYER =\\|PROJECT_REDUCER_LAYER =\\|RUNNER_WORKSPACE_LAYER =\" -- apps`. (c) Read tests/security/boundary-roster.security.ts's `DECLARATION_PATTERN` and confirm that a name ending `_CODE_LAYER_MAP` does NOT match it, so no roster backfill is demanded. (d) Confirm row 1 (task-f3182818) is DONE and `repository.publish_resolve` is in `RUNTIME_COMMAND_KINDS`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST — the pins, in a NEW apps/daemon/src/repository/publish-resolve-contracts.test.ts, following release-decide-contracts.test.ts. (1) A BIDIRECTIONAL roster arm: `new Set(Object.keys(PUBLISH_RESOLVE_CODE_LAYER_MAP))` EQUALS `new Set(PUBLISH_RESOLVE_CODES)` — set-equality in both directions, never a subset, and not by iterating the roster alone, which can only ever see one direction (global rail). Also assert the exact sorted roster by value, so an added or dropped code reds the pin. (2) A per-code arm asserting each code's layer BY VALUE against the IMPORTED declared constant — `expect(PUBLISH_RESOLVE_CODE_LAYER_MAP.<code>).toBe(GOAL_PREREQUISITE_LAYER)` and so on. This is where the literal-in-the-map is pinned to the real constant, exactly as release-decide-contracts.test.ts:44-46 does. (3) The constructor: a refusal minted for each code carries exactly `{ code, detail, layer: <the map's layer>, ok: false }` and is frozen. (4) THE COMPILE-TIME ARM (DoD 3): a `// @ts-expect-error` line assigning a hand-built literal that pairs a code with the WRONG layer to the correlated refusal type — checked by `pnpm typecheck`, which fails if that line ever starts to compile. Confirm the file is RED (the module does not exist yet).",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/repository/publish-resolve-contracts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN — the module. Create apps/daemon/src/repository/publish-resolve-contracts.ts mirroring the template's five parts: the kind constant `\"repository.publish_resolve\"`; `PUBLISH_RESOLVE_CODE_LAYER_MAP` frozen, with the three codes from planningNotes.designDecisions, each mapped to a STRING LITERAL equal to a declared layer constant's value and carrying a one-line doc comment naming what detects it; `PUBLISH_RESOLVE_CODES` DERIVED from the map's keys and sorted; the correlated refusal type as a distributed mapped type; and ONE constructor taking a code and an optional detail and NO layer argument. Copy the template's header reasoning, adapted: why the layer values are literals (to stay a standalone-loadable leaf, with the equality pinned by import in the test), and why the name ends `_CODE_LAYER_MAP` rather than `_LAYERS`. Import NOTHING from @moe/store, @moe/core, @moe/runner or @moe/scheduler. Create its one-line bridge apps/daemon/src/repository/publish-resolve-contracts.js as `export * from \"./publish-resolve-contracts.ts\";`. Confirm every arm from step 2 is GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/repository/publish-resolve-contracts.ts",
+        "apps/daemon/src/repository/publish-resolve-contracts.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILL, GATES AND REVIEW. (A) DRILL the bidirectional arm: add a code to the map without adding it to the pinned sorted roster list, and confirm arm (1) goes RED; then separately pair one code with the wrong literal layer and confirm arm (2) goes RED. Quote both failing lines. The module is NEW and untracked, so `git diff` cannot see it and is NOT a valid restore proof (global rail 13): back it up out of tree to `%TEMP%/moe-task-adeabf1f-publish-resolve-contracts-<workerId>.ts` recording its SHA256 (task id in the path, since seat ids are reused and a seat-only backup can hold the wrong vintage), restore by copying the backup back, and prove the restore by SHA256 equality in a call SEPARATE from the restore. Record both hashes. (B) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/publish-resolve-contracts.test.ts`, count line quoted. (C) `pnpm typecheck`, projects counted — this is what enforces the `@ts-expect-error` arm. (D) The security lane (`tests/security`), with its count line quoted: the TASK-LV census and the declaration scanners must stay green with this module present. Read OUTPUT, not exit codes. (E) In the completion record, state the correction to this row's description: literals in the map by design, pinned by import in the test, no layer argument at any call site.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1018.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T19:11:04.144Z",
+  "updatedAt": "2026-09-18T19:28:51.688Z",
+  "dependsOn": [
+    "task-f3182818e7924be996d3543798a9d444"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-18T19:27:22.833Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T19:28:49.270Z",
+  "planningNotes": {
+    "codebaseInsights": "Filed by me today as ROW 2 of the owner-directed split of task-21be6e90. dependsOn row 1 (task-f3182818). A pure contracts module: nothing dispatches it until row 3 and the service child. Measured at HEAD 2026-09-18.\n\n(1) A CORRECTION TO THIS ROW'S OWN DESCRIPTION. It says 'Use DECLARED layer constants, never bare layer strings'. Read literally, that contradicts the template it tells the worker to copy. apps/daemon/src/release/release-decide-contracts.ts (90 lines) writes its MAP VALUES as string literals ON PURPOSE and says why in its header: 'WHY THE LAYER VALUES ARE STRING LITERALS AND NOT IMPORTS. Each value is the value of an already-rostered layer constant ... Importing those constants here would drag @moe/store, @moe/core, @moe/runner and @moe/scheduler into what must stay a standalone-loadable leaf module. The equality is therefore pinned BY IMPORT IN THE TEST.' The bare-literal hazard is about refusal CALL SITES, and the template makes those structurally unable to write a layer at all: `releaseRefusal(code, detail)` takes NO layer argument and reads the map. So: literals in the map, equality pinned by importing the real constants in the TEST, and no layer argument anywhere else. DoD 4 ('no bare layer string literal at any refusal site') holds exactly under that reading.\n\n(2) THE TEMPLATE'S PARTS, all to be mirrored: the kind constant; `..._CODE_LAYER_MAP`, frozen; the code roster DERIVED from the map's keys and sorted (`Object.freeze((Object.keys(MAP) as Code[]).sort())`), never restated; a per-code CORRELATED refusal type written as a distributed mapped type (`{ [C in Code]: RefusalFor<C> }[Code]`), so a hand-built literal pairing a code with the wrong layer is a COMPILE error, not merely bad practice; and ONE constructor that takes a code and an optional detail and no layer.\n\n(3) THE DECLARED LAYER CONSTANTS the test pins against: `GOAL_PREREQUISITE_LAYER = \"DAEMON_PREREQUISITE\"` (apps/daemon/src/goals/goal-close-prerequisite.ts:58), `PROJECT_REDUCER_LAYER = \"PROJECT_REDUCER\"` (apps/daemon/src/recovery/recovery-completion-evidence.ts:43), `RUNNER_WORKSPACE_LAYER = \"RUNNER_WORKSPACE\"` (apps/daemon/src/work/foundation-attempt-contracts.ts:34). release-decide-contracts.test.ts:44-46 is the pinning pattern.\n\n(4) THE NAME MUST END `_CODE_LAYER_MAP`. The security lane's declaration scanners (tests/security/boundary-roster.security.ts `DECLARATION_PATTERN` and layer-visibility-cases.ts `PRIVATE_DECLARATION_PATTERN`) treat a constant whose name ends in LAYER/LAYERS/BOUNDARIES before the `=` as a new rostered boundary and demand a roster backfill; the template's header explains the `_MAP` tail exists to avoid exactly that.\n\n(5) A NEW .js BRIDGE IS REQUIRED. Plain-node entries now load the daemon graph without transform flags (task-4444d180 / task-8bc14883), so a module imported through a `.js` specifier with no bridge is a runtime failure rather than a style issue."
+  },
+  "planApprovedAt": "2026-09-18T19:28:51.688Z"
+}

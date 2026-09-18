@@ -1,0 +1,102 @@
+{
+  "id": "task-a47babf8291943efb08258a0c1f6cc78",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "The repository.publish_resolve service: an operator-asserted resolve that records a REFUSED receipt and releases the PUBLISHING hold",
+  "description": "CHILD of task-21be6e9055984413a651ce6ee331e2c8 (the operator exit for an UNKNOWN publish), filed by architect-73d103f8 on 2026-09-18. Delivers the daemon half of that row's DoD 2 and DoD 4's release reason. task-21be6e90 is the integration parent and declares dependsOn on this row.\n\nWHAT IT DOES. Replaces the refusing stub that row 3 (task-2c3f878ba94940428d34f204dc74de95) registers for `repository.publish_resolve` with the real behaviour, in a NEW module apps/daemon/src/repository/publish-resolve-service.ts (plus its one-line .js bridge — plain-node entries now load the daemon graph without transform flags, so a missing bridge is a runtime failure, not a style issue). Given `{ decisionId, resolution: \\\"NOT_TRANSMITTED\\\" | \\\"ABANDON\\\" }` from the operator:\n- refuse with row 2's codes (task-adeabf1f8c9e4e2c8b778491f9e20b71) when the decision names no publish request, when it is NOT UNKNOWN (it already has a receipt, or no intent), or, for NOT_TRANSMITTED, when the recorded observation shows the remote DOES hold the approved sha;\n- otherwise record a REFUSED receipt for THAT decisionId carrying the last observation, and release the reservation from PUBLISHING with a NEW reason `PUBLISH_RESOLVED`, legal only from PUBLISHING.\n\nWHY A NEW REASON. task-78dea88b adds `PUBLISH_NOT_TRANSMITTED` for a resolve the DAEMON PROVED. This one is ASSERTED BY THE OPERATOR; distinct reasons keep the audit trail honest about who decided. Add it to `RepositoryExecutionReleaseReason` (apps/daemon/src/repository/repository-execution-contracts.ts:10) and one branch to the reason-to-phase ternary at repository-execution-port.ts:101-105, keeping the chain's fall-through to false so an unlisted reason still fails closed.\n\nWHY THE CARD UN-STICKS FOR FREE. apps/daemon/src/http/run-goal-publication.ts skips any decision that already has a receipt BEFORE consulting its intent (`if (state.receipts.has(pending.decisionId)) continue;`), so a REFUSED receipt for the SAME decisionId flips the card from UNKNOWN to REFUSED and re-enables Publish — the same mechanism task-78dea88b relies on.\n\nTHE SINGLE-TRANSMISSION INVARIANT. The resolve never pushes. It only records the operator's assertion and releases the hold; a later publish is a FRESH decision with its own intent. The arms in apps/daemon/src/orchestrator/node-publisher-approved.test.ts must pass UNCHANGED.\n\nDepends on row 3 (the registered stub and fence) and task-78dea88b (the transmission evidence and the NOT_TRANSMITTED reason, which edit repository-execution-contracts.ts and -port.ts first).",
+  "definitionOfDone": [
+    "An operator resolve of an UNKNOWN publish records a REFUSED receipt for that decisionId carrying the last observation, and releases the reservation from PUBLISHING with reason PUBLISH_RESOLVED; asserted by value on the receipt, the reservation's absence and the reason, and `readRunGoalPublication` then reports REFUSED rather than UNKNOWN for that decision.",
+    "Every refusal is asserted by exact code WITH its layer from row 2's map: an unknown decision id; a decision that is not UNKNOWN (already PUSHED or REFUSED, or with no intent); and NOT_TRANSMITTED against an observation showing the remote holds the approved sha. Each refusing arm asserts the reservation is UNCHANGED.",
+    "PUBLISH_RESOLVED is accepted only from PUBLISHING: a repository-execution-port.test.ts arm sweeps the port's own phase list, asserts the sweep visited more than one phase, and asserts the exact refusal from every other phase.",
+    "The resolve never transmits: the injected publication port records ZERO push calls across every arm, and node-publisher-approved.test.ts passes unchanged.",
+    "Gates quoted with `Test Files N passed` lines: daemon tests for src/repository/** and src/orchestrator/node-publisher*, the full `pnpm --filter @moe/daemon test`, and `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE PREREQUISITES AND THE OWNERSHIP FACT, then stop. (a) Confirm task-2c3f878b, task-78dea88b and task-52682237 are DONE; record row 2's refusal constructor and codes from apps/daemon/src/repository/publish-resolve-contracts.ts, task-52682237's latest-observation reader, and row 3's stub registration in apps/daemon/src/daemon-command-async-entries.ts. (b) RE-VERIFY THE FINDING THAT RESHAPED THIS ROW: `sed -n` the `release(...)` method of apps/daemon/src/repository/repository-execution-port.ts and confirm it still refuses REPOSITORY_EXECUTION_CONTROLLER_MISMATCH when the caller's controllerId differs from the reservation's. If it no longer does, stop and report — the design below depends on it. (c) Confirm `recordPublishReceipt` is the receipt writer node-publisher uses, and that run-goal-publication.ts still skips a decision with a receipt before consulting its intent.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED then GREEN — the command, which records a fact and never touches the reservation. In a NEW apps/daemon/src/repository/publish-resolve-service.test.ts first add arms asserting each refusal BY exact code WITH its layer from row 2's map, each also asserting that NO receipt was written: an unknown decision id; a decision that already has a receipt (PUSHED or REFUSED); a decision with no intent (nothing was ever attempted); and, for NOT_TRANSMITTED, a latest observation showing the remote DOES hold the approved sha — the double-transmission guard. Then the success arms: NOT_TRANSMITTED and ABANDON each write exactly ONE REFUSED receipt for that decisionId whose code names the resolution and whose detail carries the latest observation. Add an arm that the command makes ZERO calls to the reservation port, proving it never races the owning controller. Confirm RED. Then create apps/daemon/src/repository/publish-resolve-service.ts implementing exactly that with row 2's constructor (no layer argument at any call site), and its one-line bridge apps/daemon/src/repository/publish-resolve-service.js as `export * from \"./publish-resolve-service.ts\";`. Confirm GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/repository/publish-resolve-service.ts",
+        "apps/daemon/src/repository/publish-resolve-service.js",
+        "apps/daemon/src/repository/publish-resolve-service.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "The new release reason, legal only from PUBLISHING. In apps/daemon/src/repository/repository-execution-port.test.ts first add arms: `release(..., \"PUBLISH_RESOLVED\", ...)` by the OWNING controller succeeds from PUBLISHING; from every other phase it is refused REPOSITORY_EXECUTION_TRANSITION_INVALID; and by a NON-owning controller it is refused REPOSITORY_EXECUTION_CONTROLLER_MISMATCH — that last arm pins the very ownership rule this row is built around. Sweep phases from the port's own phase list and assert the sweep visited more than one. Confirm RED. Then add `\"PUBLISH_RESOLVED\"` to `RepositoryExecutionReleaseReason` in apps/daemon/src/repository/repository-execution-contracts.ts, and add it to the branch in repository-execution-port.ts that already admits `\"PUBLISHED\" || \"PUBLISH_NOT_TRANSMITTED\"` from PUBLISHING. Keep the chain's final fall-through to false so an unlisted reason still fails closed. Confirm GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-execution-contracts.ts",
+        "apps/daemon/src/repository/repository-execution-port.ts",
+        "apps/daemon/src/repository/repository-execution-port.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "The owning controller acts on the fact. In apps/daemon/src/orchestrator/node-publisher.ts, when the publisher holds a PUBLISHING reservation for a decision that now carries an operator-resolve receipt (one of the resolve codes step 2 writes), release that reservation with PUBLISH_RESOLVED and report it. It must NOT push, and must NOT write a second receipt. A decision with a PUSHED receipt, or with a REFUSED receipt that is not an operator resolve, is left exactly as today. In apps/daemon/src/orchestrator/node-publisher.test.ts add arms by value: after an operator-resolve receipt, the next pass releases the owned hold with PUBLISH_RESOLVED and makes ZERO push calls; a node delivery refused REPOSITORY_EXECUTION_BUSY before that pass is ADMITTED after it; THE WINDOW — a fresh publish approved before the release pass reports UNKNOWN for that pass and proceeds on the next, pushing exactly once. node-publisher-approved.test.ts must pass UNCHANGED. Keep node-publisher.ts under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Replace row 3's stub with the service, and re-aim the arm that pinned it. In apps/daemon/src/daemon-command-async-entries.ts swap the refusing stub task-2c3f878b registered for a handler that calls step 2's service; the operator fence and the derived MCP exclusion are unchanged and must stay exactly as row 3 left them. In apps/daemon/src/daemon-command-registry.test.ts, the arm row 3 wrote — an OPERATOR dispatch is refused by the stub — is now wrong BY DESIGN: RE-AIM it, never delete it, so that an operator dispatch against an UNKNOWN publish records the REFUSED receipt, and one against a decision that is not UNKNOWN is refused with row 2's exact code and layer. Keep row 3's NON-operator arm exactly as it is: a non-operator is still refused by the fence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GATES AND ADVERSARIAL REVIEW. (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/daemon-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/gates-human-only-fence.test.ts`, count quoted — read the OUTPUT, not the exit code. (B) The full `pnpm --filter @moe/daemon test` and `pnpm typecheck`, both quoted; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (C) ADVERSARIAL REVIEW, in the completion record: Can the command, or anything it calls, ever reach the reservation port? Is there ANY sequence in which a publish transmits twice — walk the window, a wrapper restart between the command and the release pass, and NOT_TRANSMITTED against a push that did land? What if the wrapper is DOWN when the operator resolves — does the hold release once it restarts, and is anything stranded meanwhile? Can a REFUSED receipt that is NOT an operator resolve ever be mistaken for one and release a hold? (D) State in the completion record the correction to this row's description: the command cannot release a hold owned by the live wrapper's controller (REPOSITORY_EXECUTION_CONTROLLER_MISMATCH), so it records the receipt as a fact and the owning publisher releases — the pattern repository.recover already uses.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1021.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T19:14:31.019Z",
+  "updatedAt": "2026-09-18T19:39:57.881Z",
+  "dependsOn": [
+    "task-2c3f878ba94940428d34f204dc74de95",
+    "task-78dea88bfd1f491b9a0b0c3f9c0519fe",
+    "task-52682237c158403b83fcf54b3b0bb2bd"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-18T19:37:18.631Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10
+  },
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T19:39:55.318Z",
+  "planningNotes": {
+    "codebaseInsights": "Filed by me today as a CHILD of task-21be6e90. dependsOn [task-2c3f878b (row 3's registered stub and fence), task-78dea88b (the transmission evidence and the port's first new release reason), task-52682237 (the observation this service checks and carries)]. That third dependency was MISSING when the chain was first wired and was added while planning this row: without the observation reader, an operator could assert NOT_TRANSMITTED on a push that actually landed, and the next publish would transmit a second time. Measured at HEAD 2026-09-18.\n\n(1) THE DESCRIPTION'S CORE MECHANISM IS UNIMPLEMENTABLE AS WRITTEN — measured. It says the service 'releases the reservation from PUBLISHING with a NEW reason PUBLISH_RESOLVED'. apps/daemon/src/repository/repository-execution-port.ts `release(workspace, owner, expectedRevision, reason, controllerId)` begins `if (controllerId !== prior.state.controllerId) return repositoryExecutionFailure(\"REPOSITORY_EXECUTION_CONTROLLER_MISMATCH\")`. The PUBLISHING reservation is owned by the WRAPPER's publisher controller: apps/daemon/src/orchestrator/node-publisher-reservation.ts takes a handle only when `handle.reservation.controllerId === config.controller.controllerId`, and returns null while another controller's process is ALIVE (it may `claimController` only a dead one). During a stuck publish that wrapper is alive, passing UNKNOWN every tick. A command handler runs in the DAEMON under a different controller, so it can never release that hold.\n\n(2) THE PRECEDENT FOR THIS EXACT SITUATION. `repository.recover`, an operator-only command in REPOSITORY_RECOVERY_FAMILY, manipulates reservations it does not own by RECORDING A FACT that the owning controller then acts on (apps/daemon/src/repository/repository-recovery-facts.ts; read back at repository-landing-attempt.ts via `readRecoveryFact`). Controller ownership is the invariant that stops two processes racing on one reservation; the resolve respects it the same way.\n\n(3) THE RECEIPT IS THE FACT — no new ledger event. The command writes a REFUSED publish receipt for the decision through the existing `recordPublishReceipt` (the call node-publisher already uses), with a resolve code naming the resolution and a detail carrying the last observation. Who asserted it is already durable: every dispatched command is a recorded decision carrying its principal. That keeps publication-effect-ledger.ts untouched and the row at exactly ten files, where a separate 'resolve requested' event would have forced another split.\n\n(4) WHY THE CARD FLIPS IMMEDIATELY. apps/daemon/src/http/run-goal-publication.ts skips any decision that already has a receipt before consulting its intent (`if (state.receipts.has(pending.decisionId)) continue;`), so the card reports REFUSED as soon as the command writes the receipt.\n\n(5) WHY node-publisher MUST ACT, OR THE HOLD IS STRANDED. With a receipt on the decision, the publisher no longer treats it as pending; unless taught otherwise it never releases the PUBLISHING hold it owns, and every later delivery stays REPOSITORY_EXECUTION_BUSY. So node-publisher, on its next pass, must release a PUBLISHING hold it owns whose decision now carries an operator-resolve receipt, with the new reason PUBLISH_RESOLVED.\n\n(6) THE PORT HAS ALREADY MOVED. repository-execution-port.ts's release guard now reads `reason === \"PUBLISHED\" || reason === \"PUBLISH_NOT_TRANSMITTED\" ? prior.state.phase === \"PUBLISHING\"` — task-78dea88b's reason has landed there. PUBLISH_RESOLVED joins that same branch.\n\n(7) ROW 3'S STUB ARM FLIPS. task-2c3f878b pins, in apps/daemon/src/daemon-command-registry.test.ts, that an OPERATOR dispatch of `repository.publish_resolve` is refused by its stub. Replacing the stub makes that arm wrong by design; it must be re-aimed to the real behaviour, not deleted."
+  },
+  "planApprovedAt": "2026-09-18T19:39:57.880Z"
+}

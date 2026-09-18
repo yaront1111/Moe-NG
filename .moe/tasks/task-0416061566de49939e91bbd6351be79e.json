@@ -11,9 +11,51 @@
     "Gates quoted with `Test Files N passed` count lines: daemon tests for src/repository/**, src/http/repository-remote-read*, src/orchestrator/node-publisher*, and `pnpm typecheck`."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "planRevision": 0,
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE PREREQUISITE AND RE-MEASURE, then stop. (a) Read task-baefab32's completionSummary via get_context.epicSiblings; confirm it is DONE and that `readRemoteDefaultBranch(store, projectId, remoteUrl): string | null` exists in apps/daemon/src/repository/remote-default-branch.ts with that exact signature — if not, stop and report. (b) Re-confirm planningNotes insight 1 at YOUR tree, because it is what keeps this row small: `sed -n '60,75p' apps/daemon/src/repository/publish-ledger.ts` shows `PublishRequest` decoded from the stored decision, and node-publisher.ts builds no candidate by calling the reader — `git grep -n \"readPublicationCandidate\\|createPublicationCandidateReader\" -- apps/daemon/src/orchestrator` returns nothing. If node-publisher DOES call the reader now, stop and report: it becomes a third production caller that must pass the target. (c) Re-run the eleven-reference census from insight 2 and confirm every test caller is a zero-argument fake or passes only a string, so an optional second parameter leaves all of them valid; if any would break, stop and report rather than editing it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED then GREEN — the rule, in the reader. In apps/daemon/src/repository/git-publication-native.test.ts (which already drives the real reader against a real repository at :45 and :56 — leave those two calls exactly as they are, since they prove the no-target path is unchanged) first add arms, each asserting `approval.branch` BY VALUE against the PRODUCTION reader on a real repository: with a target whose recorded default EQUALS the workspace branch, the branch is exactly `moe/release/<goalId>`; with a target whose default is null (unknown), it is `moe/release/<goalId>`; with a target naming a DIFFERENT default, it is the workspace branch unchanged; with NO target, it is the workspace branch unchanged. Add a case-sensitivity arm — a workspace branch `Master` against a default `master` is NOT equal — because git compares branch names case-sensitively. Confirm RED. Then widen `PublicationCandidateReader` in apps/daemon/src/repository/publication-approval-contracts.ts:19 with an OPTIONAL trailing parameter `target?: { readonly goalId: string; readonly remoteDefaultBranch: string | null }`, and implement the rule in apps/daemon/src/repository/publication-candidate.ts. Write it as one comment at the site: the branch is set ONCE here, so the preview, the command and — through the command's recorded decision — the push all carry the same target, and the operator approves what is actually pushed. Confirm GREEN.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/publication-approval-contracts.ts",
+        "apps/daemon/src/repository/publication-candidate.ts",
+        "apps/daemon/src/repository/git-publication-native.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Refuse an invalid ref by name (DoD 3). Before returning a candidate whose branch is `moe/release/<goalId>`, check that the name is a valid branch under git's own rules — reuse the reader's existing `execFileSync(\"git\", ...)` runner to run `git check-ref-format --branch`, or implement git's documented rules in pure code; either way test against git's real answer. Invalid names return a NAMED refusal through `publicationRefused` and never a candidate, so nothing downstream can push a ref git would reject or quietly rewrite. Add arms in git-publication-native.test.ts: a real goalId of the form the store actually holds (e.g. `goal-2cf9472a-d972-4e97-88cf-1734639d9700`) is accepted; a goalId containing a character git forbids in a branch name (such as `..`, a space, `~`, `^`, `:`, or a trailing `.lock`) is refused with the exact code, asserted by value, and no candidate is returned.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/publication-candidate.ts",
+        "apps/daemon/src/repository/git-publication-native.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Pass the target from BOTH production readers, and prove they agree (DoD 2). In apps/daemon/src/http/repository-remote-read.ts:100 (the preview) and apps/daemon/src/repository/publish-services.ts:95 (the command), pass `{ goalId, remoteDefaultBranch: readRemoteDefaultBranch(store, projectId, remoteUrl) }` as the reader's second argument — a local store read, safe on the polled preview path. Then add the agreement arms in apps/daemon/src/repository/publication-approval.test.ts, each asserting by value: (1) with the same recorded default, the preview's approval and the command's fresh read are IDENTICAL, and the command ACCEPTS the preview's approval — no PUBLISH_CANDIDATE_CHANGED; (2) a recorded default that CHANGES between preview and command makes the command refuse with the exact code PUBLISH_CANDIDATE_CHANGED and its layer — the existing TOCTOU guard doing its designed job; (3) THE FORGOTTEN-CALLER ARM: a command reader called WITHOUT the target, against a preview that passed it, is refused PUBLISH_CANDIDATE_CHANGED — this is what catches a production caller that silently drops the target. Also assert the command RECORDS `approval.branch = moe/release/<goalId>` in its decision, since that recorded value is what node-publisher pushes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/repository-remote-read.ts",
+        "apps/daemon/src/repository/publish-services.ts",
+        "apps/daemon/src/repository/publication-approval.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GATES AND ADVERSARIAL REVIEW. (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/http/repository-remote-read.test.ts src/http/repository-publication-read.test.ts src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts`, count line quoted — read the OUTPUT, not the exit code. The node-publisher files are in the gate because the push inherits the command's recorded branch. (B) `pnpm typecheck`, projects counted — this is what proves the optional parameter left every fake and every pass-through reference valid. (C) The full `pnpm --filter @moe/daemon test`; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (D) ADVERSARIAL REVIEW, in the completion record: Is there ANY production path that builds a publish candidate without passing the target — re-run the census and name each caller's verdict? Can the preview and the command ever compute different branches from the same recorded inputs? Does a goal published BEFORE this row, whose decision recorded the workspace branch, now push something different on recovery — it must not, because the push uses the recorded decision? Is the branch comparison case-sensitive everywhere? Can an invalid ref ever reach `git push`? Name, in the completion record, the CORRECTION to this row's description: the push does not re-read the candidate, so only two production readers pass the target.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "planRevision": 1,
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -26,8 +68,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:57:31.970Z",
-  "updatedAt": "2026-09-18T12:57:36.759Z",
+  "updatedAt": "2026-09-18T19:22:21.338Z",
   "dependsOn": [
     "task-baefab32f1264daf8f173efc0c1fe2c0"
-  ]
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-18T19:20:25.881Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-18T19:22:19.143Z",
+  "planningNotes": {
+    "codebaseInsights": "Filed by me earlier today as leaf 2 of the owner-chosen OPTION A for task-4ba1e00a. dependsOn task-baefab32 (which lands `readRemoteDefaultBranch`), which itself waits on task-78dea88b. Measured at HEAD 2026-09-18; step 1's re-measure is binding because both prerequisites rewrite files this row reads.\n\n(1) A CORRECTION TO THIS ROW'S OWN DESCRIPTION, measured. The description says the approval must equal a fresh candidate read 'at push (node-publisher.ts:33, :53)'. It does NOT. node-publisher's `PublishRequest` is DECODED FROM THE STORED DECISION (apps/daemon/src/repository/publish-ledger.ts:66 `decodeRequest(decision)`), and the publish command records the candidate — `approval.branch` included — in that decision (publish-services.ts:106 and the event payload at :110). node-publisher.ts:33 and :53 compare the REQUEST's recorded candidate with the INTENT's recorded candidate; neither calls the reader. So the push inherits whatever branch the COMMAND recorded, and there are TWO production readers, not three: the preview (apps/daemon/src/http/repository-remote-read.ts:100) and the command (apps/daemon/src/repository/publish-services.ts:95). The command then requires the operator's approval — taken from the preview — to equal its own fresh read via `samePublicationApproval` (:100).\n\n(2) THE READER AND ITS FULL CENSUS. `export type PublicationCandidateReader = (remoteUrl: string) => PublicationCandidateResult;` (publication-approval-contracts.ts:19). `git grep -n \"PublicationCandidateReader\\|readPublicationCandidate\\|createPublicationCandidateReader\" -- apps tests` returns eleven daemon references — more than the description listed: the declaration; the implementer publication-candidate.ts; the two production callers above; pass-through type references in daemon-command-registry.ts:18/:130/:283, daemon-repository-workflow-wiring.ts:32 and daemon-store-foundation-composition.ts:288/:575; and test callers — bootstrap-test-fixtures.ts:214 (implements it and SPREADS `remoteUrl` as a string), repository-publication-read.test.ts:13 and publication-approval.test.ts:25/:104 (zero-argument fakes), and git-publication-native.test.ts:45/:56 (CALLS it with a bare string). The control-room's `readPublicationCandidate` (apps/control-room/src/live/live-publication-candidate.ts:17) is an UNRELATED function of the same name that fetches over HTTP; it is not this type.\n\n(3) WHY AN OPTIONAL SECOND PARAMETER. Changing the reader to take an object would break git-publication-native.test.ts (a string argument) and bootstrap-test-fixtures.ts (which uses its argument as a string). An OPTIONAL trailing `target` leaves every one of those valid and unchanged, and gives callers that do not pass it exactly today's behaviour. The risk is a production caller that FORGETS it and silently keeps pushing to the default branch; the preview-command agreement arm in step 4 exists to catch exactly that, because a forgotten target makes the two disagree.\n\n(4) WHERE THE DEFAULT COMES FROM. Both production callers hold `store` and `projectId` (repository-remote-read's port is built with them at daemon-store-foundation-composition.ts:575; the command's handler reads the store, as publish-services.ts's `bindingLeg` does) and call task-baefab32's `readRemoteDefaultBranch(store, projectId, remoteUrl)` — a LOCAL store read, safe on the polled preview path.\n\n(5) THE READER RUNS GIT SYNCHRONOUSLY. publication-candidate.ts (34 lines) already runs `execFileSync(\"git\", ...)` for `rev-parse` and `symbolic-ref`, so ref validation may reuse that runner; no async path is needed."
+  },
+  "planApprovedAt": "2026-09-18T19:22:21.338Z"
 }
