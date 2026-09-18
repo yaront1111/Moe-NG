@@ -63,7 +63,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T20:38:32.809Z",
-  "updatedAt": "2026-09-18T21:05:35.820Z",
+  "updatedAt": "2026-09-18T21:06:11.887Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T20:40:02.710Z",
     "plannedStepCount": 3,
@@ -106,7 +106,8 @@
   "filesModified": [
     "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
     ".moe/tasks/task-d6ada0821e0043dcaec8a4a265c40da0.json",
-    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json"
+    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+    ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json"
   ],
   "completionSummary": "Moved the \"wrapper deps\" positive-control pin in apps/daemon/src/orchestrator/agent-wrapper-main.test.ts :395 (one line, census rule: pin moved, matcher not widened, arm kept). from/to is now `\"      clock: () => Date.now(),\\n      deps,\"` / `\"      clock: () => Date.now(),\\n      deps: v1Deps,\"`. The old anchor (\"deps,\\n maxAgents\") was gone since main's e6d5e260 put a comment and a `log:` key between them. The new anchor occurs once in the source, inside the createAgentWrapper({ slice :293-352 (:321 is the file's only /^\\s+deps,$/ line). No production byte changed.\nBYTES: a peer QA checkpoint, 68f251be (task-8bc14883), swept this exact one-line diff before my wrapper committed. See comment-e080d75d and `git show 68f251be`. The completion commit may be empty.\nGATES:\n- Targeted file: 1 failed | 51 passed before, 52/52 passed after (fresh at HEAD be1f2c6d).\n- `pnpm --filter @moe/daemon typecheck`: exit 0, 0 errors.\n- Full `pnpm --filter @moe/daemon test` at 68f251be: Test Files 764 passed (764), Tests 12548 passed | 21 skipped (12569), 0 failed. The full-suite-gate lease was free, acquired, and released after the run.\nDRILLS (in memory, via a temp vitest config that was deleted, ls: No such file; sha256 unchanged):\n- D0 control: 52/52.\n- D1: deleting the deps wiring line reds only the main arm, at :378 `toMatch(/^\\s+deps,\\r?$/mu)`.\n- D2: deleting that wrapper clause reds only the \"wrapper deps\" control, at its second expect `toThrow()`. Its first expect still passed, so the new anchor hits the wrapper call's deps.\nREVIEW: if a key is later inserted between clock and deps, the arm fails loudly at its first expect (today's red). task-eca3780d touches only the :435-436 comment, outside the slice. Details are in the step-3 note.",
   "commits": [
@@ -125,6 +126,22 @@
       "treeId": "6b3686611ab3b871f8d13984b8a171b4a6fa5b41",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "6b0d7475c848f669fe59639966dbcb5dd88d2998",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T21:00:39Z",
+      "paths": [
+        ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json",
+        ".moe/tasks/task-d6ada0821e0043dcaec8a4a265c40da0.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T21:06:11.887Z",
+      "treeId": "692d3dbe56f2988e6e57d96aaa976f0b87115d0d",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -134,9 +151,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-952c612b@2026-09-18T20:43:28Z",
-    "at": "2026-09-18T20:55:51.327Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-18T21:00:39Z",
+    "at": "2026-09-18T21:06:11.887Z"
   },
   "completedAt": "2026-09-18T21:05:35.820Z",
   "reviewCompletedAt": "2026-09-18T21:05:35.820Z",

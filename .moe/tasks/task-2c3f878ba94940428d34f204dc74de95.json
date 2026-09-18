@@ -15,8 +15,11 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE THE TEMPLATE AND THE CENSUS, then stop. (a) Follow preview.decide through every wiring site named in planningNotes insight 1 and record each file:line at YOUR tree; confirm REPOSITORY_RECOVERY_FAMILY still exists (daemon-command-vocabulary.ts:181) and that joining it adds no bootstrap-sequence entry. (b) Confirm row 2 (task-adeabf1f) is DONE and apps/daemon/src/repository/publish-resolve-contracts.ts exports the kind constant this row wires. (c) RE-RUN THE CENSUS WITH `:(glob)` — without it `git grep` does not recurse `**` and silently skips files, which is how the first census missed mcp-tool-allowlist.test.ts: `git grep -nE \"MCP_EXCLUDED_COMMAND_KINDS\\)\\.toEqual|expectedExcluded|excluded: [0-9]+|vocabulary: [0-9]+|OPERATOR_PRINCIPAL_KINDS.size\" -- ':(glob)apps/daemon/src/**/*.test.ts' ':(glob)tests/**/*.ts'`. Record every hit. If it finds a whole-set pin outside mcp-tool-allowlist.test.ts and daemon-command-vocabulary.test.ts, stop and report rather than taking an unnamed path.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "RE-MEASURED at this tree. No owned-path edits. Peer dirt (untouched): apps/daemon/src/repository/git-publication-port.ts, git-publication-port.test.ts, publication-effect-contracts.ts, remote-default-branch.ts/.js/.test.ts; plus .moe/*.\n\n(a) preview.decide wiring at THIS tree (planningNotes insight 1, line numbers match): payload-keys.ts:37 import / :167 PAYLOAD_KEYS row; vocabulary.ts PREVIEW_FAMILY :169-175 CAPABILITIES.REVIEW, WiredCommandKind :255, familyCapabilityOf walks FAMILY_TABLES :274-278 (PREVIEW_FAMILY listed), agentCapabilitiesFor null :296, OPERATOR_PRINCIPAL_KINDS :402; families.ts membership preview :126 / requiredCapability REVIEW :189; async-entries.ts preview.start :329-336 (decide itself is sync via registry, not this file). release.decide async entry :357-361 as planned.\n\nREPOSITORY_RECOVERY_FAMILY EXISTS at vocabulary.ts:181 `{ \"repository.recover\": CAPABILITIES.ADMIN }`, composed FAMILY_TABLES :278. bootstrap-sequence.ts names `repository.publish` (:29, :176) NOT recover. Joining REPOSITORY_RECOVERY_FAMILY adds NO bootstrap-sequence entry. Capability choice for step 3: ADMIN like recover — operator holds every capability, ADMIN fences REACH only; OPERATOR_PRINCIPAL_KINDS is the human gate. agentCapabilitiesFor already returns null for recover (:293); publish_resolve must join that null branch so it is never staffable.\n\n(b) Row 2 task-adeabf1f DONE, landing.merged=true, completion sha 7986045b. publish-resolve-contracts.ts:33 exports PUBLISH_RESOLVE_COMMAND_KIND = \"repository.publish_resolve\". Import from ../repository/publish-resolve-contracts.js. Do NOT mint via layer literals.\n\n(c) CENSUS with :(glob) as specified:\ngit grep -nE \"MCP_EXCLUDED_COMMAND_KINDS\\\\)\\\\.toEqual|expectedExcluded|excluded: [0-9]+|vocabulary: [0-9]+|OPERATOR_PRINCIPAL_KINDS.size\" -- ':(glob)apps/daemon/src/**/*.test.ts' ':(glob)tests/**/*.ts'\nHITS (only the two named files): vocabulary.test.ts:465 size.toBe(30); allowlist.test.ts:159 MCP_EXCLUDED.toEqual(derived); :230 expectedExcluded hand list (29 names, last recover); :251 toEqual(expectedExcluded); :280 { excluded: 29, queries: 7, vocabulary: 65, wired: 43 }. No whole-set pin OUTSIDE those two files matched the regex.\n\nINDEPENDENT of that regex (OPERATOR_PRINCIPAL_KINDS / length-29 sweep), three more EXACT exclusion-denominator pins and one served-kind roster pin WILL RED when the kind joins OPERATOR_PRINCIPAL_KINDS / PAYLOAD_KEYS:\n1. mcp-main.test.ts:220 EXPECTED_EXCLUDED_COMMAND_KINDS hand list; :268 length 29; :270 *2=58; :273 production.toEqual(expected).\n2. mcp-http/mcp-http-host.test.ts:694/:725 EXCLUSION_CASES.length 29 (list DERIVED, count frozen); :696 =58.\n3. daemon-command-registry-human-approver.test.ts:387 expectedExclusions hand list; :419/:420 length 29; :421 sort-equal to MCP_EXCLUDED.\n4. daemon-store-dependencies.test.ts:840 registryKinds exact sorted served-set (comment: 'A new command writes its own kind here').\nOwned-in-later-steps (not unnamed): vocabulary.test.ts ROWS.toHaveLength(65) :360 + OPERATOR_ONLY :318; registry.test.ts ROWS/REGISTRATION_ORDER/registry.size 65 at :1131/:1221/:2103 + OPERATOR_ONLY :431.\nAdding unnamed 1-4 to the plan's 8 files = 12, over the 10-file cap — split/amend signal. Per step 1 'stop and report rather than taking an unnamed path' and global unnamed-consumer rail: NOT editing those files. gates-human-only-fence BAND is /^(?:design|preview|release)\\./ so repository.* is outside the band; step 2's named arm is still required. HUMAN_ONLY_STEPS is a hand set in agent-spawn-contract.ts (not derived); not in this plan.\nPositive control: census DID hit allowlist.test.ts:280 (the pin a glob-less grep misses).",
+      "startedAt": "2026-09-18T21:00:54.186Z",
+      "completedAt": "2026-09-18T21:06:42.405Z"
     },
     {
       "stepId": "step-2",
@@ -54,8 +57,8 @@
       "affectedFiles": []
     }
   ],
-  "planRevision": 1,
-  "status": "WORKING",
+  "planRevision": 3,
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -68,23 +71,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:22.330Z",
-  "updatedAt": "2026-09-18T19:33:52.940Z",
+  "updatedAt": "2026-09-18T21:07:26.425Z",
   "dependsOn": [
     "task-adeabf1f8c9e4e2c8b778491f9e20b71"
   ],
   "metrics": {
     "firstClaimAt": "2026-09-18T19:28:56.428Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 1
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T19:33:50.755Z",
   "planningNotes": {
     "codebaseInsights": "Filed by me today as ROW 3 of the owner-directed split of task-21be6e90. dependsOn row 2 (task-adeabf1f), which follows row 1 (task-f3182818). The service child task-a47babf8 replaces this row's refusing stub with the real behaviour. Measured at HEAD 2026-09-18.\n\n(1) THE TEMPLATE IS preview.decide, NOT repository.publish. `repository.publish` is a BOOTSTRAP kind (apps/daemon/src/bootstrap/bootstrap-contracts.ts:44) with a bootstrap-sequence entry (bootstrap-sequence.ts:29, :176) — joining that family would drag the bootstrap sequence in. `preview.decide`, a non-bootstrap operator decision, is wired through: its payload keys (daemon-command-payload-keys.ts:37, :167); its family map with a capability (daemon-command-vocabulary.ts:169-171, `CAPABILITIES.REVIEW`); the wired-kind type union (:255); `familyCapabilityOf` (:296); OPERATOR_PRINCIPAL_KINDS (:401); and a family classification in daemon-command-families.ts (:126). It never touches the bootstrap sequence.\n\n(2) THE REGISTRATION HOME. `release.decide`, the other operator decide kind, is registered in apps/daemon/src/daemon-command-async-entries.ts:353 as `[RELEASE_DECIDE_COMMAND_KIND]: Object.freeze({ ... payloadKeys: PAYLOAD_KEYS[...], requiredCapability: CAPABILITIES.GOAL })`. That file already holds preview.* and deployment.* operator entries; the refusing stub goes there.\n\n(3) A SEMANTIC HOME ALREADY EXISTS. `REPOSITORY_RECOVERY_FAMILY = Object.freeze({ \"repository.recover\": CAPABILITIES.ADMIN })` (daemon-command-vocabulary.ts:181, composed at :278). Resolving a stuck publish is a repository RECOVERY action, and repository.recover is already operator-only. Joining that family keeps the kind out of the bootstrap sequence entirely. The worker confirms it adds no sequence coupling and chooses the capability with a stated reason.\n\n(4) THE CENSUS, and how it was nearly missed. A first `git grep` of kind-count pins returned almost nothing because `git grep` does not recurse `**` without the `:(glob)` magic — it silently skipped mcp-tool-allowlist.test.ts, which holds a pin known to exist. That is exactly the 'a sweep that yields zero cases passes' failure the rails warn about. Re-run with `:(glob)`, the pins a new operator-only kind moves are: apps/daemon/src/mcp-tool-allowlist.test.ts:157 (`expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(...)`, an exact list); :228-249 (`expectedExcluded`, documented as an 'EXACT, frozen exclusion denominator', listing every excluded kind by hand); and :278 (`{ excluded: 29, queries: 7, vocabulary: 65, wired: 43 }` — `excluded` and `vocabulary` each rise by one, `wired` does not). :258-259 is DERIVED from OPERATOR_PRINCIPAL_KINDS and needs no edit. apps/daemon/src/daemon-command-vocabulary.test.ts:465 pins `expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(30)`. Of the fourteen test files that reference OPERATOR_PRINCIPAL_KINDS or HUMAN_ONLY_STEPS, a triage found only daemon-command-vocabulary.test.ts pinning the WHOLE set; the other thirteen check membership of specific kinds, which a new kind cannot disturb. That triage is a regex and is not proof: the worker's own full daemon run is the final census.\n\n(5) gates-roster-coherence.test.ts NEEDS NO EDIT, contrary to this row's description. It checks roster COHERENCE — served is a subset of advertised (:79-85), the generated client equals the roster (:89-94), and every band kind is on all three surfaces (:97-108) — not human-only classification. With row 1 advertising the kind and this row serving it, it is satisfied as-is. Human-only classification is gates-human-only-fence.test.ts plus the derived MCP exclusion."
   },
-  "planApprovedAt": "2026-09-18T19:33:52.940Z"
+  "planApprovedAt": "2026-09-18T19:33:52.940Z",
+  "contextFetchedBy": [
+    "worker-07e6de2a"
+  ],
+  "workStartedAt": "2026-09-18T21:00:54.186Z",
+  "blockedReason": "Step 1 census (the specified :(glob) regex) hit only the two named files (allowlist.test.ts :159/:230/:251/:280 and vocabulary.test.ts:465). Independent of that regex, four more EXACT whole-set pins in @moe/daemon WILL red when repository.publish_resolve joins PAYLOAD_KEYS + OPERATOR_PRINCIPAL_KINDS, and they are not in this plan's 8 files. Adding all four is 12 files, over the 10-file cap — a split/amend signal, not an in-line extra path.\n\nUnnamed consumers (file:line, what fails):\n1. apps/daemon/src/mcp-main.test.ts:220 EXPECTED_EXCLUDED_COMMAND_KINDS hand list; :268 EXCLUSION_CASES.length.toBe(29); :270 *2=58; :273 production.toEqual(expected).\n2. apps/daemon/src/mcp-http/mcp-http-host.test.ts:694 and :725 EXCLUSION_CASES.length.toBe(29) (list is DERIVED, count is frozen); :696 *2=58.\n3. apps/daemon/src/daemon-command-registry-human-approver.test.ts:387 expectedExclusions hand list; :419/:420 length 29; :421 sort-equal to MCP_EXCLUDED_COMMAND_KINDS.\n4. apps/daemon/src/daemon-store-dependencies.test.ts:840 registryKinds exact sorted served-set (comment: 'A new command writes its own kind here').\n\nDoD requires a green full `pnpm --filter @moe/daemon test`. Those four files live in that package, so a path-attributed baseline cannot excuse them: the owned-package leg would be nonzero. I will not edit unnamed paths. Please amend or split so those pins are owned (or carve a sibling that this row dependsOn, and drop the full-daemon-leg from THIS DoD). Census regex positive control: allowlist.test.ts:280 WAS found. Row 2 task-adeabf1f is DONE/merged. Template still preview.decide; REPOSITORY_RECOVERY_FAMILY at vocabulary.ts:181 is the right family (no bootstrap-sequence coupling).",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-18T21:07:26.425Z"
 }
