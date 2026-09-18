@@ -1,0 +1,26 @@
+{
+  "id": "task-90cbe66d7e3f4cfea3a4c778bb6bab2b",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: a peer QA checkpoint swept 8 paths another WORKING row had already asserted in complete_step.modifiedFiles",
+  "description": "Evidence: commit 46e4c059 (2026-09-18 21:07:50Z, \"wip(task-8bc14883…)\", Moe-Session qa-84420029@2026-09-18T12:43:01Z, trailer Moe-Paths: 7 but 8 files changed) holds all 8 source paths of task-baefab32 (git-publication-port.ts/.test.ts, publication-effect-contracts.ts, remote-default-branch.ts/.js/.test.ts, node-publisher.ts/.test.ts). task-baefab32's step-2/3/4 complete_step.modifiedFiles had ASSERTED those paths between 20:58Z and 21:05Z, before the sweep. It looks like a long-lived session attributing by delta from a baseline taken 8.5h earlier.\nConsequence: the row's bytes land under a foreign Moe-Task trailer, its own completion commit is empty, and task.commits misses them. Repro: a QA session idles for hours while a worker edits and asserts paths; the QA exit checkpoint commits them.\nExpected: a checkpoint never commits paths another live row has asserted, whether in its modifiedFiles or in declared files.",
+  "definitionOfDone": [
+    "Task completed as described"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 1025.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T21:17:08.911Z",
+  "updatedAt": "2026-09-18T21:17:08.911Z"
+}

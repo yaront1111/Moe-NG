@@ -71,7 +71,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:22.330Z",
-  "updatedAt": "2026-09-18T21:07:26.425Z",
+  "updatedAt": "2026-09-18T21:07:33.642Z",
   "dependsOn": [
     "task-adeabf1f8c9e4e2c8b778491f9e20b71"
   ],
@@ -100,5 +100,34 @@
   "blockedReason": "Step 1 census (the specified :(glob) regex) hit only the two named files (allowlist.test.ts :159/:230/:251/:280 and vocabulary.test.ts:465). Independent of that regex, four more EXACT whole-set pins in @moe/daemon WILL red when repository.publish_resolve joins PAYLOAD_KEYS + OPERATOR_PRINCIPAL_KINDS, and they are not in this plan's 8 files. Adding all four is 12 files, over the 10-file cap — a split/amend signal, not an in-line extra path.\n\nUnnamed consumers (file:line, what fails):\n1. apps/daemon/src/mcp-main.test.ts:220 EXPECTED_EXCLUDED_COMMAND_KINDS hand list; :268 EXCLUSION_CASES.length.toBe(29); :270 *2=58; :273 production.toEqual(expected).\n2. apps/daemon/src/mcp-http/mcp-http-host.test.ts:694 and :725 EXCLUSION_CASES.length.toBe(29) (list is DERIVED, count is frozen); :696 *2=58.\n3. apps/daemon/src/daemon-command-registry-human-approver.test.ts:387 expectedExclusions hand list; :419/:420 length 29; :421 sort-equal to MCP_EXCLUDED_COMMAND_KINDS.\n4. apps/daemon/src/daemon-store-dependencies.test.ts:840 registryKinds exact sorted served-set (comment: 'A new command writes its own kind here').\n\nDoD requires a green full `pnpm --filter @moe/daemon test`. Those four files live in that package, so a path-attributed baseline cannot excuse them: the owned-package leg would be nonzero. I will not edit unnamed paths. Please amend or split so those pins are owned (or carve a sibling that this row dependsOn, and drop the full-daemon-leg from THIS DoD). Census regex positive control: allowlist.test.ts:280 WAS found. Row 2 task-adeabf1f is DONE/merged. Template still preview.decide; REPOSITORY_RECOVERY_FAMILY at vocabulary.ts:181 is the right family (no bootstrap-sequence coupling).",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-18T21:07:26.425Z"
+  "blockedAt": "2026-09-18T21:07:26.425Z",
+  "commits": [
+    {
+      "sha": "a60a4fdc8ddd5d227e0bd2f9329ce28550d9fbea",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-18T20:59:48Z",
+      "paths": [
+        ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+        ".moe/tasks/task-d6ada0821e0043dcaec8a4a265c40da0.json"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-18T21:07:33.642Z",
+      "treeId": "891ae94d0df5954cb347349e8102da2f8448a17d",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+    ".moe/tasks/task-d6ada0821e0043dcaec8a4a265c40da0.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-07e6de2a@2026-09-18T20:59:48Z",
+    "at": "2026-09-18T21:07:33.642Z"
+  }
 }
