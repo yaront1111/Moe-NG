@@ -77,7 +77,7 @@ async function drive(cwd: string, targetDir: string): Promise<Sinks> {
     env: {},
     log: (line: string) => stdout.push(line),
     nodeVersion: "v24.16.0",
-    packageVersion: "0.1.0",
+    packageVersion: "test",
     randomHex: () => CREDENTIAL,
     startManager: async () => 0,
     startStack: async () => 0,

@@ -103,7 +103,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T20:39:33.812Z",
-  "updatedAt": "2026-09-18T05:32:24.761Z",
+  "updatedAt": "2026-09-18T05:32:28.021Z",
   "metrics": {
     "firstClaimAt": "2026-09-17T20:52:06.923Z",
     "plannedStepCount": 7,
@@ -152,7 +152,8 @@
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.js",
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts"
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json"
   ],
   "completionSummary": "DELIVERED option (a) only; option (b) measured NOT APPLICABLE. Full gate table + foreign-red attribution in comment-fcad91b958e7480489cbeda473117ecf; detached-HEAD follow-up in comment-25f011b5d09241bbaf46310885263465.\n\nDoD 1 — a dirty tracked `.moe-next/start.ps1` no longer wedges node.deliver. `baseline()` (repository-delivery-runtime.ts:147-160) now checkpoints that dirt and records the baseline. The live repro was ALREADY a test asserting the opposite (repository-delivery-runtime.test.ts:170-192); it is rewritten and asserts ok=true, starts===1, baseline NON-null, RUNTIME_METADATA_CHECKPOINTED + BASELINE_RECORDED logged, HEAD moved, the commit touching EXACTLY `.moe-next/start.ps1`, author `Moe <moe@moe.local>`, and revertable by one real `git revert`. An 8-line comment records WHY the old assertions were inverted (owner direction 2026-09-17), so it reads as a decision, not a loosened gate.\n\nDoD 2 — scope fence proven BOTH arms, by exact code. Product dirt still refuses REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE at gate B (`entries.length !== 0`, byte-identical in the diff) and asserts NOT RUNTIME_METADATA_CHECKPOINTED, HEAD unchanged, `.git/index` byte-identical. NEW mixed-tree arm: metadata checkpointed AND product dirt still refuses AND the product file still dirty with its original bytes. The fence is enforced in PRODUCTION (new runtime-metadata-checkpoint.ts, 128 lines) via the IMPORTED `isMoeMetadata` — not a reimplementation — plus `..`-segment and absolute-path rejection, because `.moe-next/../src/app.ts` would otherwise classify as metadata. 9 unit arms against REAL git, each pinning its exact outcome code. MUTATION-VERIFIED twice: deleting the fence makes it commit `src/product.ts` (5 red). Restores proven by SHA256 (untracked file, so `git diff` is invalid proof): 74cd5ae8…828f91 before = after.\n\nDoD 3 — NOT APPLICABLE, measured not skipped. `git -C D:/projexts/UnAI ls-files -- .moe .moe-next` → 4 paths; `.gitignore` carries only `.moe-next/store.sqlite",
   "reviewCompletedAt": "2026-09-18T05:30:54.921Z",
@@ -246,5 +247,29 @@
         }
       ]
     }
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "c89fa4fc61a05167d420337c308a753ccfb6b1e4",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T05:17:29Z",
+      "paths": [
+        ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T05:32:28.021Z",
+      "treeId": "1afb932e5613aed9f067d62587a782ebeb80404c",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T05:17:29Z",
+    "at": "2026-09-18T05:32:28.021Z"
+  }
 }

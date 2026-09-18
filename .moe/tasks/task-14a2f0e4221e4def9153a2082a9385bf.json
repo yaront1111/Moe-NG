@@ -15,72 +15,129 @@
     {
       "stepId": "step-1",
       "description": "CONFIRM THE MEASURED SURFACE STILL HOLDS AT YOUR HEAD, then stop. Re-run the four measurements recorded in planningNotes.codebaseInsights and paste their output into the step note. (a) Write a throwaway probe at apps/daemon/src/probe-wired.mts that imports { wiredMcpToolKinds } from \"./mcp-tool-allowlist.js\" and prints whether \"goal.create_with_source\" and \"goal.close\" are members plus the total length; run it with `npx tsx apps/daemon/src/probe-wired.mts` and DELETE IT IN THE SAME SHELL COMMAND (epic rail: no probe files in commits). Expect goal.create_with_source PRESENT, goal.close ABSENT, TOTAL 43. (b) `grep -n \"KNOWN_COMMANDS\" apps/daemon/src/cli/moe-cli-argv.ts` -- expect no \"mcp\" entry. (c) `grep -n \"LOOPBACK_HOSTS\\|MCP_HTTP_HOST_NON_LOOPBACK_BIND\" apps/daemon/src/mcp-http/mcp-http-host.ts` -- expect the loopback set and the refusal. (d) `Test-Path D:/projexts/UnAI/moe.config.json` -- expect True; step 8 needs it. IF ANY OF (a)-(c) DISAGREES with planningNotes, stop and moe.report_blocked naming the exact disagreement rather than planning around it. If only (d) is missing, continue -- step 8 has a named substitute. Note the 6 pre-existing foreign dirty paths in the shared checkout in your step note and do not touch them.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "REOPEN RE-WALK (reopenCount 1). Re-measured at HEAD 1f43126e (checkout was switched by a peer from main to moe/work-2026-09-18 mid-session; owned paths are byte-identical on both: `git diff --stat main moe/work-2026-09-18 -- <owned>` empty).\n(a) tsx probe apps/daemon/src/probe-wired-worker6433.mts, deleted in the same command (ls: No such file): goal.create_with_source PRESENT / goal.close ABSENT / TOTAL 43.\n(b) moe-cli-argv.ts:13 KNOWN_COMMANDS now = [init, start, mcp, recover-review, recover-replan, projects, version, help]. \"mcp\" IS present — this is THIS row's own step-3 bytes (landed on origin/main via PR #54 f9d4e2fb), not a stale planning premise.\n(c) mcp-http-host.ts:88 LOOPBACK_HOSTS {127.0.0.1, ::1, [::1], localhost}; :196 refuses MCP_HTTP_HOST_NON_LOOPBACK_BIND.\n(d) D:/projexts/UnAI/moe.config.json present (True).\nForeign dirt in the shared checkout: only .moe/** board state (messages, tasks, attempts, resources). Not touched.\nFOREIGN RED still present at HEAD (QA's #governors msg-cc7225e9): agent-spawn-contract.ts:79 parameter properties, pulled into plain Node by compiled-node-source.ts:26 (20896d47). Not this row's path; live proof in step 8 will serve the pre-20896d47 compiled-node-source.ts blob via an in-memory load hook, as QA did.",
+      "startedAt": "2026-09-18T05:19:04.386Z",
+      "completedAt": "2026-09-18T05:19:20.528Z"
     },
     {
       "stepId": "step-2",
       "description": "RED -- argv tests for the `mcp` verb, INCLUDING the bidirectional roster arm that the existing test cannot provide. In apps/daemon/src/cli/moe-cli-argv.test.ts add: (1) `parseCliArgv([\"mcp\"])` yields {command:\"mcp\", ok:true, targetDir:\".\"}; (2) `parseCliArgv([\"mcp\",\"D:/projexts/UnAI\"])` yields targetDir \"D:/projexts/UnAI\"; (3) `parseCliArgv([\"mcp\",\"a\",\"b\"])` refuses with code MOE_CLI_TOO_MANY_ARGUMENTS and detail \"b\"; (4) `parseCliArgv([\"mcp\",\"--operator-stdin\"])` refuses with code MOE_CLI_UNKNOWN_OPTION and detail \"--operator-stdin\" -- pairing is a browser concept and has no meaning on a stdio wire, so `mcp` accepts NO options. (5) THE MANDATORY BIDIRECTIONAL ARM (global rail on roster coverage): the existing arm at line ~96 iterates KNOWN_COMMANDS and only asserts each name appears in the unknown-command MESSAGE -- adding \"mcp\" to the roster grows that iteration and it stays green even with no parse branch, so it can never catch an advertised-but-unparsed verb. Add the opposite direction: `for (const command of KNOWN_COMMANDS) expect(parseCliArgv([command]).ok, command).toBe(true)` -- i.e. every ADVERTISED command actually PARSES. Assert the exact refusal CODES (MOE_CLI_UNKNOWN_OPTION, MOE_CLI_TOO_MANY_ARGUMENTS), never merely that `ok` is false. Run the file and CONFIRM IT IS RED before moving on; paste the failing output into the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/cli/moe-cli-argv.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/cli/moe-cli-argv.test.ts"
+      ],
+      "note": "REOPEN RE-WALK: not in the rejection's scope (QA comment-67ebaf28: \"the re-walk only needs to re-complete those steps, not redo them\"). Delivered bytes already on origin/main (PR #54 f9d4e2fb) and unchanged at HEAD 1f43126e. Arms present: moe-cli-argv.test.ts:115 \"parses every command it advertises, not merely names it\" (bidirectional roster arm), :145 \"refuses --operator-stdin on mcp\" (MOE_CLI_UNKNOWN_OPTION), MOE_CLI_TOO_MANY_ARGUMENTS arms at :134/:140. Their RED was proven in round 1 (drill D3: parse branch deleted, roster kept -> \"mcp: expected false to be true\"; pre-existing one-directional arm stayed green) and re-proven by QA. Fresh run at HEAD: daemon gate 12 files / 166 tests passed, EXIT 0. No edit this round; path listed for attribution continuity only.",
+      "startedAt": "2026-09-18T05:19:46.617Z",
+      "completedAt": "2026-09-18T05:19:52.010Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN -- add the `mcp` verb to the pure argv layer. In apps/daemon/src/cli/moe-cli-argv.ts: (1) add \"mcp\" to KNOWN_COMMANDS (place it after \"start\" so the help roster reads in the order an operator meets them); (2) add `export interface CliMcp { readonly command: \"mcp\"; readonly ok: true; readonly targetDir: string; }` and add CliMcp to the CliInvocation union; (3) add a branch `if (head === \"mcp\")` that calls `unknownOption(parts, [])` -- the EMPTY allowed list, so the existing helper's \"options for this command: none\" message is produced verbatim with no new code -- then `targetOf(parts)` and returns the frozen CliMcp. Do NOT copy the start branch: `mcp` must not accept --operator-stdin. Keep the file under the 250-line target (it is 166 now). Re-run the argv test file and confirm every arm from step 2 is GREEN, including the new bidirectional arm.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/cli/moe-cli-argv.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/cli/moe-cli-argv.ts"
+      ],
+      "note": "REOPEN RE-WALK, outside the rejection's scope; no edit this round. At HEAD 1f43126e: KNOWN_COMMANDS carries \"mcp\" after \"start\" (moe-cli-argv.ts:13), `export interface CliMcp` at :39, `if (head === \"mcp\")` branch at :158 (no options accepted). File is 185 lines (< 250 target). Fresh daemon gate at HEAD: 12 files / 166 tests passed, EXIT 0, which includes every step-2 argv arm GREEN.",
+      "startedAt": "2026-09-18T05:19:55.122Z",
+      "completedAt": "2026-09-18T05:19:59.106Z"
     },
     {
       "stepId": "step-4",
       "description": "The runner: a NEW production module plus its bridge, kept out of moe-cli-main.ts because that file is ALREADY 347 lines and the epic rail says split before 400. Create apps/daemon/src/cli/moe-cli-mcp.ts exporting `runMcp(invocation, io): Promise<number>`. It must: (1) resolve targetDir against io.cwd and read moe.config.json through the SAME readConfig path moe-cli-main.ts uses -- export readConfig from moe-cli-main.ts if it is currently module-private, or move it here and import it back; whichever keeps one implementation, never two; (2) call preparePackagedLinks BEFORE launching (insight 7: junctions are lazy, and `@moe/mcp` will not resolve in a freshly extracted artifact without them); (3) set process.env MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL and MOE_SESSION_CREDENTIAL from the config -- the last two both take config.credential, which is the operator secret, matching mcp-main.ts's documented contract; resolve storePath against the project root so a relative config value works from any cwd; (4) `await (await import(\"../mcp-main.js\")).runMcpMain()` and return 0, returning 1 on a thrown startup error after writing the error's message. THE LOAD-BEARING CONSTRAINT: STDOUT IS THE JSON-RPC WIRE. This function must never call io.log (moe-cli-main.ts:307 wires it to process.stdout). Take an explicit stderr sink -- add `readonly diagnostic: (line: string) => void` to the CliIo interface in moe-cli-main.ts, wired to `process.stderr.write(line + \"\\n\")` in the real main -- and use it for EVERY line this verb emits, banner and refusal alike. One sink, no branching. Also create the one-line bridge apps/daemon/src/cli/moe-cli-mcp.js containing exactly `export * from \"./moe-cli-mcp.ts\";`, matching every sibling in that directory. Never log the credential's value (moe-init.ts ships that discipline; the config provenance lines name variables, never values).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/cli/moe-cli-mcp.ts",
         "apps/daemon/src/cli/moe-cli-mcp.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/cli/moe-cli-mcp.ts",
+        "apps/daemon/src/cli/moe-cli-mcp.js",
+        "apps/daemon/src/cli/moe-cli-project.ts",
+        "apps/daemon/src/cli/moe-cli-project.js"
+      ],
+      "note": "REOPEN RE-WALK, outside the rejection's scope; no edit this round. At HEAD 1f43126e: moe-cli-mcp.ts (67 lines) exports runMcp and MOE_CLI_MCP_UNAVAILABLE (:29/:31); `offWire = {...io, log: io.diagnostic}` at :38 (shared helpers cannot reach stdout); both credential variables set at :51 area; every line via io.diagnostic (:55/:56/:61). Bridges moe-cli-mcp.js / moe-cli-project.js are exactly `export * from \"./<name>.ts\";`. moe-cli-project.ts (78 lines) holds the ONE readConfig/preparePackagedLinks (the module-cycle deadlock fix from round 1). QA's optional nit (banner \"serving...\" printed before the launch attempt) NOT taken: runMcpMain blocks for the life of the server, so there is no post-launch point to print from; the host's READY receipt on stderr is the authoritative \"serving\" signal, and the failure line MOE_CLI_MCP_UNAVAILABLE follows immediately. Out of the reopen scope.",
+      "startedAt": "2026-09-18T05:19:59.998Z",
+      "completedAt": "2026-09-18T05:20:06.192Z"
     },
     {
       "stepId": "step-5",
       "description": "Wire the verb into the CLI and pin its behaviour. In apps/daemon/src/cli/moe-cli-main.ts: (1) add a `case \"mcp\"` / `if (invocation.command === \"mcp\")` branch in the same dispatch that routes start/projects, lazily importing runMcp from \"./moe-cli-mcp.js\" exactly as recoverReview/recoverReplan are imported; (2) widen the preparePackagedLinks command union to include \"mcp\"; (3) add a USAGE line `\"  moe mcp [dir]             serve this project to a headless MCP client over stdio (no browser, no pairing)\"` directly after the `moe start` line; (4) add `readonly diagnostic` to CliIo and wire it to stderr in the real main. Then in apps/daemon/src/cli/moe-cli-main.test.ts add: (a) `moe mcp` on a directory with no moe.config.json returns 1 and emits the exact code MOE_CONFIG_UNREADABLE (or MOE_CONFIG_INVALID for a malformed file -- assert the SPECIFIC code, and assert it arrives on the DIAGNOSTIC sink, not the log sink); (b) a happy-path arm with runMcp's import seam stubbed, asserting the four env variables are set to the config's values and that the STDOUT log sink received ZERO lines -- this is the arm that catches JSON-RPC wire poisoning, so assert emptiness explicitly, not merely that the call succeeded; (c) `moe --help` output contains \"moe mcp [dir]\" -- the USAGE block has no asserting consumer today, so this pins it. Test-file line count is not capped (the per-file cap is per PRODUCTION file), so these belong here rather than in a tenth file.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/cli/moe-cli-main.ts",
         "apps/daemon/src/cli/moe-cli-main.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/cli/moe-cli-main.ts",
+        "apps/daemon/src/cli/moe-cli-main.test.ts",
+        "apps/daemon/src/cli/moe-cli-mcp.test.ts",
+        "apps/daemon/src/cli/moe-cli-cwd.test.ts",
+        "apps/daemon/src/cli/moe-cli-replan-recovery.test.ts",
+        "apps/daemon/src/cli/moe-cli-recover-review.test.ts",
+        "apps/daemon/src/projects/project-review-recovery-native.test.ts"
+      ],
+      "note": "REOPEN RE-WALK, outside the rejection's scope; no edit this round. At HEAD 1f43126e: moe-cli-main.ts (315 lines) has `readonly diagnostic` on CliIo (:68), USAGE line \"  moe mcp [dir] ...\" (:86) directly after moe start, and the `invocation.command === \"mcp\"` dispatch (:241) with a lazy import of ./moe-cli-mcp.js. The step-5 arms (coded refusals on the DIAGNOSTIC sink, stdout toEqual([]), --help pins \"moe mcp [dir]\") are in moe-cli-main.test.ts / moe-cli-mcp.test.ts; the other 4 test files only gained the required `diagnostic` in their CliIo literals. QA drills B (offWire = {...io}) and C (banner via io.log) went red on these arms. Fresh daemon gate at HEAD: 12 files / 166 tests passed, EXIT 0.",
+      "startedAt": "2026-09-18T05:20:07.082Z",
+      "completedAt": "2026-09-18T05:20:13.617Z"
     },
     {
       "stepId": "step-6",
       "description": "The free-session round-trip, in a NEW file apps/daemon/src/mcp-free-session-roundtrip.test.ts (mcp-dispatch-port.test.ts is already 842 lines -- do not extend it). Build the harness by copying the real-store setup at the top of mcp-dispatch-port.test.ts (mkdtempSync + createStoreDependencies + SqliteEventStore.openForProject + installTestRecoveryBinding), but compose the port WITH `documents: provider.goalSource?.()` -- the existing harness omits it and goal.create_with_source plus documents.source_read both need it. Three arms, each asserting a STABLE CODE and naming WHICH LAYER refused: (1) ACCEPT -- dispatch goal.create_with_source with its exact payload keys [\"instructions\",\"source\",\"title\"] (measured at daemon-command-payload-keys.ts:149), carrying a source with displayPath/mediaType/text; assert the response is an accepted outcome, assert a GoalCreated event is committed to the store, and capture the new goalRef. (2) READ-BACK (DoD item 3) -- dispatch the documents.source_read QUERY with that goalRef and assert the returned displayPath, mediaType and text equal what arm 1 supplied, proving the free session both created the goal and can read its state back over the MCP query kinds. (3) REFUSE -- drive the PRODUCTION stdio surface (createStdioMcpServer with `toolAllowlist: wiredMcpToolKinds()`, exactly as mcp-main.ts composes it) and call the tool label for `goal.close`; assert the refusal code is exactly CAPABILITY_DENIED and that it came from the TRANSPORT layer -- i.e. before envelope construction, authentication or dispatch (stdio-server.ts callTool refuses a known-but-unadvertised label). Prove the layer, do not assert it by comment: make the dispatch port a spy and assert it was NEVER invoked for that call. This matters because the port authenticates with the operator credential as fallbackCredential, so a capability check alone would PASS -- the roster exclusion is the only fence, and an arm that merely asserted \"refused\" would stay green if the fence moved to a weaker layer. MUTATION-VERIFY ALL THREE: per epic rail 6, take a SHA256 backup of mcp-tool-allowlist.ts to %TEMP%/moe-task-14a2f0e4-mcp-tool-allowlist-<workerId>.ts (task id in the path, per the drill rail), then temporarily re-admit goal.close to the roster and confirm arm 3 goes RED; restore from the backup and prove restoration by SHA256 equality in a SEPARATE command from the restore. Record both hashes in the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/mcp-free-session-roundtrip.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-free-session-roundtrip.test.ts",
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "note": "REOPEN RE-WALK, outside the rejection's scope; no edit this round. At HEAD 1f43126e: mcp-free-session-roundtrip.test.ts arms present — :124 accept (decision {DECIDED, EFFECTS_COMMITTED}, GoalCreated re-read from the reopened store), :148 read-back over documents.source_read, :168 refusal AT THE TRANSPORT (McpError.data.code CAPABILITY_DENIED at :212 + spy port never called), :219 advertises goal creation + read kinds. Mutation proof stands from round 1 (D1: goal.close re-admitted -> arm 3 red with INPUT_INVALID from a LATER layer, proving the arm is not one-layer-vacuous; allowlist restore SHA256 4156aa1f… equal) and QA re-ran it in memory (drill A, same red verbatim). apps/daemon/package.json + pnpm-lock.yaml carry @modelcontextprotocol/sdk@1.30.0 (unchanged). Fresh daemon gate at HEAD: 12 files / 166 tests passed, EXIT 0.",
+      "startedAt": "2026-09-18T05:20:14.575Z",
+      "completedAt": "2026-09-18T05:20:20.410Z"
     },
     {
       "stepId": "step-7",
       "description": "Document the exposed surface and the connect recipe (DoD item 4). INSTALL.md is generated by tools/packaging/pack-docs.ts:14 installDoc(), which is the only source -- dist/moe-windows/INSTALL.md is output, never edit it. Add a section titled \"Headless access (no browser)\" that states, in the same plain register as the surrounding text: (1) `moe mcp <dir>` serves the project to an MCP client over stdio, with no pairing and no CSRF token, because the MCP transport authenticates by credential rather than by the browser's Host+Origin+CSRF wall; (2) the client config to paste, in the shape agent-spawner.ts already uses for seats but over stdio: {\"mcpServers\":{\"moe-next\":{\"command\":\"moe\",\"args\":[\"mcp\",\"<project path>\"]}}} -- note explicitly that NO credential belongs in this file, because `moe mcp` reads moe.config.json itself; (3) what the session can do: create goals with goal.create and goal.create_with_source, and read state through the query kinds work.get_context, graph.get, graph.preview, product_contract.read, events.read, documents.source_read and design.read; (4) what it CANNOT do and why: operator-only kinds -- approving a plan, closing or cancelling a goal, choosing a provider, rolling back a deployment -- are refused at the transport with CAPABILITY_DENIED because they are human acts, and an MCP caller holding the operator credential would otherwise be indistinguishable from the operator in the browser. (5) One warning line: stdout on this wire carries JSON-RPC, so diagnostics go to stderr. In tools/packaging/pack-docs.test.ts add an arm asserting installDoc() output contains \"moe mcp\" and \"goal.create_with_source\" -- the packaged doc is the only thing an operator reads after unzipping, and an unpinned section silently disappears on the next edit. Do NOT add any kind to MCP_SERVED_QUERY_KINDS or the command roster: mcp-tool-allowlist.test.ts:278 pins {excluded: 29, queries: 7, vocabulary: 65, wired: 43} and this task changes none of those numbers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tools/packaging/pack-docs.ts",
         "tools/packaging/pack-docs.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-docs.ts",
+        "tools/packaging/pack-docs.test.ts"
+      ],
+      "note": "THE REJECTION FIX (DoD 4 connect recipe). QA's measurement accepted as correct: a client spawns its command literally, `moe` is a .cmd on no PATH after INSTALL.md's steps, and a bare .cmd spawn is EINVAL. The base step text's literal `\"command\":\"moe\"` JSON is superseded by the DoD's behavioural clause, per the rejection.\npack-docs.ts:96 recipe is now QA's form E: {\"mcpServers\":{\"moe-next\":{\"command\":\"node\",\"args\":[\"C:\\\\moe\\\\apps\\\\daemon\\\\src\\\\cli\\\\moe-cli-main.ts\",\"mcp\",\"C:\\\\work\\\\demo\"]}}} + 5 lines saying C:\\moe is the unzip folder, C:\\work\\demo the project, both must be ABSOLUTE (the client starts node from its own cwd), and that the entry is the file moe.cmd runs (so it is still `moe mcp`: links prepared, no credential in the config). Not raw mcp-main.ts, not moe.cmd, not cmd /c.\npack-docs.test.ts: the `\"command\":\"moe\"` pin is gone. New recipe(doc) helper JSON.parses the recipe line the way a client does; the arm asserts command === \"node\", args length 3, args[0] endsWith `\\` + the entry DERIVED FROM MOE_CMD (regex /node \"%~dp0([^\"]+)\"/ over the shipped constant, not retyped), args[1] === \"mcp\", args[0] and args[2] win32.isAbsolute.\nTDD RED FIRST, on the unmodified HEAD bytes (pack-docs.ts sha256 c896f49f… == HEAD): \"AssertionError: expected 'moe' to be 'node'\", 1 failed | 4 passed | 2 skipped.\nGREEN: pnpm test tools/packaging/pack-docs.test.ts -> Test Files 1 passed (1) / Tests 5 passed | 2 skipped (7), EXIT 0 (the 2 skips are the pre-existing pwsh-gated moe.ps1 arms).\nIN-MEMORY DRILLS (temp root config qa-drill-task-14a2f0e4-worker6433.config.mjs, enforce:\"pre\" transform, anchor THROWS unless exactly one hit; deleted after, `ls` = No such file; pack-docs.ts sha256 ee641cc3… identical before/after — no disk mutation):\n CONTROL -> 5 passed | 2 skipped, EXIT 0\n M1 \"command\":\"node\" -> \"moe\" (QA's requested mutant) -> RED at :211 \"expected 'moe' to be 'node'\"\n M2 MOE_CMD entry moved to apps\\daemon\\src\\moe-main.ts (recipe untouched) -> RED at :213 \"C:\\moe\\apps\\daemon\\src\\cli\\moe-cli-main.ts: expected false to be true\" — proves the derivation from MOE_CMD is live\n M3 project path \"C:\\\\work\\\\demo\" -> \"demo\" -> RED at :217 \"demo: expected false to be true\" (absolute check)\nEach red at its OWN assertion; none vacuous.\nTYPECHECK: pnpm typecheck:packaging EXIT 0; the test file under the same strict flags (+ --allowImportingTsExtensions) EXIT 0, zero diagnostics.\nRoster untouched: no kind added to MCP_SERVED_QUERY_KINDS or the command roster.",
+      "startedAt": "2026-09-18T05:20:21.296Z",
+      "completedAt": "2026-09-18T05:23:10.002Z"
     },
     {
       "stepId": "step-8",
       "description": "LIVE PROOF, GATE, AND ADVERSARIAL REVIEW. (A) LIVE (DoD item 1): run `moe mcp D:/projexts/UnAI` against the live UnAI project measured in step 1 and confirm the stdio server comes up with NO browser and NO pairing. Drive it as a real MCP client would -- pipe a JSON-RPC `initialize` followed by `tools/list` into its stdin and confirm the response lists goal.create_with_source; quote the request you sent and the decisive response line. Confirm stdout carried ONLY JSON-RPC and that the banner appeared on stderr. If D:/projexts/UnAI/moe.config.json turned out to be absent in step 1, the NAMED SUBSTITUTE is: `moe init` a fresh directory under your scratchpad, run `moe mcp` against it, and run the identical initialize+tools/list exchange -- disclose in the completion record which of the two you ran. Do not narrow this arm to a unit test: DoD item 1 is a live launch claim and a test double cannot discharge it. (B) GATE, ONE COMMAND, both count lines quoted: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/cli src/mcp-free-session-roundtrip.test.ts src/mcp-tool-allowlist.test.ts && pnpm test tools/packaging/pack-docs.test.ts`. Read the OUTPUT, not the exit code: a leg with no `Test Files N passed` count line RAN NOTHING and is not a pass (a bad --filter prints \"No projects matched the filters\" and exits 0). Then run the apps/** regression explicitly, because the root vitest include has no apps/**: `pnpm --filter @moe/daemon test`, and quote its count line too. Attribute any red by the path-attributed baseline rule -- record repo-wide failures at your merge-base and at HEAD, and only failures in the delta intersected with this task's owned paths block completion; report foreign red verbatim rather than hiding or fabricating it. (C) ADVERSARIAL SELF-REVIEW before complete_task, on this diff specifically: does anything this verb prints reach stdout? Does the credential appear in any log line, error message or stack trace? What happens on two concurrent `moe mcp` runs against one project -- does the store lock refuse by name, or corrupt? What happens when moe.config.json exists but storePath points at a file that does not -- is the refusal coded or a raw throw? Does the new bidirectional argv arm actually go red if you delete the `mcp` parse branch while leaving it in KNOWN_COMMANDS (try it, restore, prove the restore)? Does the CAPABILITY_DENIED arm still red if the fence is weakened? Record each answer in the completion record.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/cli/moe-cli-mcp.test.ts"
+      ],
+      "note": "(A) LIVE, the RECIPE AS WRITTEN. Probe (in %TEMP%, deleted) took the recipe from the REAL installDoc() output, JSON-parsed it, and substituted only the placeholders: C:\\moe -> D:\\projexts\\moe-next\\dist\\moe-windows (the extracted artifact the live UnAI runtime pid 40736 runs from; regression-free; ensureWorkspaceLinks skips live links), C:\\work\\demo -> D:\\projexts\\UnAI. Folder NOT on PATH (INSTALL.md's flow, QA's failing case A).\n SDK StdioClientTransport (cross-spawn): CONNECTED in 3261 ms, serverInfo moe-next, tools/list 43, goal_create_with_source true, goal_close false, client errors [] (a non-JSON-RPC stdout line would land there).\n Plain spawn, shell:false, no cross-spawn: spawn error none; stdout 2 lines, 0 non-JSON-RPC; tools/list 43; exit 0 on stdin EOF. Stderr: banner, READY, SHUTDOWN receipts.\n Credential (64 chars) in SDK stderr false, plain stdout false, stderr false.\n Repeated on a scratch `moe init` project whose PATH HAS SPACES (\"...\\Temp\\moe proj 14a2f0e4 w6433\"): SDK CONNECTED 43 tools, plain spawn 2 lines / 0 non-JSON-RPC / exit 0, no credential. Scratch dir (plain Directory, no link) deleted.\n(B) GATE (plan's one command) at HEAD 1f43126e: leg 1 Test Files 12 passed / Tests 166 passed; leg 2 Test Files 1 passed / Tests 5 passed | 2 skipped. EXIT 0.\n FOUND AND FIXED MY OWN RED: root lane release-version-surfaces listed \"apps/daemon/src/cli/moe-cli-mcp.test.ts 2883 0.1.0\" as an unclassified current-version occurrence. My round-1 file injected packageVersion \"0.1.0\"; round 1's root run missed it because the file was untracked then and the census scans TRACKED files. runMcp never reads packageVersion, so it is now \"test\", like moe-cli-recover-review.test.ts. I did not widen the census. After the fix the census lists only 4 peer CLAUDE.md literals (b51935a7).\n FULL DAEMON (lease held 05:27:32Z..release, HEAD 1f43126e): Test Files 13 failed | 732 passed (745); Tests 17 failed | 12293 passed | 23 skipped. Every failing file mapped by script: 12 hit the ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX parameter property at agent-spawn-contract.ts:79 (20896d47; graph-preview's child reproduced by hand), and wrapper-review-missions hit NodeBriefUnreadableError (peer). Owned paths ∩ failing = ∅. QA saw 14/18 at 06309bfe.\n ROOT LANE: Test Files 5 failed | 461 passed | 1 skipped (467); Tests 4 failed | 10665 passed. checker (root CLAUDE.md FILE_OVERSIZED, 1cb6a82a peer), release-version-surfaces x2 (4 peer CLAUDE.md), goal-brief-mcp-readback + transport-host-matrix (moe-mcp-stdio child dies at agent-spawn-contract.ts:79; httpPort TypeError is the cascade), package-loadability (@moe/daemon ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX). All foreign.\n EXACT COMMIT TREE: temp vitest configs (deleted) served origin/main 0fc403f8 blobs for the 3 modules that differ from HEAD (work/attempt-release-disposition, expansion-release-authority, release-handoff-builder). Daemon gate SERVED all 3: 12 files / 166 passed. pack-docs loaded none of them: 5 passed | 2 skipped.\n(C) MAIN (DoD 5): commit 0dcf6ba9 built by temp index + commit-tree on origin/main 0fc403f8 (3 paths, Moe-Task trailer), pushed as a fast-forward: 0fc403f8..0dcf6ba9 -> main. Local main CAS-updated (not checked out anywhere). All 18 owned paths on origin/main are byte-identical to the worktree (git diff --stat empty).\n(D) ADVERSARIAL: no production code changed this round. Stdout purity, credential, concurrency, coded storePath refusal, and the D1/D3 drills stand from round 1 and QA's review. New this round: the recipe carries paths with spaces as single argv elements under both launch styles, and it came up alongside the live `moe start` on the same UnAI store (READY, then a clean SHUTDOWN).",
+      "startedAt": "2026-09-18T05:23:12.053Z",
+      "completedAt": "2026-09-18T05:37:49.006Z"
     }
   ],
-  "planRevision": 19,
-  "status": "WORKING",
-  "assignedWorkerId": "worker-6433dce1",
+  "planRevision": 35,
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -107,16 +164,22 @@
       "author": "qa-84420029",
       "content": "QA qa-84420029 EVIDENCE (2026-09-18). Everything below is VERIFIED GREEN; the re-walk only needs to re-complete these steps, not redo them.\n\nGATES AT HEAD 20896d47 (my runs):\n- recorded verification cmd (daemon src/cli + roundtrip + allowlist): Test Files 12 passed / Tests 166 passed.\n- pnpm test tools/packaging/pack-docs.test.ts: 1 passed; Tests 5 passed | 2 skipped.\n- apps/daemon tsc --noEmit: exit 0. --listFilesOnly shows the test files are included, so every CliIo literal compiles with the required `diagnostic`.\n- full `pnpm --filter @moe/daemon test` (lease held, HEAD 06309bfe): 14 failed | 731 passed files, 18 failed | 12294 passed tests. ALL FOREIGN, zero intersection with owned paths. 16 are ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX (20896d47), 2 are NodeBriefUnreadableError in wrapper-review-missions (the peer's change), and 1 is release-handoff-builder (peer fix a7d2e5ef).\n\nLIVE END-TO-END THROUGH A REAL `moe mcp` STDIO PROCESS. Scratch project seeded via bootstrap fixtures, raw JSON-RPC driver:\ninitialize serverInfo moe-next -> tools/list 43 (goal_create_with_source/goal_create/documents_source_read present; goal_close/goal_cancel absent) -> tools/call goal_create_with_source {ok:true, outcome:ACCEPTED, decision:{DECIDED, EFFECTS_COMMITTED}} -> documents_source_read with displayPath/mediaType equal and text byte-equal -> goal_close refused with RPC -32002, data.code CAPABILITY_DENIED.\nStdout was 5 lines, 0 non-JSON-RPC. Credential in stdout: false; in stderr: false. Exit 0 on stdin EOF with a SHUTDOWN TRANSPORT_CLOSED receipt, and the store holds GoalCreated for the new goal.\nRan twice: (1) child under --experimental-transform-types; (2) child under plain Node with a module.register load hook serving bb56f065 blobs for the peer-changed files. That second run is the production launch mode on the delivered tree.\nUnAI: readConfig('D:/projexts/UnAI') gives projectId unai-9705356d4240 and storePath D:\\projexts\\UnAI\\store.sqlite, which exists. I did not open the live store again; your READY receipt covers that.\n\nFAILED LAUNCH, stdin held open: storePath parent missing -> exit 1 in 1.7s, 0 stdout bytes, `MOE_CLI_MCP_UNAVAILABLE: STORE_INPUT_INVALID: ...`. Foreign import failure -> exit 1 in 0.65s, same shape. No lingering process.\n\nIN-MEMORY DRILLS (temp vitest config with an enforce:\"pre\" transform; nothing on disk; config deleted and `ls` confirmed). Control run: 4 files / 74 tests green.\nA: goal.close added to MCP_REACHABLE_OPERATOR_KINDS -> roundtrip arm 3 red \"expected { code: 'INPUT_INVALID', …(9) } to match object { code: 'CAPABILITY_DENIED' }\". This reproduces your D1 verbatim; arm 4 and 3 allowlist arms are also red.\nB: offWire = {...io} -> 4 arms red (config-absent and malformed, in both the main and mcp tests).\nC: banner via io.log -> 5 arms red (stdout toEqual([])).\n\nDOC ROSTER: the \"cannot\" list matches MCP_EXCLUDED_COMMAND_KINDS (graph.approve, goal.close, goal.cancel, project.set_agent_provider, deployment.rollback). The 7 documented query kinds equal MCP_SERVED_QUERY_KINDS.\n\nMAIN: after fetch, origin/main carries all 18 owned paths byte-identical to bb56f065 (`git diff --stat origin/main bb56f065 -- <owned>` is empty).\n\nNON-BLOCKING NIT (optional): the \"serving stdio JSON-RPC on stdout\" banner is printed before the launch attempt, so a failed launch reads \"serving...\" and then MOE_CLI_MCP_UNAVAILABLE.",
       "timestamp": "2026-09-18T05:15:22.610Z"
+    },
+    {
+      "id": "comment-d8819da47a8f49d7a1adb4b30ec1815d",
+      "author": "worker-6433dce1",
+      "content": "REOPEN 1 EVIDENCE (worker-6433dce1). All rejection items addressed. One extra defect found and fixed: it was mine.\n\n1. RECIPE (pack-docs.ts:96). Now QA's form E: {\"mcpServers\":{\"moe-next\":{\"command\":\"node\",\"args\":[\"C:\\\\moe\\\\apps\\\\daemon\\\\src\\\\cli\\\\moe-cli-main.ts\",\"mcp\",\"C:\\\\work\\\\demo\"]}}}. Five lines follow it: C:\\moe is the unzip folder and C:\\work\\demo is the project; both paths must be absolute because the client starts node from its own cwd; the entry is the file moe.cmd runs, so this is still `moe mcp` (links prepared, no credential in the client config); it is named directly because a client spawns its command literally and moe.cmd is on no PATH. Not raw mcp-main.ts, not moe.cmd, not cmd /c.\n\n2. PIN (pack-docs.test.ts). The \"command\":\"moe\" pin is gone. recipe(doc) JSON-parses the recipe line the way a client does. The arm asserts command === \"node\", 3 args, args[0] ends with \"\\\" + the entry DERIVED from MOE_CMD (regex over the shipped constant, not retyped), args[1] === \"mcp\", and win32.isAbsolute on args[0] and args[2].\n Red first on the unchanged HEAD bytes: \"expected 'moe' to be 'node'\".\n In-memory drills (temp config, enforce:\"pre\", anchors throw unless they hit exactly once; no disk mutation, pack-docs.ts sha ee641cc3 before and after): M1 command back to \"moe\" -> red :211; M2 MOE_CMD entry moved -> red :213 (proves the derivation); M3 project path \"demo\" -> red :217. Control green. Each failed at its own assertion.\n\n3. LIVE, the recipe as written. The probe took it from the real installDoc() output and substituted only the placeholders: C:\\moe -> dist\\moe-windows (the extracted artifact the live UnAI runtime runs from), C:\\work\\demo -> D:\\projexts\\UnAI. Folder NOT on PATH (your case A).\n SDK StdioClientTransport: CONNECTED, 43 tools, goal_create_with_source true, goal_close false, 0 client errors.\n Plain spawn (shell:false): 2 stdout lines, 0 non-JSON-RPC, exit 0 on EOF.\n Credential absent from every stream.\n Repeated with a project path containing SPACES (scratch `moe init`, since deleted): same results under both launch styles.\n\n4. MY OWN RED, FIXED. The root-lane release-version-surfaces census listed \"apps/daemon/src/cli/moe-cli-mcp.test.ts 2883 0.1.0\". My round-1 test injected packageVersion \"0.1.0\". The census scans TRACKED files only, and the file was untracked during round 1's root run, so that run could not see it. runMcp never reads packageVersion, so it is now \"test\", as in moe-cli-recover-review.test.ts. I did not widen the census.\n\n5. GATES.\n Plan gate, fresh: 12 files / 166 passed + 1 file / 5 passed | 2 skipped, EXIT 0.\n Full daemon suite: 13 failed | 732 passed files, 17 failed | 12293 passed tests. 12 files fail on agent-spawn-contract.ts:79 (20896d47, strip-only parameter property). wrapper-review-missions fails on NodeBriefUnreadableError (peer).\n Root lane: 5 failed | 461 passed. checker = root CLAUDE.md (1cb6a82a). version-surfaces = 4 peer CLAUDE.md files (b51935a7). goal-brief-mcp-readback and transport-host-matrix = moe-mcp-stdio child dies at agent-spawn-contract.ts:79. package-loadability = same.\n Every red is foreign; failing paths ∩ owned paths = ∅.\n Exact commit tree: temp configs served origin/main blobs for the 3 modules that differ from HEAD (work/*). Daemon gate served all 3: 12 / 166 passed.\n\n6. MAIN (DoD 5). 0dcf6ba9 = origin/main 0fc403f8 + the 3 paths, with a Moe-Task trailer. Pushed as a fast-forward (0fc403f8..0dcf6ba9). All 18 owned paths on origin/main equal the worktree bytes. `git log origin/main --grep \"Moe-Task: task-14a2f0e4\"` finds it. The wrapper will commit the same bytes to moe/work-2026-09-18, which is identical content, so there is no conflict.\n\nNOT TAKEN: the optional banner nit. runMcpMain blocks for the life of the server, so there is no point after launch to print \"serving\" from; the READY receipt is the authoritative signal.",
+      "timestamp": "2026-09-18T05:38:33.786Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T20:05:26.229Z",
-  "updatedAt": "2026-09-18T05:16:55.051Z",
+  "updatedAt": "2026-09-18T05:39:27.822Z",
   "metrics": {
     "firstClaimAt": "2026-09-17T20:39:59.929Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 8,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -127,7 +190,16 @@
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
   "failedDodItems": [
     {
       "item": "A skill or INSTALL.md section documents the exposed tool set (goal.create/create_with_source + MCP_SERVED_QUERY_KINDS) and the connect recipe; bidirectional allowlist test still green (wiredMcpToolKinds set-equality). -- the tool set and the allowlist parts PASS; the connect recipe does not connect as written (measured: Connection closed / ENOENT / EINVAL).",
@@ -141,12 +213,12 @@
   },
   "planApprovedAt": "2026-09-17T20:48:47.416Z",
   "workStartedAt": "2026-09-17T21:00:27.828Z",
-  "reviewStartedAt": "2026-09-17T21:48:06.147Z",
+  "reviewStartedAt": "2026-09-18T05:39:27.817Z",
   "verification": {
-    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/cli src/mcp-free-session-roundtrip.test.ts src/mcp-tool-allowlist.test.ts",
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/cli src/mcp-free-session-roundtrip.test.ts src/mcp-tool-allowlist.test.ts && pnpm test tools/packaging/pack-docs.test.ts",
     "exitCode": 0,
-    "outputTail": " Test Files  12 passed (12)\n      Tests  166 passed (166)\n   Start at  00:47:34\n   Duration  7.16s (transform 11.81s, setup 0ms, import 16.04s, tests 4.03s, environment 1ms)\n\nGATE EXIT=0",
-    "reportedAt": "2026-09-17T21:48:06.147Z",
+    "outputTail": "HEAD c89fa4fc origin/main 0dcf6ba9\nGATE EXIT=0\n Test Files  12 passed (12)\n      Tests  166 passed (166)\n   Duration  8.88s (transform 15.72s, setup 0ms, import 20.63s, tests 4.60s, environment 1ms)\n Test Files  1 passed (1)\n      Tests  5 passed | 2 skipped (7)\n   Duration  2.65s (transform 2.12s, setup 0ms, import 2.55s, tests 5ms, environment 0ms)",
+    "reportedAt": "2026-09-18T05:39:27.817Z",
     "source": "agent-reported"
   },
   "filesModified": [
@@ -154,8 +226,11 @@
     "apps/daemon/src/cli/moe-cli-argv.ts",
     "apps/daemon/src/cli/moe-cli-mcp.ts",
     "apps/daemon/src/cli/moe-cli-mcp.js",
+    "apps/daemon/src/cli/moe-cli-project.ts",
+    "apps/daemon/src/cli/moe-cli-project.js",
     "apps/daemon/src/cli/moe-cli-main.ts",
     "apps/daemon/src/cli/moe-cli-main.test.ts",
+    "apps/daemon/src/cli/moe-cli-mcp.test.ts",
     "apps/daemon/src/cli/moe-cli-cwd.test.ts",
     "apps/daemon/src/cli/moe-cli-replan-recovery.test.ts",
     "apps/daemon/src/cli/moe-cli-recover-review.test.ts",
@@ -164,12 +239,9 @@
     "apps/daemon/package.json",
     "pnpm-lock.yaml",
     "tools/packaging/pack-docs.ts",
-    "tools/packaging/pack-docs.test.ts",
-    "apps/daemon/src/cli/moe-cli-project.ts",
-    "apps/daemon/src/cli/moe-cli-project.js",
-    "apps/daemon/src/cli/moe-cli-mcp.test.ts"
+    "tools/packaging/pack-docs.test.ts"
   ],
-  "completionSummary": "`moe mcp [dir]` ships: a headless session (agent, CLI, script) now drives a live moe-next project with no browser and no pairing. All 5 DoD items met. Full detail in the two row comments.\n\nVERIFIED LIVE against the REAL UnAI project (unai-9705356d4240), not the substitute: piped JSON-RPC initialize + tools/list into it and got serverInfo {\"name\":\"moe-next\"}, TOOLS/LIST count 43, goal_create_with_source true, goal_close FALSE. STDOUT carried exactly 2 lines and both parsed as JSON-RPC; banner + READY receipt on stderr; credential in neither stream.\n\nTHE LIVE ARM EARNED ITS KEEP — it found two real bugs after the unit suite was green:\n1. MODULE-CYCLE DEADLOCK. Importing values from \"./moe-cli-main.js\" made Node load a SECOND copy of the entry whose isMainModule was still true, re-running its top-level await: exit 13, zero output, on every path. Vitest resolves .js/.ts to one module and isMainModule is false there, so no in-process test could see it. Fixed in production by extracting moe-cli-project.ts (shared readConfig/preparePackagedLinks, narrow CliProjectIo) and leaving only an erased `import type` edge to the entry.\n2. BRIDGE CENSUS. runtime-entrypoint.test.ts flagged cli\\moe-cli-mcp.js \"unexpected\" — its closure follows static `from \"…\"` only, so a dynamically-imported module needs its own .test.ts sibling. Fixed by adding moe-cli-mcp.test.ts (6 direct arms).\n\nDESIGN: stdout is the JSON-RPC wire, so CliIo gained a REQUIRED `diagnostic` stderr sink and runMcp hands the SHARED helpers `{...io, log: io.diagnostic}` — a line added to either helper later still cannot leak. 10 arms assert the stdout sink is EMPTY, not merely that the call succeeded. No credential enters the client config: `moe mcp` reads moe.config.json itself.\n\nREFUSAL CODES ASSERTED AS MEASURED, NOT AS PREDICTED: absent config MOE_CLI_CONFIG_ABSENT (moe-cli-main.ts:27), malformed JSON MOE_CONFIG_UNREADABLE (moe-init.ts:30/:198), failed launch MOE_CLI_MCP_UNAVAILABLE, operator-only kind CAPABILITY_DE",
+  "completionSummary": "REOPEN 1: the connect recipe now connects. It is on main as 0dcf6ba9, fast-forward from 0fc403f8. Full evidence is in comment-d8819da4.\n\nRECIPE: pack-docs.ts now gives {\"command\":\"node\",\"args\":[\"C:\\\\moe\\\\apps\\\\daemon\\\\src\\\\cli\\\\moe-cli-main.ts\",\"mcp\",\"C:\\\\work\\\\demo\"]} (QA's form E). C:\\moe is the unzip folder, both paths must be absolute, and the entry is the file moe.cmd runs, so this is still `moe mcp` and no credential enters the config.\n\nPIN: pack-docs.test.ts JSON-parses the recipe. It asserts command node, the entry derived from MOE_CMD, \"mcp\", and absolute paths. It failed first on the HEAD bytes (\"expected 'moe' to be 'node'\"). In-memory drills went red on command \"moe\" (:211), on a moved MOE_CMD entry (:213) and on a relative path (:217).\n\nLIVE: I took the recipe from the real installDoc() output and ran it against dist\\moe-windows and UnAI, with the folder not on PATH. The SDK client connected (43 tools, goal_close absent). A plain spawn with shell:false gave 2 stdout lines, all JSON-RPC, and exit 0. It also worked with a project path containing spaces. The credential appeared in no stream.\n\nMY OWN RED, FIXED: moe-cli-mcp.test.ts injected packageVersion \"0.1.0\". The release version census reports that as unclassified once the file is tracked. The file now uses \"test\".\n\nGATES: the plan command passed with 12 files / 166 tests and 1 file / 5 passed | 2 skipped. The full daemon suite had 13 failed / 732 passed files. The root lane had 5 failed / 461 passed files. Every red is foreign: agent-spawn-contract.ts:79 parameter properties (20896d47), NodeBriefUnreadable, or peer CLAUDE.md files. No failing path is an owned path. I also ran the daemon gate on the exact commit tree by serving the origin/main blobs in memory: 12 files / 166 tests passed.\n\nMAIN: all 18 owned paths on origin/main match the worktree bytes. The commit carries a Moe-Task trailer.",
   "reviewCompletedAt": "2026-09-18T05:15:51.036Z",
   "rejectionDetails": {
     "failedDodItems": [
@@ -229,5 +301,32 @@
         }
       ]
     }
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "f1550cf848d5675f4fdd430496e7a98786d03f49",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T04:54:26Z",
+      "paths": [
+        ".moe/tasks/task-14a2f0e4221e4def9153a2082a9385bf.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T05:16:58.674Z",
+      "treeId": "c13480346ac06d276616e92ea36f117627b268eb",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/qa-drill-14a2f0e4.config.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T04:54:26Z",
+    "at": "2026-09-18T05:16:58.674Z"
+  }
 }
