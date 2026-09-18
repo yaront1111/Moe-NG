@@ -14,7 +14,9 @@ import { DESIGN_STEP_KIND, byStaffingRank } from "./agent-staffing-order.js";
 import { codeMission, compilerMission, designGoalRef, designMission, mission } from "./agent-mission-text.js";
 import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
 import { decideSeatProvider, pauseProviderOf } from "./agent-provider-resolve.js";
-import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
+import {
+  COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS, NODE_BRIEF_UNREADABLE, NodeBriefUnreadableError,
+} from "./agent-spawn-contract.js";
 import type { ProviderPauseFacts, RunOnceReport, SpawnReport, SpawnStartRefusal } from "./agent-spawn-contract.js";
 import type { AgentWrapperConfig, NodeMission } from "./agent-wrapper-config.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
@@ -131,7 +133,13 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     if (step.kind === "node.deliver") {
       try {
         brief = config.nodeMission?.(step.aggregateId ?? "") ?? null;
-      } catch {
+      } catch (error) {
+        // A brief the STORE could not serve is retried next pass and recorded nowhere. The path
+        // below records a failure the staffing gate never clears, so it would turn one
+        // transient read fault into a wrapper that staffs nothing until restarted.
+        if (error instanceof NodeBriefUnreadableError) {
+          return uncoded(step.kind, NODE_BRIEF_UNREADABLE, null, workItemId);
+        }
         const failure = setupError("node.mission");
         staffing.recordFailures(failure);
         return uncoded(step.kind, failure.message, null, workItemId);

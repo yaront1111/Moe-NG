@@ -33,7 +33,7 @@ export interface GitObservation {
 
 export type GitObserveResult =
   | Readonly<{ readonly observation: GitObservation; readonly ok: true }>
-  | Readonly<{ readonly code: "NOT_A_REPOSITORY" | "GIT_FAILED" | typeof TRACKED_RUNTIME_METADATA_DIRTY; readonly detail: string; readonly ok: false }>;
+  | Readonly<{ readonly code: "NOT_A_REPOSITORY" | "GIT_FAILED" | typeof TRACKED_RUNTIME_METADATA_DIRTY; readonly detail: string; readonly ok: false; /** Present on TRACKED_RUNTIME_METADATA_DIRTY only: the full sorted dirty set, untruncated, for a self-heal to act on. `detail` shows at most four. */ readonly paths?: readonly string[] }>;
 
 export const TRACKED_RUNTIME_METADATA_DIRTY = "TRACKED_RUNTIME_METADATA_DIRTY" as const;
 
@@ -73,7 +73,7 @@ export const LANDER_IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe
 
 const tail = (text: string): string => text.slice(-DETAIL_TAIL).toWellFormed();
 
-function isMoeMetadata(path: string): boolean {
+export function isMoeMetadata(path: string): boolean {
   return path.split("/").some((segment) => MOE_DIRECTORIES.has(process.platform === "win32" ? segment.toLowerCase() : segment));
 }
 
@@ -153,9 +153,9 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     // grant authority to silently omit or commit these preexisting runtime files.
     const metadata = all.filter((entry) => !entry.untracked && isMoeMetadata(entry.path));
     if (metadata.length > 0) {
-      const paths = JSON.stringify(metadata.slice(0, 4).map((entry) => entry.path.slice(0, 120))).slice(0, 350);
-      return { ok: false, code: TRACKED_RUNTIME_METADATA_DIRTY,
-        detail: `${String(metadata.length)} tracked runtime metadata path(s) changed: ${paths}. Review these existing changes with git status --short before continuing.` };
+      const shown = JSON.stringify(metadata.slice(0, 4).map((entry) => entry.path.slice(0, 120))).slice(0, 350);
+      return { ok: false, code: TRACKED_RUNTIME_METADATA_DIRTY, paths: metadata.map((entry) => entry.path).sort(),
+        detail: `${String(metadata.length)} tracked runtime metadata path(s) changed: ${shown}. Review these existing changes with git status --short before continuing.` };
     }
     const dirty = all.filter((entry) => !isMoeMetadata(entry.path)
       && (scope === "" || entry.path.startsWith(`${scope}/`)));

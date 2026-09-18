@@ -371,8 +371,33 @@ export const OPERATOR_ACTIVATION_STEPS: ReadonlySet<string> = new Set([
  * (a live predecessor, a held claim, a record the fence cannot read) clears
  * on its own time, not the wrapper's.
  */
+/** The wrapper's outcome for a brief whose durable read failed this pass. */
+export const NODE_BRIEF_UNREADABLE = "NODE_BRIEF_UNREADABLE";
+
 export const GATE_REFUSALS: ReadonlySet<string> = new Set([
   ...AGENT_STAFFING_REFUSAL_CODES, ...REPOSITORY_DELIVERY_REFUSAL_CODES,
   // The spawner closing under a pass is the process ending, not the item failing its turn.
   "AGENT_SPAWNER_CLOSED" satisfies AgentSpawnerRefusalCode,
+  // A brief the store could not serve this pass. Not the item's fault and not a setup fault:
+  // it is retried next pass, burns no attempt, and -- unlike a thrown mission -- never latches
+  // the wrapper's failure outcome. See `NodeBriefUnreadableError`.
+  NODE_BRIEF_UNREADABLE,
 ]);
+
+/**
+ * Thrown by a mission source when the DURABLE READ behind a brief failed -- the compiled graph
+ * or the review ledger could not be consulted -- as opposed to a brief that genuinely does not
+ * exist (which answers null, NODE_BRIEF_MISSING).
+ *
+ * A DISTINCT CLASS, not a message, because of what the wrapper does with an ordinary throw from
+ * a mission: it records a setup failure, and recorded failures are never cleared, so every later
+ * pass returns `spawned: []` until the process restarts. A transient SQLITE_BUSY during a graph
+ * read must not take the fleet down that way. The wrapper matches this class BEFORE that path
+ * and answers NODE_BRIEF_UNREADABLE, a gate refusal that is simply retried next pass.
+ */
+export class NodeBriefUnreadableError extends Error {
+  public constructor(detail: string) {
+    super(`${NODE_BRIEF_UNREADABLE}: ${detail}`);
+    this.name = "NodeBriefUnreadableError";
+  }
+}

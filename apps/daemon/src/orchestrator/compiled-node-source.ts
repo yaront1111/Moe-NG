@@ -23,6 +23,7 @@
  * here or the node is simply not briefable (fail closed: listed on the board,
  * never staffed with an invented workspace).
  */
+import { NodeBriefUnreadableError } from "./agent-spawn-contract.js";
 import type { GraphRevisionContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -271,9 +272,10 @@ export function criterionStatements(
 
 /**
  * A mission refused because the durable graph could not be READ — never because the node has no
- * brief. The wrapper already separates a mission that throws (AGENT_SETUP_FAILED:node.mission)
- * from one that answers null (NODE_BRIEF_MISSING), so this reaches an operator as a store fault
- * rather than as an accusation that a perfectly good node was never compiled.
+ * brief. Thrown as `NodeBriefUnreadableError`, which the wrapper answers as NODE_BRIEF_UNREADABLE
+ * and retries next pass. NOT a plain Error: an ordinary mission throw records a setup failure
+ * the staffing gate never clears, and one transient read fault would then stop the wrapper
+ * staffing anything until restart.
  */
 export const COMPILED_NODE_SOURCE_UNREADABLE = "COMPILED_NODE_SOURCE_UNREADABLE";
 
@@ -304,7 +306,9 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
     const node = sealed().find((candidate) => candidate.nodeRef === nodeRef);
     // "Not found in a graph I could not read" is not "not compiled". Thrown rather than
     // returned, because null is already spoken for by a genuinely absent brief.
-    if (node === undefined && degraded) throw new Error(COMPILED_NODE_SOURCE_UNREADABLE);
+    if (node === undefined && degraded) {
+      throw new NodeBriefUnreadableError(`${COMPILED_NODE_SOURCE_UNREADABLE} ${nodeRef}`);
+    }
     if (node === undefined) return null;
     let statements: readonly string[];
     try {
