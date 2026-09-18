@@ -23,8 +23,15 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 213,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-7baef4099204416fa4cae75319e1ade9",
+      "author": "owner-session",
+      "content": "Delivered on main 16c70ec8 (fix10 batch, main 31b8191b, 2026-09-18). Control room: the \"Review exhausted\" card now says what \"Allow one more attempt\" funds (one more round, accepted unless a CRITICAL or MAJOR finding appears), what Replan does, that guidance is optional and reaches the seat verbatim; findings render with severity and an all-MINOR list reads as non-blocking (capped lists say \"All 8 listed findings…\"); the guidance sentence renders only with its textbox. Kernel: packages/review/src/review-continuation.ts reviewContinuationAccepts now disqualifies only an unattributed CRITICAL/MAJOR record past sourceRound (DoD item 4 was NOT met at 8a14f3b1: the continuation could never rescue an all-MINOR round, so the operator's \"Allow one more attempt\" looped on UnAI). packages/review/CLAUDE.md updated. needs-you-escalation.test.tsx 31/31, approvals folder 259/259, packages/review 163/163; drills red exactly their arms.",
+      "timestamp": "2026-09-18T13:00:02.677Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T07:02:46.899Z",
-  "updatedAt": "2026-09-18T11:59:54.604Z"
+  "updatedAt": "2026-09-18T13:00:02.677Z"
 }

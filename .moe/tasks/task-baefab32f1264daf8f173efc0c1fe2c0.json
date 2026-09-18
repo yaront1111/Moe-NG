@@ -1,0 +1,30 @@
+{
+  "id": "task-baefab32f1264daf8f173efc0c1fe2c0",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "Measure a project remote's default branch and record it as an additive event, never by widening RepositoryRemoteBound",
+  "description": "LEAF 1 of 3 for task-4ba1e00a3aa64a83a1b883566377e3ab (\"Release cannot open a pull request when the workspace branch IS the remote's default branch\"), filed by architect-73d103f8 on 2026-09-18 after the owner chose OPTION A: when the workspace branch is the remote's default branch, publish pushes a goal branch `moe/release/<goalId>` instead, so Release opens a real PR and Moe stops pushing straight to the operator's default branch. Option A measured at ~15+ files, so it splits in build order: THIS row (measure + record the default), then task \"Publish to moe/release/<goalId> when the workspace branch is the remote default\" (consumes this), then task-4ba1e00a (guard, card, live test, docs). Both consumers declare dependsOn on this row.\n\nTHE FACT THIS ROW PRODUCES: for a project's bound remote, its default branch as the REMOTE itself reports it, or an explicit null meaning unmeasured or unmeasurable. Measured with `git ls-remote --symref <remoteUrl> HEAD` (answer shape `ref: refs/heads/<name>\\tHEAD`), through the SAME authenticated, isolated path apps/daemon/src/repository/git-publication-port.ts already uses for `ls-remote` in its `observe` (:74-86) and for `push` (:62-67) - reuse its `isolated(...)` and `publicationCredentialArguments(...)` rather than a second credential path.\n\nTHE HAZARD THAT DECIDES THE DESIGN - do NOT widen RepositoryRemoteBound. apps/daemon/src/repository/publish-ledger.ts:153-172 `decodeBinding` requires an EXACT key set (`keys.length !== REMOTE_BOUND_KEYS.length || !REMOTE_BOUND_KEYS.every(...)` -> null). Adding a `defaultBranch` key to that event would make every EXISTING bound-remote event in every live store - UnAI's included - fail to decode, so `readProjectRemote` returns null, the project loses its bound remote, and publish and release both refuse. That is exactly the pre-#52 governance-ledger failure fixed today in task-2bb0bc24 (a key added to an exact-key-set durable record without a legacy path). Instead record the measurement as a SEPARATE, ADDITIVE event type on the same remote aggregate (`remoteAggregateId(projectId)`), e.g. `RepositoryRemoteDefaultMeasured { remoteUrl, defaultBranch: string | null, measuredAt }`. Nothing already stored can be broken by a new event type.\n\nWHEN TO MEASURE - the constraint, not a free choice. The publish command `createPublishRepository` (publish-services.ts:68) is SYNCHRONOUS and the approval preview (apps/daemon/src/http/repository-remote-read.ts) is a POLLED browser read: neither may make a network call. And the operator's approval must equal a fresh candidate read at preview, at command (`samePublicationApproval`, publish-services.ts:100) and at push (node-publisher.ts:53) - so all three must read the SAME recorded value, never a fresh measurement inside their own decision. Measure asynchronously on the wrapper side (recommended: in apps/daemon/src/orchestrator/node-publisher.ts AFTER a successful push, which already runs async with the port and credentials), and record it for the next read. A measurement that lands between a preview and its command makes the existing TOCTOU guard answer PUBLISH_CANDIDATE_CHANGED and the operator re-approves - safe and already designed for.\n\nCONTRACT the consumers plan against (changing it requires amending them):\n- the measurement op on the publication port, returning `{ ok: true, defaultBranch: string | null } | refusal`;\n- `readRemoteDefaultBranch(store, projectId, remoteUrl): string | null` - null when unmeasured, unmeasurable, or measured for a DIFFERENT remoteUrl (a re-bound remote must never be answered by the old remote's default).\n\nOUT OF SCOPE: choosing the publish target (the second row), the release guard, the card and docs (task-4ba1e00a).",
+  "definitionOfDone": [
+    "RepositoryRemoteBound and REMOTE_BOUND_KEYS are UNCHANGED (`git diff` shows no edit to publish-ledger.ts's decodeBinding key set or publish-receipt-contracts.ts's REMOTE_BOUND_EVENT_TYPE payload); a regression arm decodes a 3-key RepositoryRemoteBound payload of today's exact shape and asserts readProjectRemote still returns it.",
+    "The measurement records an ADDITIVE event on the remote aggregate, and `readRemoteDefaultBranch` returns the measured branch for the matching remoteUrl, null for an unmeasured remote, null when the remote reports no HEAD symref, and null when the latest measurement names a DIFFERENT remoteUrl - one arm per case, asserting the exact value.",
+    "The measurement op parses `ls-remote --symref` output driven through an injected runner: a well-formed `ref: refs/heads/<name>\\tHEAD` yields that branch; empty output, a missing symref line, a non-zero exit and a malformed line each yield a named refusal or null - never a guessed branch and never a throw. Asserts the reason by value.",
+    "The measurement never runs inside the synchronous publish command or the polled preview read: an arm asserts the publish command path and the repository-remote-read path make no measurement call.",
+    "Gates quoted with their `Test Files N passed` count lines: the daemon tests for src/repository/** and src/orchestrator/node-publisher*, and `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1014.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T12:57:08.262Z",
+  "updatedAt": "2026-09-18T12:57:08.262Z"
+}
