@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createGitLandingPort, nodeGitRunner } from "./git-landing-port.js";
 import { DELETED_BLOB } from "./landing-receipt-contracts.js";
+import { prepareRuntimeMetadataExcludes } from "./runtime-metadata-excludes.js";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -258,5 +259,42 @@ describe("createGitLandingPort against a real repository", () => {
     expect(committed.ok).toBe(false);
     expect(!committed.ok && committed.code).toBe("GIT_COMMIT_FAILED");
     expect(!committed.ok && committed.detail).toContain("does-not-exist");
+  });
+
+  // MEASURED 2026-09-18 (git 2.54): every hosted project excludes `/.moe/` and `/.moe-next/` (the writer below runs
+  // before each start); under it `git add` of a TRACKED `.moe-next/start.ps1` exits 1 yet stages it.
+  const dirtyExcludedMetadata = async (): Promise<string> => {
+    const root = scratchRepository();
+    expect(await prepareRuntimeMetadataExcludes({ configPath: join(root, "moe.config.json"),
+      projectRoot: root, storePath: join(root, "store.sqlite") })).toEqual({ ok: true });
+    writeFileSync(join(root, ".moe-next", "start.ps1"), "# start --operator-stdin\n", "utf8");
+    return root;
+  };
+
+  it("commits a tracked path under an excluded directory through commitTracked, where commit (add first) refuses it", async () => {
+    const root = await dirtyExcludedMetadata();
+    writeFileSync(join(root, "src", "tracked.ts"), "export const before = 2;\n", "utf8"); git(root, "add", "--", "src/tracked.ts");
+    const port = createGitLandingPort();
+    expect(await port.commit(root, [".moe-next/start.ps1"], "m\n"))
+      .toMatchObject({ ok: false, code: "GIT_COMMIT_FAILED", detail: expect.stringContaining("ignored") });
+    const committed = await port.commitTracked(root, [".moe-next/start.ps1"], "checkpoint\n");
+    if (!committed.ok) throw new Error(committed.detail);
+    expect(committed.receipt.sha).toBe(git(root, "rev-parse", "HEAD"));
+    expect(git(root, "show", "--name-only", "--format=", "HEAD")).toBe(".moe-next/start.ps1");
+    expect(git(root, "log", "-1", "--format=%an <%ae>")).toBe("Moe <moe@moe.local>");
+    expect(git(root, "status", "--porcelain")).toBe("M  src/tracked.ts"); // operator-staged work: still staged, not committed
+  });
+
+  it("leaves HEAD and the index exactly as they were when commitTracked fails", async () => {
+    const root = await dirtyExcludedMetadata();
+    const hooks = join(root, ".git", "moe-test-hooks"); mkdirSync(hooks);
+    writeFileSync(join(hooks, "pre-commit"), "#!/bin/sh\necho HOOK_REFUSED_TEST >&2\nexit 1\n", { mode: 0o755 });
+    git(root, "config", "core.hooksPath", hooks);
+    const head = git(root, "rev-parse", "HEAD"); const index = readFileSync(join(root, ".git", "index"));
+    const committed = await createGitLandingPort().commitTracked(root, [".moe-next/start.ps1"], "m\n");
+    // The operator's hook refuses AFTER git staged the path into its temporary index; the real index is rolled back.
+    expect(committed).toMatchObject({ ok: false, code: "GIT_COMMIT_FAILED", detail: expect.stringContaining("HOOK_REFUSED_TEST") });
+    expect(git(root, "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(root, ".git", "index"))).toEqual(index);
   });
 });

@@ -49,11 +49,27 @@ function steadyLine(report: RunOnceReport, exhausted: readonly SpawnReport[]): s
       + ` (active ${String(report.active)})\n`;
 }
 
+/**
+ * A latched wrapper, said EVERY pass and never deduped. The latch is a containment, not an
+ * idle state: nothing will be staffed until the process restarts, and an operator watching a
+ * board that has gone quiet needs the line that says why on every interval, not once in the
+ * scrollback under "nothing to staff".
+ */
+function haltedLine(report: RunOnceReport): string {
+  return `[wrapper] HALTED: staffing stopped after an authority cleanup failed; no seat will be`
+    + ` staffed until this wrapper is restarted. failures: ${report.halted ?? ""}`
+    + ` (active ${String(report.active)})\n`;
+}
+
 export function createPassLogger(
   write: (line: string) => void,
 ): (report: RunOnceReport) => void {
   let lastSteady = "";
   return (report: RunOnceReport): void => {
+    if (report.halted !== undefined) {
+      write(haltedLine(report));
+      return;
+    }
     const exhausted: SpawnReport[] = [];
     let activity = false;
     for (const entry of report.spawned) {

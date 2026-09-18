@@ -66,8 +66,10 @@ class FakeObserver extends EventEmitter {
   readonly stderr = new PassThrough();
   readonly received: string[] = [];
   killed = false;
-  constructor(private readonly onDrain?: (observer: FakeObserver) => void) {
+  private readonly onDrain: ((observer: FakeObserver) => void) | undefined;
+  constructor(onDrain?: (observer: FakeObserver) => void) {
     super();
+    this.onDrain = onDrain;
     this.stdin.on("data", (chunk: Buffer) => {
       for (const line of chunk.toString("utf8").split("\n").filter((entry) => entry !== "")) {
         this.received.push(line);

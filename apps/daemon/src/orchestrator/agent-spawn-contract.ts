@@ -71,17 +71,27 @@ export type AgentProcessFailureReason = "EXIT_NONZERO" | "EXIT_SIGNAL" | "SPAWN_
 
 export class AgentProcessFailureError extends Error {
   readonly code = "AGENT_PROCESS_FAILED";
+  readonly reason: AgentProcessFailureReason;
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly tail: readonly string[];
+  readonly outputSeen: boolean;
   /**
    * `outputSeen` is the spawner's own stream reading; a failure minted without one (a test
    * stub, a SPAWN_ERROR before any pipe existed) defaults to what its tail proves, so the flag
    * can never contradict the lines beside it.
    */
-  constructor(readonly reason: AgentProcessFailureReason, readonly exitCode: number | null,
-    readonly signal: NodeJS.Signals | null, readonly tail: readonly string[] = [],
-    readonly outputSeen: boolean = tail.length > 0) {
+  constructor(reason: AgentProcessFailureReason, exitCode: number | null,
+    signal: NodeJS.Signals | null, tail: readonly string[] = [],
+    outputSeen: boolean = tail.length > 0) {
     super(`AGENT_PROCESS_FAILED:${reason}${exitCode !== null ? `:${String(exitCode)}`
       : signal !== null ? `:${signal}` : ""}`);
     this.name = "AgentProcessFailureError";
+    this.reason = reason;
+    this.exitCode = exitCode;
+    this.signal = signal;
+    this.tail = tail;
+    this.outputSeen = outputSeen;
   }
 }
 
@@ -187,6 +197,15 @@ export interface RunOnceReport {
    * unchanged by this key existing.
    */
   readonly paused?: ProviderPauseFacts;
+  /**
+   * The staffing latch, present ONLY once an authority cleanup has failed. From that pass on
+   * the wrapper staffs nothing until it is restarted — a deliberate containment, because a
+   * cleanup that failed may have left durable claims dangling and staffing more would compound
+   * it. Carried on the report so the pass log can say so EVERY pass: before this the halt was
+   * printed once, inside a line beginning "nothing to staff", and then deduped forever, so a
+   * wedged fleet read as a quiet board. Absent on every other pass, like `paused`.
+   */
+  readonly halted?: string;
   readonly spawned: readonly SpawnReport[];
   readonly surfaceOutcome: string;
 }

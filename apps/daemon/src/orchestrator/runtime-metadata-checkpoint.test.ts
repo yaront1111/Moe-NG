@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createGitLandingPort } from "../repository/git-landing-port.js";
+import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import { checkpointRuntimeMetadata } from "./runtime-metadata-checkpoint.js";
 
 const roots: string[] = [];
@@ -19,8 +20,12 @@ const git = (cwd: string, ...args: string[]): string =>
 /**
  * A real repository, because the whole defect lives in git's actual behaviour: the
  * operator's own identity, one product file and two tracked runtime metadata files.
+ * It carries the exclusions every hosted project carries: `/.moe/` and `/.moe-next/`
+ * in info/exclude, written by the production writer the host runs before each start.
+ * Tracked files stay tracked under them, but `git add` of one exits 1 (measured
+ * 2026-09-18), which is how the first cut of this module failed in every live project.
  */
-function scratchRepository(): string {
+async function scratchRepository(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "moe-metadata-checkpoint-"));
   roots.push(root);
   git(root, "init", "--quiet", "--initial-branch=trunk");
@@ -34,15 +39,35 @@ function scratchRepository(): string {
   writeFileSync(join(root, ".moe-next", "seed.ps1"), "# seed\n", "utf8");
   git(root, "add", "-A");
   git(root, "commit", "--quiet", "-m", "operator: initial");
+  expect(await prepareRuntimeMetadataExcludes({ configPath: join(root, "moe.config.json"),
+    projectRoot: root, storePath: join(root, "store.sqlite") })).toEqual({ ok: true });
   return root;
 }
 
 const checkpoint = (root: string, paths: readonly string[]): ReturnType<typeof checkpointRuntimeMetadata> =>
   checkpointRuntimeMetadata({ git: createGitLandingPort(), nodeRef: "node-alpha", paths, workspace: root });
 
+/** Each path set must be refused before git sees it. Several were measured escaping the first fence. */
+const FENCE_CASES = [
+  ["a traversal that escapes the metadata directory", [".moe-next/start.ps1", ".moe-next/../src/product.ts"]],
+  // Git for Windows reads `\` as a separator in a pathspec, so this one names src/product.ts.
+  ["a backslash traversal", [".moe-next/..\\src\\product.ts"]],
+  ["a dot-backslash traversal", [".moe-next/.\\..\\src\\product.ts"]],
+  // Pathspec magic: an exclude-only pathspec means everything else, the whole tree.
+  ["exclude magic, short form", [":!x/.moe-next/y"]],
+  ["exclude magic, long form", [":(exclude)x/.moe-next/y"]],
+  // The port NUL-delimits its pathspecs, so a NUL inside one path becomes a second pathspec.
+  ["a NUL that splits one path into two pathspecs", [".moe-next/start.ps1\0src/product.ts"]],
+  ["an absolute posix path", [".moe-next/start.ps1", "/etc/hosts"]],
+  ["an absolute windows path", [".moe-next/start.ps1", "C:/Windows/system32/drivers/etc/hosts"]],
+  ["a metadata path mixed in with a product path", [".moe-next/start.ps1", "src/product.ts"]],
+  ["an empty set", []],
+] as const satisfies readonly (readonly [string, readonly string[]])[];
+const executedFenceCases = new Set<string>();
+
 describe("checkpointRuntimeMetadata against a real repository", () => {
   it("checkpoints dirty tracked runtime metadata under Moe's identity so the node can be staffed", async () => {
-    const root = scratchRepository();
+    const root = await scratchRepository();
     writeFileSync(join(root, ".moe-next", "start.ps1"), "# start --operator-stdin\n", "utf8");
     const head = git(root, "rev-parse", "HEAD");
 
@@ -65,7 +90,7 @@ describe("checkpointRuntimeMetadata against a real repository", () => {
   });
 
   it("refuses a path outside the runtime metadata classification without touching the repository", async () => {
-    const root = scratchRepository();
+    const root = await scratchRepository();
     writeFileSync(join(root, "src", "product.ts"), "export const shipped = 2;\n", "utf8");
     const head = git(root, "rev-parse", "HEAD");
     const index = readFileSync(join(root, ".git", "index"));
@@ -82,27 +107,48 @@ describe("checkpointRuntimeMetadata against a real repository", () => {
     expect(git(root, "status", "--porcelain", "--", "src/product.ts")).toBe("M src/product.ts");
   });
 
-  it.each([
-    ["a traversal that escapes the metadata directory", ".moe-next/../src/product.ts"],
-    ["an absolute posix path", "/etc/hosts"],
-    ["an absolute windows path", "C:/Windows/system32/drivers/etc/hosts"],
-    ["a metadata path mixed in with a product path", "src/product.ts"],
-    ["an empty set", undefined],
-  ] as const)("refuses %s", async (_label, path) => {
-    const root = scratchRepository();
+  it.each(FENCE_CASES)("refuses %s without touching the repository", async (label, paths) => {
+    executedFenceCases.add(label);
+    const root = await scratchRepository();
     writeFileSync(join(root, ".moe-next", "start.ps1"), "# start --operator-stdin\n", "utf8");
+    // Product dirt, tracked and untracked, that an escape would sweep into Moe's commit.
+    writeFileSync(join(root, "src", "product.ts"), "export const shipped = 2;\n", "utf8");
+    writeFileSync(join(root, "src", "untracked-wip.ts"), "export const wip = 1;\n", "utf8");
     const head = git(root, "rev-parse", "HEAD");
     const index = readFileSync(join(root, ".git", "index"));
 
-    const report = await checkpoint(root, path === undefined ? [] : [".moe-next/start.ps1", path]);
+    const report = await checkpoint(root, paths);
 
     expect(report.outcome).toBe("RUNTIME_METADATA_CHECKPOINT_UNKNOWN_PATHS");
     expect(git(root, "rev-parse", "HEAD")).toBe(head);
     expect(readFileSync(join(root, ".git", "index"))).toEqual(index);
   });
 
+  // Not a fence case: the fence ACCEPTS this path, because one of its segments is `.moe-next`.
+  // As a glob pathspec, though, `[/.moe-next/]` is one character from a set holding `.`, so the
+  // same string also names src/product.ts (measured 2026-09-18). Only literal pathspecs hold it.
+  it("commits only the observed path when that path would glob onto product code", async () => {
+    const root = await scratchRepository();
+    const odd = "src/product[/.moe-next/]ts";
+    mkdirSync(join(root, "src", "product[", ".moe-next"), { recursive: true });
+    writeFileSync(join(root, odd), "# odd\n", "utf8");
+    git(root, "--literal-pathspecs", "add", "--", odd);
+    git(root, "commit", "--quiet", "-m", "operator: a file name legal on NTFS and POSIX");
+    writeFileSync(join(root, odd), "# odd, edited\n", "utf8");
+    writeFileSync(join(root, "src", "product.ts"), "export const shipped = 2;\n", "utf8");
+    const observed = await createGitLandingPort().observe(root);
+    expect(observed).toMatchObject({ code: "TRACKED_RUNTIME_METADATA_DIRTY", ok: false, paths: [odd] });
+
+    const report = await checkpoint(root, observed.ok ? [] : observed.paths ?? []);
+
+    expect(report.outcome).toBe("RUNTIME_METADATA_CHECKPOINTED");
+    expect(git(root, "show", "--name-only", "--format=", "HEAD").split("\n")).toEqual([odd]);
+    // Trimmed ` M`: the operator's product change is neither committed nor staged.
+    expect(git(root, "status", "--porcelain", "--", "src/product.ts")).toBe("M src/product.ts");
+  });
+
   it("reports the checkpoint ineffective when metadata it was not given stays dirty", async () => {
-    const root = scratchRepository();
+    const root = await scratchRepository();
     writeFileSync(join(root, ".moe-next", "start.ps1"), "# start --operator-stdin\n", "utf8");
     writeFileSync(join(root, ".moe-next", "seed.ps1"), "# seed --operator-stdin\n", "utf8");
 
@@ -117,8 +163,10 @@ describe("checkpointRuntimeMetadata against a real repository", () => {
     expect(git(root, "show", "--name-only", "--format=", "HEAD")).toBe(".moe-next/start.ps1");
   });
 
-  it("reports git's own words when the commit cannot succeed", async () => {
-    const root = scratchRepository();
+  it("reports git's own words and leaves HEAD and the index alone when the commit cannot succeed", async () => {
+    const root = await scratchRepository();
+    const head = git(root, "rev-parse", "HEAD");
+    const index = readFileSync(join(root, ".git", "index"));
 
     // Classified as metadata and confined, so it passes the fence, but no such file exists:
     // real git refuses the pathspec rather than this module predicting that it would.
@@ -127,6 +175,32 @@ describe("checkpointRuntimeMetadata against a real repository", () => {
     expect(report.outcome).toBe("RUNTIME_METADATA_CHECKPOINT_FAILED");
     expect(report.ok).toBe(false);
     expect(report.detail).toContain(".moe-next/never-existed.ps1");
-    expect(report.detail).toContain("did not match any files");
+    expect(report.detail).toContain("did not match any file(s) known to git");
+    expect(git(root, "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(root, ".git", "index"))).toEqual(index);
+  });
+
+  it("leaves the operator's index as it was when their own hook refuses the checkpoint", async () => {
+    const root = await scratchRepository();
+    const hooks = join(root, ".git", "moe-test-hooks"); mkdirSync(hooks);
+    writeFileSync(join(hooks, "pre-commit"), "#!/bin/sh\necho HOOK_REFUSED_TEST >&2\nexit 1\n", { mode: 0o755 });
+    git(root, "config", "core.hooksPath", hooks);
+    writeFileSync(join(root, ".moe-next", "start.ps1"), "# start --operator-stdin\n", "utf8");
+    const head = git(root, "rev-parse", "HEAD");
+    const index = readFileSync(join(root, ".git", "index"));
+
+    const report = await checkpoint(root, [".moe-next/start.ps1"]);
+
+    // The hook runs AFTER git staged the path into its temporary index; the real one is untouched.
+    expect(report.outcome).toBe("RUNTIME_METADATA_CHECKPOINT_FAILED");
+    expect(report.detail).toContain("HOOK_REFUSED_TEST");
+    expect(git(root, "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(root, ".git", "index"))).toEqual(index);
+    expect(git(root, "status", "--porcelain", "--", ".moe-next/start.ps1")).toBe("M .moe-next/start.ps1");
+  });
+
+  // A sweep that silently yields no case passes. This names the cases that actually ran.
+  it("runs every fence case", () => {
+    expect([...executedFenceCases].toSorted()).toEqual(FENCE_CASES.map(([label]) => label).toSorted());
   });
 });

@@ -35,7 +35,7 @@ import { PROJECT_ID, cleanUp, configFor, openFileStore } from "./environment-tes
  * that only watched one would stay green while the other was deleted. The third arm - that a
  * DELIVERED `MOE_`-prefixed name still arrives - is what makes the pair a statement about the
  * source loop rather than about the string "MOE_": delivery is applied after that loop
- * (agent-spawn-environment.ts:105), so the scrub cannot reach it.
+ * (the `deliverEnvironment` return in agent-spawn-environment.ts), so the scrub cannot reach it.
  *
  * SEARCHES ARE OVER BYTES. A plaintext inside a serialised blob is invisible to a parsed
  * assertion and perfectly visible to whoever opens the file.

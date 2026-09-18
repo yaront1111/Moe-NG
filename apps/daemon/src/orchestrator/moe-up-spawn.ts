@@ -39,21 +39,16 @@ export interface LaunchEntryPaths {
 }
 
 /**
- * Node 24 strips types but does not TRANSFORM them, and the wrapper's module
- * graph contains a TypeScript parameter property — `agent-spawn-contract.ts:53`,
- * `constructor(readonly reason: ...)`. Measured on Windows at b773de7:
- *
- *   node apps/daemon/src/orchestrator/agent-wrapper-main.ts
- *   -> SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]:
- *      TypeScript parameter property is not supported in strip-only mode
- *
- * so the wrapper entry cannot start under plain `node` at all. vitest never sees
- * this because its transform handles parameter properties. This flag is the
- * launcher's own invocation choice, NOT a repair of the wrapper: the underlying
- * syntax is still there and still breaks the documented manual recipe. Passed to
- * both children so a parameter property added to the daemon's graph tomorrow
- * cannot break the launcher the same way. Drop it once the syntax is gone — the
- * negative-control test in `moe-up-main.test.ts` says when.
+ * Passed to both children, and to the `moe start` wrapper by
+ * `projects/project-stack-host-main.ts`, so the two launchers share one argv
+ * shape. It is no longer load-bearing. The parameter property that once stopped
+ * the wrapper entry under plain strip-only `node` (`AgentProcessFailureError` in
+ * `agent-spawn-contract.ts`) is gone, and `erasableSyntaxOnly` in
+ * `apps/daemon/tsconfig.json` now refuses non-erasable syntax at typecheck:
+ * measured to fire on daemon sources and on the workspace package sources the
+ * daemon program pulls in. `moe-up-main.test.ts` proves the entry loads with and
+ * without it. Kept rather than dropped because removing it changes the live
+ * `moe start` launch path; task-8bc14883 drops it from both launchers.
  */
 export const NODE_TRANSFORM_TYPES_FLAG = "--experimental-transform-types" as const;
 

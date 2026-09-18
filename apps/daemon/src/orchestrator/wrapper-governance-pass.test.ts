@@ -1,5 +1,8 @@
+import { REVIEW_ROUND_ABSOLUTE_CEILING } from "@moe/review";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { governanceAggregateId } from "../review/governance-decision-ledger.js";
+import { decideGovernanceEscalation } from "../review/governance-escalation-decider.js";
 import type { GovernanceAdvisor } from "../review/governance-escalation-decider.js";
 import type { GovernancePolicy } from "../review/governance-policy-settings.js";
 import { readReviewLedger } from "../review/review-read-model.js";
@@ -7,6 +10,7 @@ import {
   PROJECT_ID,
   SUBJECT_REF,
   closeStores,
+  driveEscalatedRounds,
   driveRounds,
   openStore,
 } from "../review/review-test-fixtures.js";
@@ -70,6 +74,59 @@ describe("the governance pass", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("needs your decision in the control room");
     expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(false);
+  });
+
+  it("names the real reason it stopped, with a line of its own for every reason", async () => {
+    // Measured on UnAI 2026-09-18: 302 lines of "no answer could be produced" while the advisor
+    // was never once asked — the decision ledger could not be READ, and the log said a model had
+    // not answered. Pinned as a SET of exact lines: a check on the new line alone would stay green
+    // if another reason's line were changed to match it, and that collapse is the defect.
+    type Store = ReturnType<typeof openStore>;
+    const unreadable = (store: Store): void => {
+      driveRounds(store, 3);
+      const aggregateId = governanceAggregateId(PROJECT_ID);
+      store.commit({
+        aggregateId,
+        commandBytes: new TextEncoder().encode("{}"),
+        commandId: "gov-corrupt-1",
+        committedAt: clock(),
+        events: [{
+          eventId: "gov-corrupt-1-e1",
+          eventType: "GovernanceDecisionRecorded",
+          payload: new TextEncoder().encode("not json"),
+        }],
+        expectedVersion: store.getAggregateVersion(aggregateId),
+      });
+    };
+    type Reason = readonly [string, (store: Store) => void, GovernancePolicy, string];
+    const reasons: readonly Reason[] = [
+      ["BOUND_SPENT", (store) => { driveRounds(store, 3); },
+        { kind: "AI_GOVERNOR", maxDecisions: 0 }, "its governance decision bound is spent"],
+      ["LEDGER_UNREADABLE", unreadable, OPEN,
+        "the daemon could not read its governance decision history from the store, "
+        + "a store problem and not a model that declined to answer"],
+      ["NO_ANSWER", (store) => { driveRounds(store, 3); }, OPEN, "no answer could be produced"],
+      ["ROUND_CEILING", (store) => { driveEscalatedRounds(store, REVIEW_ROUND_ABSOLUTE_CEILING); },
+        OPEN, "its review has reached the absolute round ceiling, which no decision can raise"],
+    ];
+    expect(reasons.length).toBe(4);
+
+    const logged: string[] = [];
+    for (const [why, seed, policy] of reasons) {
+      const store = openStore();
+      seed(store);
+      // Each setup reaches the reason it is named for — asserted at the decider, not assumed.
+      expect(await decideGovernanceEscalation(
+        { advisor: silent, clock, policy, projectId: PROJECT_ID, store }, SUBJECT_REF,
+      )).toEqual({ kind: "HUMAN_NEEDED", why });
+      const { lines, pass } = passOver(store, policy);
+      await pass();
+      logged.push(...lines);
+    }
+
+    expect(logged).toEqual(reasons.map(([, , , because]) => `[governance] ${SUBJECT_REF}: `
+      + `${because}; it needs your decision in the control room, and its work is untouched`));
+    expect(new Set(logged).size).toBe(4);
   });
 
   it("is inert with no policy stated, and reads nothing on the way to doing nothing", async () => {

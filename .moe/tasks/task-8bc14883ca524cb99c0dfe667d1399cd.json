@@ -1,0 +1,32 @@
+{
+  "id": "task-8bc14883ca524cb99c0dfe667d1399cd",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Drop NODE_TRANSFORM_TYPES_FLAG from both launchers now that the daemon graph is erasable, and correct the runbook's manual-wrapper recipe",
+  "description": "Follow-up filed by governor-cc0cc843 under ruling msg-541e4475 (2026-09-18) on task-4444d180 step 5, option (B). 4444d180 removed the only non-erasable production syntax (agent-spawn-contract.ts:79) and added `erasableSyntaxOnly` to apps/daemon/tsconfig.json. worker-e0435164 measured that it fires TS1294 on daemon src AND on package sources in the daemon program. It deliberately KEPT `--experimental-transform-types` (NODE_TRANSFORM_TYPES_FLAG) on the launchers with a stated reason: one argv shape shared by `moe up` and `moe start`, where dropping it from one launcher forks them.\n\nUNNAMED CONSUMERS worker-e0435164 found (measured at 4444d180's tree; re-measure before planning):\n- apps/daemon/src/orchestrator/moe-up-spawn.ts:58 declares the constant only.\n- apps/daemon/src/orchestrator/moe-up-main.ts:244 (daemon child) and :366 (wrapper child) compose the argv. moe-up-main.test.ts:281/:354 pin the flag positionally, and after 4444d180 the tripwire arm (formerly :924-927) asserts that plain strip-only node LOADS the wrapper entry.\n- apps/daemon/src/projects/project-stack-host-main.ts:17/:74 imports the constant for the `moe start` wrapper argv, and project-stack-host-main.test.ts:208 pins the literal.\n- docs/agent-stack-runbook.md:657-676 says the manual wrapper recipe is broken without the flag. That is FALSE after 4444d180, and operators read it.\n- packages/runner/src/platform/windows/windows-project-stack-boundary.ts has its own TRANSFORM_TYPES literal for the stack entry. Census it and decide it in the same row.\n\nRISK: this changes the argv of the launcher the owner's LIVE projects run through (`moe start`). Before dropping the flag, prove every entry the launchers start (daemon, wrapper, project-stack-host) loads under plain strip-only node at the delivered tree, including any module outside the daemon tsconfig program that the guard does not cover.",
+  "definitionOfDone": [
+    "Every launcher child (moe up daemon + wrapper, moe start project-stack-host + its wrapper, and the Windows stack-boundary entry if it carries its own literal) starts under plain `node` with NO --experimental-transform-types, proven by a real-spawn arm per entry, quoted, at the delivered tree.",
+    "NODE_TRANSFORM_TYPES_FLAG and every positional pin of it are removed or re-aimed to assert the flag's ABSENCE by value. No arm deleted or matcher widened to go green. The two-sided strip-only proof from task-4444d180 still holds.",
+    "docs/agent-stack-runbook.md's manual-wrapper recipe (~:657-676) states the measured truth, with no claim that the recipe needs the flag.",
+    "`pnpm typecheck`, the daemon suite and `pnpm test:e2e` green with count lines quoted. Reds attributed by the path-attributed baseline rule."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "GOVERNOR",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-4444d18096d24fb285bc78b03edd04f6"
+  ],
+  "priority": "MEDIUM",
+  "order": 125,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T08:30:07.144Z",
+  "updatedAt": "2026-09-18T08:30:07.144Z"
+}

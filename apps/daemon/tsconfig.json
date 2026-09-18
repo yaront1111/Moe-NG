@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "erasableSyntaxOnly": true,
     "rootDir": "src",
     "skipLibCheck": true,
     "tsBuildInfoFile": "../../node_modules/.cache/daemon.tsbuildinfo",
