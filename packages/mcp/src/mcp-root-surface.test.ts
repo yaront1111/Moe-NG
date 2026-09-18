@@ -16,6 +16,8 @@ import type {
   McpDispatchFault,
   McpDispatchFaultObserver,
   McpDispatchFaultStage,
+  McpSessionFault,
+  McpSessionFaultObserver,
   StdioDispatchPort,
   StdioServerOptions,
 } from "@moe/mcp";
@@ -218,10 +220,16 @@ const observer: McpDispatchFaultObserver = (fault: McpDispatchFault): void => {
 const stdioOptions: StdioServerOptions = {
   credential: "type-surface-probe", onDispatchFault: observer, port: null as unknown as StdioDispatchPort,
 };
-const observedAdapterOptions: HttpAdapterOptions = { dispatchPort, onDispatchFault: observer, sessionPort };
+const sessionObserver: McpSessionFaultObserver = (fault: McpSessionFault): void => {
+  if (fault.stage !== "validate-bearer") return;
+};
+const observedAdapterOptions: HttpAdapterOptions = {
+  dispatchPort, onDispatchFault: observer, onSessionFault: sessionObserver, sessionPort,
+};
 
-it("reaches the three published dispatch-fault types through the bare specifier", () => {
-  expect([faultStage, observer, stdioOptions, observedAdapterOptions]).toHaveLength(4);
+it("reaches the five published fault types through the bare specifier", () => {
+  expect([faultStage, observer, sessionObserver, stdioOptions, observedAdapterOptions]).toHaveLength(5);
   expect(stdioOptions.onDispatchFault).toBe(observer);
   expect(observedAdapterOptions.onDispatchFault).toBe(observer);
+  expect(observedAdapterOptions.onSessionFault).toBe(sessionObserver);
 });

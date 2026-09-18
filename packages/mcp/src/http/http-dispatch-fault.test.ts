@@ -13,6 +13,8 @@ import {
   BEARER, INITIALIZE_BODY, build, readPayload, sessionPortFor, toolCallBody,
 } from "./http-server-test-helpers.js";
 import { MCP_SESSION_ID_HEADER } from "./http-session.js";
+import type { HttpSessionPort } from "./http-session.js";
+import type { McpSessionFault } from "../session-fault.js";
 
 /**
  * The observer, reached through the PUBLISHED adapter options rather than the bridge function:
@@ -98,5 +100,48 @@ describe("http adapter dispatch fault disclosure", () => {
 
     expect(payload["error"]).toBeUndefined();
     expect(faults).toEqual([]);
+  });
+});
+
+describe("http adapter session fault disclosure", () => {
+  it("reports a session port that throws while validating the bearer, as a session fault and not a dispatch fault", async () => {
+    const secret = "SQLITE_BUSY: credential store at /var/lib/moe/sessions.db is locked";
+    const dispatchFaults: McpDispatchFault[] = [];
+    const sessionFaults: McpSessionFault[] = [];
+    const sessionPort: HttpSessionPort = {
+      bindSession(): void {},
+      closeSession(): void {},
+      validateBearer(): never {
+        throw Object.assign(new Error(secret), { code: "SQLITE_BUSY" });
+      },
+    };
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: {
+        authenticate: () => ({ ok: true }),
+        dispatchCommandBytes: () => CONFORMANCE_COMMAND_RESPONSE_BYTES,
+        dispatchQueryBytes: () => CONFORMANCE_COMMAND_RESPONSE_BYTES,
+      },
+      enableJsonResponse: true,
+      onDispatchFault: (fault) => { dispatchFaults.push(fault); },
+      onSessionFault: (fault) => { sessionFaults.push(fault); },
+      sessionPort,
+    });
+    try {
+      const response = await adapter.handleRequest(build({ body: INITIALIZE_BODY }));
+      const payload = await readPayload(response);
+
+      expect(response.status).toBe(500);
+      expect(payload["error"]).toMatchObject({ data: { code: "UNKNOWN_ERROR" } });
+      expect(JSON.stringify(payload)).not.toContain("SQLITE_BUSY");
+      expect(dispatchFaults).toEqual([]);
+      expect(sessionFaults).toHaveLength(1);
+      expect(sessionFaults[0]).toMatchObject({
+        stage: "validate-bearer",
+        thrown: { code: "SQLITE_BUSY", message: secret },
+        transport: "http",
+      });
+    } finally {
+      await adapter.close();
+    }
   });
 });

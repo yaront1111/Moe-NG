@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+
+import { describeThrown } from "@moe/contracts";
 import type { DurableSchedule } from "./orchestrator/durable-schedule.js";
 
 import {
@@ -231,16 +233,21 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
  * start and BEFORE anything binds. `null` means carry on — the provider wires no
  * sweep, or the sweep succeeded; every other answer stops the boot. A port that
  * THROWS is the one condition named here, under the EXISTING provider code: a
- * dead port is a broken provider with no durable code or layer to preserve.
+ * dead port is a broken provider with no durable code or layer to preserve. The
+ * throw itself is said on the log, because the code alone reads as "the provider
+ * module is broken" when what happened is a locked store under the sweep.
  */
 function runBootReconciliation(
   port: BootReconciliationPort | undefined,
+  log: ((line: string) => void) | undefined,
 ): BootReconciliationRefused | DaemonEntryRefused | null {
   if (port === undefined) return null;
   try {
     const outcome = port.sweep();
     return outcome.ok ? null : outcome;
-  } catch {
+  } catch (error) {
+    const thrown = describeThrown(error);
+    log?.(`boot reconciliation threw: ${thrown.name}${thrown.code === null ? "" : ` ${thrown.code}`}: ${thrown.message}`);
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
 }
@@ -281,7 +288,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
 
     // BEFORE the listener, never after: a daemon that becomes ready while the last
     // crash is still unclassified is the exact failure this sweep exists to stop.
-    const swept = runBootReconciliation(resolved.reconciliation);
+    const swept = runBootReconciliation(resolved.reconciliation, options.log);
     if (swept !== null) return swept;
 
     // Minted here when unsupplied and returned IN PROCESS only. Design 19.2 keeps

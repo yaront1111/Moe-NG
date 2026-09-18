@@ -1,5 +1,7 @@
 import type { DiagnosticEmitter } from "@moe/contracts";
-import type { McpDispatchFault, McpDispatchFaultObserver } from "@moe/mcp";
+import type {
+  McpDispatchFault, McpDispatchFaultObserver, McpSessionFault, McpSessionFaultObserver,
+} from "@moe/mcp";
 
 /**
  * The event a tool call that THREW host-side lands under, on every MCP entry: the wrapper's
@@ -7,6 +9,9 @@ import type { McpDispatchFault, McpDispatchFaultObserver } from "@moe/mcp";
  * through this one function, so an operator greps one name.
  */
 export const MCP_DISPATCH_THREW = "MCP_DISPATCH_THREW";
+
+/** The HTTP session screen's port threw while validating a bearer: 500 to the client, this here. */
+export const MCP_SESSION_SCREEN_THREW = "MCP_SESSION_SCREEN_THREW";
 
 /**
  * Turns `@moe/mcp`'s dispatch-fault observer into a diagnostics record. The seat sees exactly
@@ -30,6 +35,27 @@ export function mcpDispatchFaultReporter(emitter: DiagnosticEmitter): McpDispatc
         thrownName: fault.thrown.name,
         thrownStack: fault.thrown.stack,
         toolKind: fault.toolKind,
+        transport: fault.transport,
+      },
+    });
+  };
+}
+
+/**
+ * The session-screen twin. A credential store that is locked or closed refuses EVERY request on
+ * the endpoint with UNKNOWN_ERROR, and before this the only sign was a seat that could not
+ * connect; the record names the throw so the operator sees the store, not the seat.
+ */
+export function mcpSessionFaultReporter(emitter: DiagnosticEmitter): McpSessionFaultObserver {
+  return (fault: McpSessionFault): void => {
+    emitter.error(MCP_SESSION_SCREEN_THREW, {
+      fields: {
+        stage: fault.stage,
+        thrownCauses: fault.thrown.causes.join(" <- "),
+        thrownCode: fault.thrown.code,
+        thrownMessage: fault.thrown.message,
+        thrownName: fault.thrown.name,
+        thrownStack: fault.thrown.stack,
         transport: fault.transport,
       },
     });

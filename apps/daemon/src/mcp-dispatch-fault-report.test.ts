@@ -3,7 +3,9 @@ import type { DiagnosticRecord } from "@moe/contracts";
 import type { McpDispatchFault } from "@moe/mcp";
 import { describe, expect, it } from "vitest";
 
-import { MCP_DISPATCH_THREW, mcpDispatchFaultReporter } from "./mcp-dispatch-fault-report.js";
+import {
+  MCP_DISPATCH_THREW, MCP_SESSION_SCREEN_THREW, mcpDispatchFaultReporter, mcpSessionFaultReporter,
+} from "./mcp-dispatch-fault-report.js";
 
 const FAULT: McpDispatchFault = {
   stage: "dispatch",
@@ -70,5 +72,41 @@ describe("mcpDispatchFaultReporter", () => {
     expect(records[0]?.fields).toMatchObject({
       stage: "authenticate", surface: "command", toolKind: "work.claim", transport: "stdio",
     });
+  });
+});
+
+describe("mcpSessionFaultReporter", () => {
+  it("lands one error record under MCP_SESSION_SCREEN_THREW carrying the throw", () => {
+    const records: DiagnosticRecord[] = [];
+    const emitter = createDiagnosticEmitter({
+      clock: () => "2026-09-18T08:00:00.000Z",
+      component: "mcp",
+      sink: { emit: (record) => { records.push(record); } },
+    });
+
+    mcpSessionFaultReporter(emitter)({
+      stage: "validate-bearer",
+      thrown: {
+        causes: [], code: "SQLITE_BUSY", message: "database is locked", name: "SqliteError",
+        stack: "SqliteError: database is locked\n    at authenticate (session-authenticator.ts:12:5)",
+      },
+      transport: "http",
+    });
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      component: "mcp",
+      event: MCP_SESSION_SCREEN_THREW,
+      fields: {
+        stage: "validate-bearer",
+        thrownCauses: "",
+        thrownCode: "SQLITE_BUSY",
+        thrownMessage: "database is locked",
+        thrownName: "SqliteError",
+        transport: "http",
+      },
+      level: "error",
+    });
+    expect(records[0]?.fields?.["thrownStack"]).toContain("session-authenticator.ts");
   });
 });

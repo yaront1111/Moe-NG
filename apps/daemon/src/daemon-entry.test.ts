@@ -124,6 +124,25 @@ it("refuses with a DISTINCT code when the provider itself throws", async () => {
   expect(started).not.toHaveProperty("port");
 });
 
+it("says on the log WHAT the boot reconciliation sweep threw, beside the same refusal", async () => {
+  // DAEMON_ENTRY_PROVIDER_THREW alone reads as "the provider module is broken"; a locked store
+  // under the sweep is a different repair, and the code cannot tell them apart.
+  const lines: string[] = [];
+  const started = await startDaemon({
+    dependencies: {
+      ...provider,
+      reconciliation: () => ({
+        sweep(): never {
+          throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+        },
+      }),
+    },
+    log: (line) => lines.push(line),
+  });
+  expect(started).toMatchObject({ code: "DAEMON_ENTRY_PROVIDER_THREW", layer: DAEMON_ENTRY_LAYER, ok: false });
+  expect(lines).toEqual(["boot reconciliation threw: Error SQLITE_BUSY: database is locked"]);
+});
+
 it("surfaces a non-loopback refusal with the LISTENER's own code and layer, unflattened", async () => {
   // PortRefusal's contract: the entry holds no translation table. Two layers can
   // refuse here, so the test names which one did — collapsing this into a

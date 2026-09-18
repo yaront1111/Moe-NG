@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 
 import { createHttpMcpAdapter } from "@moe/mcp";
-import type { HttpMcpAdapter, McpDispatchFaultObserver } from "@moe/mcp";
+import type { HttpMcpAdapter, McpDispatchFaultObserver, McpSessionFaultObserver } from "@moe/mcp";
 
 import { describeBindFailure } from "../http/bind-failure-detail.js";
 import type { AffordancePort } from "../http/affordance-contract.js";
@@ -59,6 +59,8 @@ export interface McpHttpHostOptions {
    * exactly `UNKNOWN_ERROR`; the throw goes here. Absent means contained silently, as before.
    */
   readonly onDispatchFault?: McpDispatchFaultObserver;
+  /** Host-side disclosure of the session screen's port THROWING while validating a bearer. */
+  readonly onSessionFault?: McpSessionFaultObserver;
   readonly port?: number;
   /** The daemon's committed subscription seam, handed through to the dispatch port. */
   readonly subscriptions: SubscriptionPort;
@@ -169,6 +171,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
         ? {}
         : { enableJsonResponse: options.enableJsonResponse }),
       ...(options.onDispatchFault === undefined ? {} : { onDispatchFault: options.onDispatchFault }),
+      ...(options.onSessionFault === undefined ? {} : { onSessionFault: options.onSessionFault }),
       sessionPort: createMcpHttpSessionPort(options.deps.authenticator),
       serverName: "moe-next",
       // Same roster as the stdio entry, from the same derivation.

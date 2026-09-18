@@ -25,6 +25,7 @@ import { createHttpAdapterLifecycle, settleHttpResponseOnClose } from "./http-ad
 import { trackHttpInflightRequests } from "./http-inflight-requests.js";
 import type { HttpInflightRequests } from "./http-inflight-requests.js";
 import type { McpDispatchFaultObserver } from "../dispatch-fault.js";
+import type { McpSessionFaultObserver } from "../session-fault.js";
 import { createHttpMcpServer, httpListedTools } from "./http-tool-bridge.js";
 import type { HttpDispatchPort } from "./http-tool-bridge.js";
 
@@ -77,6 +78,8 @@ export interface HttpAdapterOptions {
    * nowhere else. Absent means the fault is contained silently, as it always was.
    */
   readonly onDispatchFault?: McpDispatchFaultObserver;
+  /** Host-side disclosure of a session port that THROWS while validating a bearer. */
+  readonly onSessionFault?: McpSessionFaultObserver;
   readonly serverName?: string;
   readonly sessionIdFactory?: () => string;
   /** Milliseconds a session may sit idle before the next initialize reaps it. */
@@ -267,7 +270,10 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
     const rebinding = loopbackRefusal(request);
     if (rebinding !== undefined) return rebinding;
 
-    const screened = await screenRequest({ port: options.sessionPort, registry, request });
+    const screened = await screenRequest({
+      ...(options.onSessionFault === undefined ? {} : { observe: options.onSessionFault }),
+      port: options.sessionPort, registry, request,
+    });
     if (lifecycle.signal.aborted) return closed();
     if (screened.kind === "refused") return errorResponse(screened.error);
     if (screened.kind === "unknown-session") {

@@ -1,6 +1,9 @@
 import { createRuntimeError } from "@moe/contracts";
 import type { RuntimeError } from "@moe/contracts";
 
+import { observeSessionFault } from "../session-fault.js";
+import type { McpSessionFaultObserver } from "../session-fault.js";
+
 /**
  * Pre-dispatch session screening for the Streamable HTTP adapter.
  *
@@ -141,6 +144,8 @@ export type SessionScreenOutcome<TAttachment> =
   | { readonly kind: "unknown-session"; readonly sessionId: string };
 
 export interface SessionScreenInput<TAttachment> {
+  /** Host-side disclosure of a port that THROWS; the refusal it reports beside is unchanged. */
+  readonly observe?: McpSessionFaultObserver;
   readonly port: HttpSessionPort;
   readonly registry: HttpSessionRegistry<TAttachment>;
   readonly request: Request;
@@ -208,7 +213,8 @@ export async function screenRequest<TAttachment>(
   let verdict: HttpAuthVerdict;
   try {
     verdict = await input.port.validateBearer(credential);
-  } catch {
+  } catch (error) {
+    observeSessionFault(input.observe, error);
     return refuse("UNKNOWN_ERROR");
   }
   if (!verdict.ok) {

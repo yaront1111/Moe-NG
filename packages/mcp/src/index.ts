@@ -13,6 +13,7 @@ export type {
   McpDispatchFaultObserver,
   McpDispatchFaultStage,
 } from "./dispatch-fault.js";
+export type { McpSessionFault, McpSessionFaultObserver } from "./session-fault.js";
 export type { StdioAuthOutcome, StdioDispatchPort } from "./stdio/stdio-dispatch-port.js";
 export {
   ADAPTER_SUPPLIED_COMMAND_FIELDS,

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { McpDispatchFault } from "@moe/mcp";
+import type { McpDispatchFault, McpSessionFault } from "@moe/mcp";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
@@ -138,5 +138,60 @@ describe("mcp-http host dispatch fault disclosure", () => {
         transport: "http",
       });
     });
+  });
+});
+
+describe("mcp-http host session fault disclosure", () => {
+  it("reports the authenticator throwing under the session screen, while the seat sees UNKNOWN_ERROR", async () => {
+    // The screen re-validates the bearer on EVERY request through `deps.authenticator`, so a
+    // store that is locked there refuses the whole endpoint. The authenticator is the injected
+    // seam this time; the dispatch observer must stay silent, because no dispatch ran.
+    const directory = mkdtempSync(join(tmpdir(), "moe-mcp-http-session-fault-"));
+    const provider = createStoreDependencies({
+      clock: CLOCK, credential: CREDENTIAL, principalId: PRINCIPAL, projectId: PROJECT,
+      storePath: join(directory, "store.db"),
+    });
+    const subscriptions = provider.subscriptions?.();
+    if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
+    const deps = provider.provide();
+    const dispatchFaults: McpDispatchFault[] = [];
+    const sessionFaults: McpSessionFault[] = [];
+    const host = createMcpHttpHost({
+      deps: {
+        ...deps,
+        // A plain replacement, not a Proxy: the production authenticator is frozen, and a Proxy
+        // that lies about a non-configurable property throws its own TypeError instead.
+        authenticator: {
+          authenticate(): never {
+            throw Object.assign(new Error(SECRET), { code: "SQLITE_BUSY" });
+          },
+        },
+      },
+      enableJsonResponse: true,
+      onDispatchFault: (fault) => { dispatchFaults.push(fault); },
+      onSessionFault: (fault) => { sessionFaults.push(fault); },
+      subscriptions,
+    });
+    try {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error(`start refused: ${started.code}`);
+      const response = await within("initialize", host.handleRequest(mcpRequest(started.origin, INITIALIZE_BODY)));
+      const text = await within("initialize body", response.text());
+
+      expect(response.status).toBe(500);
+      expect(text).toContain('"UNKNOWN_ERROR"');
+      expect(text).not.toContain("SQLITE_BUSY");
+      expect(dispatchFaults).toEqual([]);
+      expect(sessionFaults).toHaveLength(1);
+      expect(sessionFaults[0]).toMatchObject({
+        stage: "validate-bearer",
+        thrown: { code: "SQLITE_BUSY", message: SECRET, name: "Error" },
+        transport: "http",
+      });
+    } finally {
+      await within("host.stop during teardown", host.stop()).catch(() => undefined);
+      provider.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });

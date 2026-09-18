@@ -28,6 +28,8 @@ injected dispatch port.
   `apps/daemon/src/mcp-dispatch-fault-report.ts`, composed by `mcp-main.ts`,
   `mcp-http/mcp-http-main.ts` and `orchestrator/agent-wrapper-main.ts` (through
   `McpHttpHostOptions.onDispatchFault`) as `MCP_DISPATCH_THREW` on the diagnostics plane.
+  `onSessionFault` (`McpSessionFaultObserver`, `session-fault.ts` — SDK-free, because
+  `http-session.ts` must stay so) is its twin for a session port that throws under the screen.
 - `STDIO_TOOL_INDEX` / `toolLabelForKind` are also read by
   `tests/integration/portability/portability-cases.ts`.
 
@@ -117,7 +119,7 @@ injected dispatch port.
 - `distribution-inventory.ts` ships `mcp-bridge` as exactly `["packages/mcp/src/index.ts"]`
   (mirrored in `distribution-packaging.test.ts`); `release-version-surfaces.test.ts` pins
   this `package.json`.
-- `http-server.ts` is 382 lines against the repo's split-before-400 rail;
+- `http-server.ts` is 389 lines against the repo's split-before-400 rail;
   `http-request-screen.ts`, `http-resume.ts`, `http-adapter-lifecycle.ts` and
   `http-inflight-requests.ts` were carved out of it. New behaviour goes in a sibling.
 - `tsconfig.json` pins `types: ["node"]` with `skipLibCheck` because the SDK's types drag
