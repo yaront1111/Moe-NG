@@ -68,7 +68,13 @@ function agreeingAttempt(
 ): AttemptFacts | StepLifecycleRefused {
   const mismatch = stepRefusal("STEP_BINDING_MISMATCH", undefined, request.kind);
   let events: readonly StoredEvent[];
-  try { events = store.readEvents(request.attemptAggregateId); } catch { return mismatch; }
+  // A stream that could not be read is not evidence about a different attempt. The three
+  // equalities below are the only things that may answer MISMATCH.
+  try {
+    events = store.readEvents(request.attemptAggregateId);
+  } catch {
+    return stepRefusal("STEP_BINDING_UNREADABLE", undefined, request.kind);
+  }
   const history = readFoundationActivationHistory(
     request.attemptAggregateId, events, request.projectId);
   if (!history.ok) return mismatch;

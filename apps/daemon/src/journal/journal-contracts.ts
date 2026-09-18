@@ -44,6 +44,10 @@ export const DAEMON_JOURNAL_APPEND = "DAEMON_JOURNAL_APPEND" as const;
 export const JOURNAL_CODES = Object.freeze([
   "JOURNAL_REQUEST_MALFORMED", "JOURNAL_ENTRY_MALFORMED", "JOURNAL_ENTRY_LIST_EMPTY",
   "JOURNAL_BINDING_MISMATCH", "JOURNAL_NODE_UNREADABLE", "JOURNAL_COMMIT_UNAVAILABLE",
+  // The attempt's activation stream could not be READ. Never BINDING_MISMATCH, whose documented
+  // meaning is "this record is evidence about a DIFFERENT attempt": one says fix the disk, the
+  // other says the caller named the wrong attempt.
+  "JOURNAL_BINDING_UNREADABLE",
   "JOURNAL_RECORD_ABSENT", "JOURNAL_RECORD_UNREADABLE", "JOURNAL_RECORD_MALFORMED",
   "JOURNAL_RECORD_AMBIGUOUS", "JOURNAL_PROJECT_MISMATCH", "JOURNAL_DIGEST_MISMATCH",
 ] as const);
