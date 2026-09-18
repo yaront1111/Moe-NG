@@ -15,7 +15,10 @@ its own: a caller that injects no dependency provider is refused, never served a
 - Six bins: `moe` (`cli/moe-cli-main.ts`), `moe-daemon` (`daemon-main.ts`), `moe-mcp-http`,
   `moe-mcp-stdio` (`mcp-main.ts`), `moe-up` (`orchestrator/moe-up-main.ts`), `moe-wrapper`
   (`orchestrator/agent-wrapper-main.ts`). Root `pnpm start` is `moe-up-main.ts`, `pnpm seed`
-  is `orchestrator/demo-seed-main.ts`.
+  is `orchestrator/demo-seed-main.ts`. `moe-daemon`, `moe-wrapper`, both MCP bins and the
+  stack host each build a `createDiagnosticRuntime` (`diagnostics/`, MOE_LOG_* knobs) at
+  their composition root and tee their console lines into `<project>/.moe/logs`; `moe`,
+  `moe-up` and the seed do not.
 - `startDaemon` / `refuseEntry` / `isDependencyProvider` (`daemon-entry.ts`) — argv and
   signals stay in `daemon-main.ts` so the lifecycle is testable in process.
   `DaemonDependencyProvider.provide()` / `provideV2()` is the one seam authority reaches the
