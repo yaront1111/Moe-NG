@@ -174,7 +174,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T20:05:26.229Z",
-  "updatedAt": "2026-09-18T05:39:27.822Z",
+  "updatedAt": "2026-09-18T05:39:41.328Z",
   "metrics": {
     "firstClaimAt": "2026-09-17T20:39:59.929Z",
     "plannedStepCount": 8,
@@ -239,7 +239,9 @@
     "apps/daemon/package.json",
     "pnpm-lock.yaml",
     "tools/packaging/pack-docs.ts",
-    "tools/packaging/pack-docs.test.ts"
+    "tools/packaging/pack-docs.test.ts",
+    ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
+    ".moe/tasks/task-14a2f0e4221e4def9153a2082a9385bf.json"
   ],
   "completionSummary": "REOPEN 1: the connect recipe now connects. It is on main as 0dcf6ba9, fast-forward from 0fc403f8. Full evidence is in comment-d8819da4.\n\nRECIPE: pack-docs.ts now gives {\"command\":\"node\",\"args\":[\"C:\\\\moe\\\\apps\\\\daemon\\\\src\\\\cli\\\\moe-cli-main.ts\",\"mcp\",\"C:\\\\work\\\\demo\"]} (QA's form E). C:\\moe is the unzip folder, both paths must be absolute, and the entry is the file moe.cmd runs, so this is still `moe mcp` and no credential enters the config.\n\nPIN: pack-docs.test.ts JSON-parses the recipe. It asserts command node, the entry derived from MOE_CMD, \"mcp\", and absolute paths. It failed first on the HEAD bytes (\"expected 'moe' to be 'node'\"). In-memory drills went red on command \"moe\" (:211), on a moved MOE_CMD entry (:213) and on a relative path (:217).\n\nLIVE: I took the recipe from the real installDoc() output and ran it against dist\\moe-windows and UnAI, with the folder not on PATH. The SDK client connected (43 tools, goal_close absent). A plain spawn with shell:false gave 2 stdout lines, all JSON-RPC, and exit 0. It also worked with a project path containing spaces. The credential appeared in no stream.\n\nMY OWN RED, FIXED: moe-cli-mcp.test.ts injected packageVersion \"0.1.0\". The release version census reports that as unclassified once the file is tracked. The file now uses \"test\".\n\nGATES: the plan command passed with 12 files / 166 tests and 1 file / 5 passed | 2 skipped. The full daemon suite had 13 failed / 732 passed files. The root lane had 5 failed / 461 passed files. Every red is foreign: agent-spawn-contract.ts:79 parameter properties (20896d47), NodeBriefUnreadable, or peer CLAUDE.md files. No failing path is an owned path. I also ran the daemon gate on the exact commit tree by serving the origin/main blobs in memory: 12 files / 166 tests passed.\n\nMAIN: all 18 owned paths on origin/main match the worktree bytes. The commit carries a Moe-Task trailer.",
   "reviewCompletedAt": "2026-09-18T05:15:51.036Z",
@@ -317,16 +319,41 @@
       "treeId": "c13480346ac06d276616e92ea36f117627b268eb",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f616c0bee59f0639ae37c691aab4480ba19f3bf8",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-6433dce1@2026-09-18T05:16:03Z",
+      "paths": [
+        ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
+        ".moe/tasks/task-14a2f0e4221e4def9153a2082a9385bf.json",
+        "apps/daemon/src/cli/moe-cli-mcp.test.ts",
+        "tools/packaging/pack-docs.test.ts",
+        "tools/packaging/pack-docs.ts"
+      ],
+      "recordedBy": "worker-6433dce1",
+      "recordedAt": "2026-09-18T05:39:41.328Z",
+      "treeId": "6268127ce5d008e59be872eb9e45b982d805b973",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
-    "apps/daemon/qa-drill-14a2f0e4.config.ts"
+    "apps/daemon/qa-drill-14a2f0e4.config.ts",
+    "serve-main-task-14a2f0e4-worker6433.config.mjs",
+    "apps/daemon/src/cli/moe-cli-mcp.test.ts",
+    "apps/daemon/serve-main-task-14a2f0e4-worker6433.config.mjs",
+    "qa-drill-task-14a2f0e4-worker6433.config.mjs",
+    "tools/packaging/pack-docs.ts",
+    "tools/packaging/pack-docs.test.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-84420029@2026-09-18T04:54:26Z",
-    "at": "2026-09-18T05:16:58.674Z"
+    "kind": "completion",
+    "sessionId": "worker-6433dce1@2026-09-18T05:16:03Z",
+    "at": "2026-09-18T05:39:41.328Z"
   }
 }

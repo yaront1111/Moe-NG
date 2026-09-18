@@ -51,7 +51,7 @@
       "startedAt": "2026-09-07T07:54:49.035Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -75,7 +75,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:39:55.125Z",
-  "updatedAt": "2026-09-07T08:15:11.601Z",
+  "updatedAt": "2026-09-18T05:40:59.453Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:18:57.861Z",
     "plannedStepCount": 3,
@@ -110,11 +110,10 @@
   },
   "planApprovedAt": "2026-09-05T17:27:35.527Z",
   "workStartedAt": "2026-09-07T07:51:44.701Z",
-  "blockedReason": "NAMED VERIFICATION RED ON FOREIGN UNCOMMITTED BYTES. Steps 1-2 COMPLETE; both children PASS every criterion. This row owns no production path and cannot fix either end. Evidence: comment-08d006ae (gates, control, attribution), step-1/2 notes, comment-5bb45270 on the owning row.\n\n`pnpm test:e2e` EXIT 1, reproduced twice (11:00:21, 11:11:12 local) under a full-suite-gate lease:\n  FAIL codex-seat-loop.e2e.test.ts > proves the CODEX branch ran, from the spawn surface, not the shim's filename\n  AssertionError: expected [ '--echo-dir', …(8) ] to include 'exec'  (:184:27)\n  Test Files 1 failed | 18 passed | 1 skipped (20)\n\nCONTROL at clean HEAD 6f56a2cc (detached worktree + node_modules junctions, no install): same file EXIT 0, Test Files 1 passed (1) / Tests 5 passed (5), all five arms named. DIRT-red, not HEAD-red.\n\nCAUSE: task-adc4b229's uncommitted seat-start work. agent-wrapper-main.ts:38 imports untracked ./seat-start-recorder.js; it records after every successful spawn and seat-start-recorder.ts:52 runs agentSpawnInvocation(command, [\"--version\"]) through the spawner's own path. Via the e2e codex shim that is 8 baked flags + --version = the 9-token argv above. The child's arm sweeps EVERY spawn record, so a legitimate probe is graded as a seat. Neither end is wrong: \"every spawn record\" meant \"every SEAT spawn\". Cheapest correct fix, on task-ae309e47's file: filter to records where argv.at(-1) === \"-\", non-vacuity guard kept AFTER the filter.\n\nWAITING FOR task-adc4b229 to land or drop those bytes. If it lands WITHOUT the arm change, the red is at HEAD for everyone and belongs to task-ae309e47 — route it there; do NOT weaken the arm from this row. Posted to worker-ca28be90 and qa-97200064 in chan-ced99359; gate lease passed to task-adc4b229 on release.\n\nBANKED, EXIT 0: daemon 575/575 (10324 passed, 7 skipped); typecheck 19 projects. No edits, no background work, lease released, worktree torn down, real node_modules intact (13/5).",
-  "blockedOnTaskIds": [
-    "task-adc4b229cae840c086cc1acc83fd4989"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T08:15:11.601Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "planRevision": 0
 }
