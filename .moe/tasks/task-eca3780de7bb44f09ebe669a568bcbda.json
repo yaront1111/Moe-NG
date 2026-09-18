@@ -73,12 +73,12 @@
     }
   ],
   "planRevision": 7,
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Prerequisite met: origin/main (with 4eb87ec4) is merged into moe/work-2026-09-18 at f02da08b and pushed. seat-liveness.ts, seat-liveness.test.ts and seat-liveness-probe.ts are now on disk. The architect resubmits the saved plan from Serena memory task-task-eca3780de7bb44f09ebe669a568bcbda-handoff, re-measuring against f02da08b first.",
+  "reopenReason": "Human ruled on the undecidable CPU floor (comment above): CPU is not a kill signal, the unobservable-tree fix is the row's core, and the absolute cap bounds a hung seat. Step 2 and any floor-pinning step need amending, so the row goes back to an architect.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -125,11 +125,17 @@
       "author": "worker-07e6de2a",
       "content": "STEP-2 CALIBRATION LISTS (2026-09-18, this host, production createSeatActivityProbe, one CIM query per ~60s, spawn(line,[],{shell:true}) so root is cmd.exe). descendants=1 on every sample (cmd.exe -> claude.exe, no tool child). CPU is tree sum, multiples of 15.625 ms.\n\nHUNG (fake API 127.0.0.1 never answers; pid 45048; 10 intervals). deltaMs: 156.25, 281.25, 125, 250, 234.375, 187.5, 546.875, 218.75, 468.75, 218.75. elapsedMs ~60303-60399. max=546.875. Fake-api: HEAD /api/hello, POST /v1/messages at 20:35:45Z, retry POST at 20:41:45Z (the 546.875 interval). Proved dead: Get-CimInstance ProcessId=45048 and 41464 returned no rows.\n\nWORKING (real claude -p --tools Read,Glob,Grep, generation prompt, no tool child). 10 keep=true intervals, exit-interval dropped. Run1 pid 43288: 1218.75, 468.75, 328.125, 687.5 then exit 0 out=50558. Run2 pid 12432: 468.75, 328.125, 515.625, 312.5, 218.75, 437.5. elapsedMs ~60852-61067. min=218.75 median=453.125 (sorted 218.75, 312.5, 328.125, 328.125, 437.5, 468.75, 468.75, 515.625, 687.5, 1218.75). Pids 43288/12432 gone.\n\nRULE: 1.5*max(hung)=820.3125. Branch1 820.3<=min(working)=218.75? NO. Branch2 821 below working median 453? NO. Overlap is real: a generating -p seat had minutes inside the hung band. Prior worker figures (hung max 328, working min 766) did not reproduce on a true -p generation. Idle not re-measured (prior 0-31).",
       "timestamp": "2026-09-18T20:52:53.264Z"
+    },
+    {
+      "id": "comment-6d395077c60946b0a345cee36a96a9e8",
+      "author": "governor-f32726f9",
+      "content": "HUMAN RULING on the step-2 block (measurement in comment-a96f4b63): SPARE HUNG SEATS. The human chose this at 2026-09-18 ~20:55Z, on the measured overlap (hung 125-547 ms/60s, working 219-1219 ms/60s, 1.5*max(hung)=820 above the working median).\n\nWHAT THIS ROW NOW DELIVERS:\n1. CPU IS NOT A KILL SIGNAL. Remove the CPU floor from the silence decision. Do not replace it with another per-interval threshold; this host's numbers say no such number exists. The probe may still REPORT CPU as evidence on the notice line; it must not decide a kill.\n2. The unobservable-tree defect stands and is the row's core: a probe that cannot see the seat's process tree knows nothing, and a seat is NEVER killed for silence on that ignorance. Killing on ignorance is guessing, not fail-closed.\n3. A hung seat is then bounded only by the absolute cap (MOE_AGENT_TIMEOUT_MS, 2h). That is the accepted cost: a wasted wait is recoverable, a killed working seat loses its context.\n\nRE-PLAN: this changes step 2 and any step that pins a floor value. Architect, amend the plan accordingly; worker, do not calibrate a floor.\n\nFOLLOW-UP ROW to file separately (not this row): run seats with streamed output (`--output-format stream-json`) so stdout silence becomes a real liveness signal. The measurement above shows why: a working `claude -p` seat buffers ALL stdout until it finishes, so today silence proves nothing about either state.",
+      "timestamp": "2026-09-18T21:29:47.385Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:03:48.372Z",
-  "updatedAt": "2026-09-18T20:53:10.522Z",
+  "updatedAt": "2026-09-18T21:29:50.773Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:06:50.602Z",
     "plannedStepCount": 7,
@@ -165,10 +171,10 @@
     "worker-07e6de2a"
   ],
   "workStartedAt": "2026-09-18T12:14:07.739Z",
-  "blockedReason": "STEP-2 FLOOR UNDECIDABLE on this host: per-interval CPU cannot tell hung from working. Production probe, shell:true cmd.exe root, descendants=1 every sample. Full lists: comment-a96f4b63e32d4f948a223dbabb6dcd4d.\nHUNG deltaMs/60s (10): 156.25, 281.25, 125, 250, 234.375, 187.5, 546.875, 218.75, 468.75, 218.75; max=546.875 (retry POST at minute 6).\nWORKING deltaMs/60s (10, live generating -p, no tool child): 1218.75, 468.75, 328.125, 687.5, 468.75, 328.125, 515.625, 312.5, 218.75, 437.5; min=218.75 median=453.125.\nRule: 1.5*max(hung)=820.3. Branch1 (820.3<=min working)? NO. Branch2 (821 below working median 453)? NO. Overlap is real, not a short sample: a generating -p seat had minutes at 219-328 inside the hung band, with 0 stdout (buffered until finish). Prior figures (hung max 328, working min 766) did not reproduce. Deciding which failure to accept (kill working lulls vs spare hung retries) is not this row's call.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-18T20:53:02.590Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "b063a1c01f698e17512615dc8c2f8b42e79472c8",
@@ -230,7 +236,7 @@
     "sessionId": "worker-07e6de2a@2026-09-18T20:30:49Z",
     "at": "2026-09-18T20:53:10.522Z"
   },
-  "priorBlockedReason": "PLAN READY, BUT THE SHARED CHECKOUT LACKS THE CODE IT CORRECTS. The ruling (msg-54bb4cb0) re-scoped this row into two corrections to the LANDED createSeatLiveness from 4eb87ec4. That commit is on origin/main only.\n\nMeasured 2026-09-18 ~19:30Z by architect-aa92f84f:\n1. HEAD is moe/work-2026-09-18 a353c62a. It is 33 commits behind origin/main 3d386d6b, and `git merge-base --is-ancestor 4eb87ec4 HEAD` says NO.\n2. apps/daemon/src/orchestrator/seat-liveness.ts, seat-liveness.test.ts and seat-liveness-probe.ts are ABSENT on disk. agent-spawner.ts is the 480-line version from before liveness.\n3. moe.submit_plan REFUSED the plan: \"[INVALID_INPUT] Plan cites affectedFiles that do not exist\".\n4. Listing those files under newFiles would tell a worker to CREATE them, which is the add/add duplicate the ruling forbids. A worker cannot sync main either, because a merge is a whole-tree commit.\n5. `git merge-tree --write-tree HEAD origin/main` exits 0 with tree 52c5fe17. The only working-tree dirt it would touch is a peer's in-flight apps/daemon/src/repository/git-publication-port.ts and its .test.ts.\n\nUNBLOCK: sync origin/main into the checkout's branch (or switch the checkout to main), then set this row back to PLANNING. The complete plan is saved VERBATIM as resubmittable JSON in Serena memory task-task-eca3780de7bb44f09ebe669a568bcbda-handoff: 7 steps, 9 files, with calibration re-measured through the production probe and in-memory drills. The next architect only has to call submit_plan with it. Sync request: msg-d0645d2b. DoD map for the withdrawn contract: comment-0c006e8a.",
+  "priorBlockedReason": "STEP-2 FLOOR UNDECIDABLE on this host: per-interval CPU cannot tell hung from working. Production probe, shell:true cmd.exe root, descendants=1 every sample. Full lists: comment-a96f4b63e32d4f948a223dbabb6dcd4d.\nHUNG deltaMs/60s (10): 156.25, 281.25, 125, 250, 234.375, 187.5, 546.875, 218.75, 468.75, 218.75; max=546.875 (retry POST at minute 6).\nWORKING deltaMs/60s (10, live generating -p, no tool child): 1218.75, 468.75, 328.125, 687.5, 468.75, 328.125, 515.625, 312.5, 218.75, 437.5; min=218.75 median=453.125.\nRule: 1.5*max(hung)=820.3. Branch1 (820.3<=min working)? NO. Branch2 (821 below working median 453)? NO. Overlap is real, not a short sample: a generating -p seat had minutes at 219-328 inside the hung band, with 0 stdout (buffered until finish). Prior figures (hung max 328, working min 766) did not reproduce. Deciding which failure to accept (kill working lulls vs spare hung retries) is not this row's call.",
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."

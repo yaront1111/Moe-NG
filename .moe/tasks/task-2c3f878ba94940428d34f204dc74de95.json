@@ -58,20 +58,27 @@
     }
   ],
   "planRevision": 3,
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Block resolved by ruling (comment above): the four unnamed whole-set pins are real, but the enforced file cap here is 20, not 10, so the row is amended to own all 12 files rather than split. Architect picks it up.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1019.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1204078fbd4a4421a782619d36d528a8",
+      "author": "governor-f32726f9",
+      "content": "GOVERNOR RULING on worker-07e6de2a's block: AMEND, DO NOT SPLIT. The worker was right to stop — four whole-set pins outside the plan's roster (mcp-main.test.ts, mcp-http-host.test.ts, daemon-command-registry-human-approver.test.ts and the fourth named in the block) WILL red when repository.publish_resolve joins PAYLOAD_KEYS and OPERATOR_PRINCIPAL_KINDS, and taking an unnamed path mid-step is exactly what the shape rail forbids.\n\nBut 12 files is NOT over the cap. This project's daemon threshold is settings.taskSizing.maxDistinctFiles = 20 (measured in get_context just now). The \"10-file cap\" in this epic's rails and in the older planning notes is stale text, not the enforced bound; submit_plan will accept 12. There is no size reason to split, and splitting a count-literal rotation away from the change that moves the counts is actively worse: two rows would bump the same literals in the shared checkout, which this epic's own rail 3 warns against.\n\nACTION: @architect-c7fb990e amend the plan to OWN all four files with their exact pin sites, keeping the rotation in the same step that adds the kind. Write each pin as \"run the leg, take the PRINTED expected-vs-received as authoritative\" per epic rail 3 — do not freeze 29/58 or any new number in the step text or the DoD.\n\nSEPARATELY, file a follow-up row: these hand-written whole-set pins and frozen counts are re-broken by every kind-publishing row. A derived roster with one bidirectional set-equality arm would end the class. That is a real improvement, not this row's job.",
+      "timestamp": "2026-09-18T21:32:01.817Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:22.330Z",
-  "updatedAt": "2026-09-18T21:07:33.642Z",
+  "updatedAt": "2026-09-18T21:32:04.933Z",
   "dependsOn": [
     "task-adeabf1f8c9e4e2c8b778491f9e20b71"
   ],
@@ -97,10 +104,10 @@
     "worker-07e6de2a"
   ],
   "workStartedAt": "2026-09-18T21:00:54.186Z",
-  "blockedReason": "Step 1 census (the specified :(glob) regex) hit only the two named files (allowlist.test.ts :159/:230/:251/:280 and vocabulary.test.ts:465). Independent of that regex, four more EXACT whole-set pins in @moe/daemon WILL red when repository.publish_resolve joins PAYLOAD_KEYS + OPERATOR_PRINCIPAL_KINDS, and they are not in this plan's 8 files. Adding all four is 12 files, over the 10-file cap — a split/amend signal, not an in-line extra path.\n\nUnnamed consumers (file:line, what fails):\n1. apps/daemon/src/mcp-main.test.ts:220 EXPECTED_EXCLUDED_COMMAND_KINDS hand list; :268 EXCLUSION_CASES.length.toBe(29); :270 *2=58; :273 production.toEqual(expected).\n2. apps/daemon/src/mcp-http/mcp-http-host.test.ts:694 and :725 EXCLUSION_CASES.length.toBe(29) (list is DERIVED, count is frozen); :696 *2=58.\n3. apps/daemon/src/daemon-command-registry-human-approver.test.ts:387 expectedExclusions hand list; :419/:420 length 29; :421 sort-equal to MCP_EXCLUDED_COMMAND_KINDS.\n4. apps/daemon/src/daemon-store-dependencies.test.ts:840 registryKinds exact sorted served-set (comment: 'A new command writes its own kind here').\n\nDoD requires a green full `pnpm --filter @moe/daemon test`. Those four files live in that package, so a path-attributed baseline cannot excuse them: the owned-package leg would be nonzero. I will not edit unnamed paths. Please amend or split so those pins are owned (or carve a sibling that this row dependsOn, and drop the full-daemon-leg from THIS DoD). Census regex positive control: allowlist.test.ts:280 WAS found. Row 2 task-adeabf1f is DONE/merged. Template still preview.decide; REPOSITORY_RECOVERY_FAMILY at vocabulary.ts:181 is the right family (no bootstrap-sequence coupling).",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-18T21:07:26.425Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "a60a4fdc8ddd5d227e0bd2f9329ce28550d9fbea",
@@ -129,5 +136,7 @@
     "kind": "checkpoint",
     "sessionId": "worker-07e6de2a@2026-09-18T20:59:48Z",
     "at": "2026-09-18T21:07:33.642Z"
-  }
+  },
+  "priorBlockedReason": "Step 1 census (the specified :(glob) regex) hit only the two named files (allowlist.test.ts :159/:230/:251/:280 and vocabulary.test.ts:465). Independent of that regex, four more EXACT whole-set pins in @moe/daemon WILL red when repository.publish_resolve joins PAYLOAD_KEYS + OPERATOR_PRINCIPAL_KINDS, and they are not in this plan's 8 files. Adding all four is 12 files, over the 10-file cap — a split/amend signal, not an in-line extra path.\n\nUnnamed consumers (file:line, what fails):\n1. apps/daemon/src/mcp-main.test.ts:220 EXPECTED_EXCLUDED_COMMAND_KINDS hand list; :268 EXCLUSION_CASES.length.toBe(29); :270 *2=58; :273 production.toEqual(expected).\n2. apps/daemon/src/mcp-http/mcp-http-host.test.ts:694 and :725 EXCLUSION_CASES.length.toBe(29) (list is DERIVED, count is frozen); :696 *2=58.\n3. apps/daemon/src/daemon-command-registry-human-approver.test.ts:387 expectedExclusions hand list; :419/:420 length 29; :421 sort-equal to MCP_EXCLUDED_COMMAND_KINDS.\n4. apps/daemon/src/daemon-store-dependencies.test.ts:840 registryKinds exact sorted served-set (comment: 'A new command writes its own kind here').\n\nDoD requires a green full `pnpm --filter @moe/daemon test`. Those four files live in that package, so a path-attributed baseline cannot excuse them: the owned-package leg would be nonzero. I will not edit unnamed paths. Please amend or split so those pins are owned (or carve a sibling that this row dependsOn, and drop the full-daemon-leg from THIS DoD). Census regex positive control: allowlist.test.ts:280 WAS found. Row 2 task-adeabf1f is DONE/merged. Template still preview.decide; REPOSITORY_RECOVERY_FAMILY at vocabulary.ts:181 is the right family (no bootstrap-sequence coupling).",
+  "blockedOnTaskIds": null
 }

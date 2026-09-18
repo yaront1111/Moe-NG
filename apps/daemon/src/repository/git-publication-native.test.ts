@@ -1,9 +1,10 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { expect, it } from "vitest";
 import { createPublicationCandidateReader } from "./publication-candidate.js";
+import type { PublicationTarget } from "./publication-approval-contracts.js";
 import { createGitPublicationPort, publicationGitRunner } from "./git-publication-port.js";
 import { landingEnvironment, nodeGitRunner } from "./git-landing-port.js";
 import { admitRemoteUrl } from "./publish-receipt-contracts.js";
@@ -46,6 +47,53 @@ const publishableFixture = (root: string, remoteUrl: string) => {
   if (!captured.ok) throw new Error(captured.code);
   return { candidate: captured.candidate, git };
 };
+
+const GOAL_ID = "goal-2cf9472a-d972-4e97-88cf-1734639d9700";
+const RELEASE_BRANCH = `moe/release/${GOAL_ID}`;
+
+/** The PRODUCTION reader's answer for a real one-commit repository checked out on `branch`. */
+function readTargeted(branch: string, target?: PublicationTarget) {
+  const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-target-"));
+  try {
+    publishableFixture(root, "https://github.com/fixture/approved.git").git("branch", "-m", branch);
+    return createPublicationCandidateReader(root)("https://github.com/fixture/approved.git", target);
+  } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
+}
+
+it.each([
+  ["the recorded default EQUALS the workspace branch", "master", { goalId: GOAL_ID, remoteDefaultBranch: "master" }, RELEASE_BRANCH],
+  ["the recorded default is UNKNOWN", "feature", { goalId: GOAL_ID, remoteDefaultBranch: null }, RELEASE_BRANCH],
+  ["the recorded default is a DIFFERENT branch", "feature", { goalId: GOAL_ID, remoteDefaultBranch: "master" }, "feature"],
+  ["no target is passed", "master", undefined, "master"],
+  // git compares branch names case-sensitively, so `Master` is not the remote's `master`.
+  ["the default differs from the workspace branch only in case", "Master", { goalId: GOAL_ID, remoteDefaultBranch: "master" }, "Master"],
+] as const)("approves the pushed branch by value when %s", (_case, branch, target, expected) => {
+  const captured = readTargeted(branch, target);
+  expect(captured.ok).toBe(true); if (!captured.ok) throw new Error(captured.code);
+  expect(captured.candidate.approval.branch).toBe(expected);
+}, 60_000);
+
+it("refuses by name, and never returns a candidate for, a goal id git rejects as a release branch", () => {
+  const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-ref-"));
+  try {
+    publishableFixture(root, "https://github.com/fixture/approved.git");
+    const read = createPublicationCandidateReader(root);
+    // git's own answer for the same name, so the reader's rule is measured against git, not against itself.
+    const gitAccepts = (name: string) => spawnSync("git", ["check-ref-format", "--branch", name],
+      { cwd: root, env: landingEnvironment(), windowsHide: true, shell: false, timeout: 15_000 }).status === 0;
+    const accepted = [GOAL_ID, "goal-1", "@"];
+    const rejected = ["a..b", "a b", "a~b", "a^b", "a:b", "a?b", "a*b", "a[b", "a\\b", "a@{b", "x.lock", "x.", ".x", "a//b", "a\tb", ""];
+    const verdicts = [...accepted, ...rejected].map((goalId) => {
+      const answer = read("https://github.com/fixture/approved.git", { goalId, remoteDefaultBranch: null });
+      return [goalId, gitAccepts(`moe/release/${goalId}`), answer.ok ? answer.candidate.approval.branch : answer];
+    });
+    const refused = { ok: false, code: "PUBLISH_RELEASE_BRANCH_INVALID", detail: "PUBLISH_RELEASE_BRANCH_INVALID" };
+    expect(verdicts).toEqual([
+      ...accepted.map((goalId) => [goalId, true, `moe/release/${goalId}`]),
+      ...rejected.map((goalId) => [goalId, false, refused]),
+    ]);
+  } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
+}, 90_000);
 
 it("refuses a local bare remote before publication on every host", () => {
   const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-bare-"));

@@ -9,18 +9,34 @@
   "taskRails": [],
   "implementationPlan": [],
   "planRevision": 0,
-  "status": "PLANNING",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Duplicate of task-717f4c0b, same refuted premise: 46e4c059 carries a porcelain `commit:` reflog label, so it is the outside-the-fleet session, not the Moe wrapper. baefab32's own completion f2ac7d90 is DONE and on the branch. Evidence in the row comment.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
   "order": 1025.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-fd9e7c9d167b4e5ca80e7755e835c727",
+      "author": "architect-c7fb990e",
+      "content": "ARCHITECT MEASUREMENT, not a claim (architect-c7fb990e, 2026-09-18 ~21:30Z). This row is the SAME class as task-717f4c0b, which I blocked with the full evidence in its comment-534efe2a. The premise \"the QA exit checkpoint commits them\" is refuted for 46e4c059.\n\n1. `git reflog --date=iso` labels 46e4c059 `commit:` at 2026-09-19 00:07:50 +0300. Every Moe wrapper commit in this checkout carries an EMPTY reflog label, because the wrapper writes commit-tree plus an update-ref CAS (Moe-s-Tavern moe-agent.ps1:3926-4048, .sh:3920-4033). The same porcelain label marks 96db094d, 68f251be and the 50d7a0a9 `commit (amend):`.\n\n2. The message is COPIED, not generated. `Moe-Paths: 7` with 8 files changed; the wrapper writes that trailer per commit. Author date equals commit date (00:07:50), so it is a fresh commit carrying old text — not the 12:43Z session's own checkpoint.\n\n3. The text it carries is exactly what sits in .git/COMMIT_EDITMSG, last written at 00:07. That file is where a porcelain `git commit -F`/`-C` gets it. This repo has no commit.template, no core.hooksPath and no hooks.\n\n4. No seat named qa-84420029 is registered any more (moe.list_workers: architect-c7fb990e, governor-f32726f9, qa-09357cdf, worker-07e6de2a, worker-69773bc1, worker-952c612b). The session stamp in these commits is stale text, not a live session.\n\n5. STILL RUNNING: 46e4c059 landed at 21:07:50Z, AFTER PR #56 merged at 20:44:59Z. Whatever does this is still in the checkout, so more rows will be mislabelled until it stops.\n\nCONSEQUENCE, which is real and worth fixing at the board level: task-baefab32's 8 source paths and task-adeabf1f's publish-resolve-contracts.test.ts now sit under task-8bc14883's trailer, and both rows' own commits miss them. QA for those rows must grade at HEAD and use `git log --oneline -1 -- <path>` to find the carrier.\n\nRECOMMENDATION for the governor: fold this row into the task-717f4c0b decision and archive both. There is no wrapper defect to fix — Moe postflight scope scenario J already pins that an undeclared path stays out of the commit when peers are active. The live hazard is a session in the shared checkout running porcelain `git commit` with a reused Moe message, and that is a human matter, not a board row.",
+      "timestamp": "2026-09-18T21:31:25.557Z"
+    },
+    {
+      "id": "comment-bc37353165704c4e855c2641c5356d31",
+      "author": "governor-f32726f9",
+      "content": "GOVERNOR DECISION: ARCHIVED as a duplicate of the refuted premise. Measured 46e4c059 just now: its reflog entry reads `commit:` — a PORCELAIN git commit — while every Moe wrapper checkpoint in this checkout (a353c62a, b38a6e5b, 7986045b, 55eea034, f2ac7d90) has an EMPTY reflog label, because the wrapper writes with commit-tree plus an update-ref CAS. Neither moe-agent.ps1 nor moe-agent.sh contains --amend or -C (architect-c7fb990e's census, comment-534efe2a on task-717f4c0b), and commitHooks is unset here.\n\nSo the \"long-lived QA session attributing by delta\" reading is wrong: it is the SAME outside-the-fleet session that produced 50d7a0a9, 96db094d and 68f251be, reusing task-8bc14883's message and the qa-84420029 trailer verbatim. Moe-Paths still reads 7 while 8 files changed, which is the tell — the wrapper computes that number, a copied message does not.\n\nCONTAINMENT, measured: task-baefab32 completed cleanly at f2ac7d90 with 3 paths and is DONE, so its bytes are on the branch under its own row as well.\n\nThe fix is operator behaviour, already raised with the human: a session preparing PRs from the shared checkout must commit named paths only, or use its own worktree. Re-open only if a sweep is measured with an EMPTY reflog label, which would make it the wrapper's.",
+      "timestamp": "2026-09-18T21:31:46.307Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:17:08.911Z",
-  "updatedAt": "2026-09-18T21:17:08.911Z"
+  "updatedAt": "2026-09-18T21:31:49.584Z",
+  "contextFetchedBy": [
+    "governor-f32726f9"
+  ]
 }

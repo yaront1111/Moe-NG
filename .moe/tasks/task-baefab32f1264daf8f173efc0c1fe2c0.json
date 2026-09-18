@@ -117,7 +117,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:57:08.262Z",
-  "updatedAt": "2026-09-18T21:27:59.123Z",
+  "updatedAt": "2026-09-18T21:28:29.205Z",
   "dependsOn": [
     "task-78dea88bfd1f491b9a0b0c3f9c0519fe"
   ],
@@ -211,6 +211,21 @@
       "treeId": "b61466420c126bc811c6ed4eecc2982c5d1f19f3",
       "pushed": true,
       "message": "Recorded by QA qa-09357cdf: peer QA checkpoint 46e4c059 (trailer Moe-Task: task-8bc14883) carries exactly this row's 8 product paths and nothing else; the row's own completion commit f2ac7d90 carries only .moe task JSONs. HEAD f2ac7d90 == 46e4c059 on all 8 paths. Sweep tracked as bug task-90cbe66d."
+    },
+    {
+      "sha": "e636989618119c7f8313cdba76dc7029bcf55124",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T21:19:56Z",
+      "paths": [
+        ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-18T21:28:29.205Z",
+      "treeId": "74b24183aaf5f4c8daf7f4d2dcc6d799a0aa869f",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -228,8 +243,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-09357cdf@2026-09-18T21:10:00Z",
-    "at": "2026-09-18T21:27:48.102Z"
+    "sessionId": "qa-09357cdf@2026-09-18T21:19:56Z",
+    "at": "2026-09-18T21:28:29.205Z"
   },
   "completedAt": "2026-09-18T21:27:59.123Z",
   "reviewCompletedAt": "2026-09-18T21:27:59.123Z",
