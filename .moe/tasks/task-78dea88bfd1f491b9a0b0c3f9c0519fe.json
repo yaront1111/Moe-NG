@@ -112,7 +112,7 @@
   ],
   "planRevision": 14,
   "status": "WORKING",
-  "assignedWorkerId": "worker-69773bc1",
+  "assignedWorkerId": "worker-952c612b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -121,10 +121,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1016.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-83aa2409a8f348a8a908080ac0e89c8d",
+      "author": "worker-69773bc1",
+      "content": "STANDING DOWN (worker-69773bc1). My session was relaunched on this row at 20:12:43Z. The governor's crash-release at 20:13:41Z was aimed at worker-6433dce1 but stripped my seat instead. worker-952c612b claimed the row at 20:13:47Z, and the row is theirs. I made NO edits and ran no gates. Here is what I measured at HEAD e55a4f88 on moe/work-2026-09-18, around 20:14Z, so you do not have to repeat it:\n1. `git status --porcelain` on the 10 owned paths plus node-publisher-approved.test.ts is EMPTY.\n2. `git diff 50d7a0a9 HEAD -- <the 10 owned paths>` is EMPTY. So the sweep commit 50d7a0a9 (labelled Moe-Task: task-8bc14883) carries the delivered bytes of steps 2-6 exactly as HEAD holds them. This row's task.commits has only e55a4f88, which touches .moe/* only. The completion commit will therefore carry no source bytes, and completionSummary must name 50d7a0a9 as the carrier.\n3. Step 7(A) is ALREADY DONE and IN 50d7a0a9. apps/daemon/CLAUDE.md:75-84 has the bullet \"The publisher pushes once, then only observes.\" It covers: REJECTED plus an unchanged tip gives a REFUSED PUBLISH_NOT_LANDED receipt and then a PUBLISH_NOT_TRANSMITTED release; why both halves are needed; succeeded/timed out/threw/lost goes to an operator; and a publish stuck before this rule has no evidence to resolve on. No edit is needed unless you want to reword it.\n4. 50d7a0a9 is an amend of a353c62a: the same parent 0cf56be3 and the same author date 16:03:29+0300, but committed at 23:06:32+0300. Its trailer says Moe-Paths: 7 while it carries 27 files. It was merged back as 20fa6949 at 23:06:40+0300.\nWhat remains is step 7 (B)-(E): the targeted vitest gate (use --testTimeout=30000 on this loaded host; the LIVE arm carries its own 600 s guard), then the full `pnpm --filter @moe/daemon test` plus `pnpm typecheck`, then the adversarial review, the FORWARD-ONLY statement and complete_task.",
+      "timestamp": "2026-09-18T20:15:02.144Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:02:52.886Z",
-  "updatedAt": "2026-09-18T20:12:43.868Z",
+  "updatedAt": "2026-09-18T20:15:02.145Z",
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -150,10 +157,19 @@
   "planApprovedAt": "2026-09-18T19:05:45.154Z",
   "contextFetchedBy": [
     "worker-6433dce1",
-    "worker-69773bc1"
+    "worker-69773bc1",
+    "worker-952c612b"
   ],
   "workStartedAt": "2026-09-18T19:06:02.404Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-6 COMPLETED. Their bytes are NOT in the working tree as dirt: at 20:06:32Z a `git commit --amend` on old qa checkpoint a353c62a swept all 9 of this row's modified files into 50d7a0a9 (mislabelled Moe-Task: task-8bc14883), merged + pushed as 20fa6949. So HEAD already carries steps 1-6: node-publisher.ts(+test), git-publication-port.ts(+test), publication-effect-ledger.ts(+test), repository-execution-contracts.ts, repository-execution-port.ts(+test).",
+      "whatRemains": "Step-7 only: CLAUDE.md publisher bullet (note: 50d7a0a9 already touched apps/daemon/CLAUDE.md — check it before editing), the vitest gate, adversarial review. Then complete_task; name 50d7a0a9 as the carrier of steps 1-6 in completionSummary since this row's own commits list is empty.",
+      "pitfalls": "origin/main has 3 publisher fixes (35aa437b WAITING/named UNKNOWN + pendingPublication, c8bc2b40 diverged-remote preflight, 31b8191b drifted identity) that CONFLICT with this row in node-publisher.ts and git-publication-port.ts. Do not try to merge main yourself; governor will handle the sync at the row boundary. Do on-disk edits only on this row's files.",
+      "releasedAt": "2026-09-18T20:13:41.147Z",
+      "releasedBy": "governor-f32726f9",
+      "reason": "Confirmed crash: worker-6433dce1 silent since 20:03Z, fleet restarted (new seats ~20:08Z), human confirmed no task in flight. Every downstream row dependsOn this one."
+    },
     {
       "whatIsDone": "Steps 1-6 COMPLETED (19:13-19:59Z). Their bytes are NOT lost and NOT dirty: at 20:06:32Z a `git commit --amend` on old qa checkpoint a353c62a swept all 9 files this row modified (git-publication-port.ts/.test.ts, publication-effect-ledger.ts/.test.ts, repository-execution-contracts.ts, repository-execution-port.ts/.test.ts, node-publisher.ts/.test.ts) into 50d7a0a9, a commit LABELLED task-8bc14883. Merge 20fa6949 (= HEAD = origin/moe/work-2026-09-18) carries them. Verify with `git show --stat 50d7a0a9`.",
       "whatRemains": "step-7 only: (A) the apps/daemon/CLAUDE.md publisher bullet, (B) the vitest gate named in the step with its count line quoted, then adversarial review and complete_task.",
@@ -163,5 +179,54 @@
       "releasedBy": "governor-f32726f9",
       "reason": "Confirmed crash: seat worker-6433dce1 is gone (fleet restarted ~20:03-20:08Z, no process, human confirmed nothing is in flight). Every downstream publisher row dependsOn this one."
     }
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "e55a4f88c96c69646b7d628a9d2e4008a00ee4a2",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-18T20:12:44Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
+        ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+        ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+        ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json",
+        ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
+        ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+        ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json",
+        ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json",
+        ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json",
+        ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+        ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-18T20:12:48.804Z",
+      "treeId": "79a8f2e12f3cef33d8da8ab6d9a0d52ad61a4dc9",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/project.json",
+    ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
+    ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+    ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json",
+    ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
+    ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+    ".moe/tasks/task-adeabf1f8c9e4e2c8b778491f9e20b71.json",
+    ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json",
+    ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json",
+    ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-69773bc1@2026-09-18T20:12:44Z",
+    "at": "2026-09-18T20:12:48.804Z"
+  }
 }
