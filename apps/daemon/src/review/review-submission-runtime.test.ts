@@ -39,7 +39,7 @@ const folders: string[] = [];
 afterEach(() => { closeStores(); for (const folder of folders.splice(0)) rmSync(folder, { force: true, recursive: true }); });
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
-function world(approved = true, capture?: VerifiedWorkspacePort["capture"]) {
+function world(approved = true, capture?: VerifiedWorkspacePort["capture"], workspaceOf?: (nodeRef: string) => string) {
   const store = boundWorld();
   const revision = committedRevision(store);
   approveGate1(store, revision);
@@ -73,7 +73,8 @@ function world(approved = true, capture?: VerifiedWorkspacePort["capture"]) {
   const ports = createDaemonCommandPorts({
     clock: () => NOW, operatorPrincipalId: "operator-local", projectId: PROJECT_ID, store,
     ...{ reviewSubmission: { workspace, authenticate: authenticator.authenticate,
-      ...(capture === undefined ? {} : { capture }) } },
+      ...(capture === undefined ? {} : { capture }),
+      ...(workspaceOf === undefined ? {} : { workspaceOf }) } },
   });
   const deps: CommandAdapterDeps = { ...ports, authenticator };
   const dispatch = (kind: string, payload: JsonObject, expectedVersion = 0, commandId = `cmd-${kind}`, target = nodeRef) =>
@@ -210,6 +211,29 @@ describe("runtime review submission without development payload hints", () => {
     expect(ledger.accepted).toBeUndefined();
   });
 
+  it("captures the evidence from the NODE's workspace when it has one of its own", async () => {
+    // Under MOE_NODE_TREES the verifier tests the node's tree. Evidence captured from the shared
+    // checkout can never equal it: two UnAI nodes looped VERIFIER_WORKSPACE_CHANGED on that.
+    const asked: string[] = [];
+    const captured: string[] = [];
+    const port = createVerifiedWorkspacePort();
+    const tree = { path: "" };
+    const w = world(true, (workspace) => { captured.push(workspace); return port.capture(workspace); },
+      (nodeRef) => { asked.push(nodeRef); return tree.path; });
+    tree.path = join(w.workspace, ".moe-next", "trees", "own");
+    w.git("worktree", "add", "-q", "-b", "moe/own", tree.path);
+    await w.claim();
+    expect(await w.dispatch("review.submit", { subjectRef: w.nodeRef, findings: [], packageItems: [], round: 1 }))
+      .toMatchObject({ ok: true });
+    expect(asked).toEqual([w.nodeRef]);
+    expect(captured).toEqual([tree.path]);
+    const round = readReviewLedger(w.store, PROJECT_ID, w.nodeRef).rounds[0];
+    if (round === undefined) throw new Error("missing round");
+    const submitted = readSubmittedReviewWorkspace(w.store, PROJECT_ID, w.nodeRef, round);
+    if (submitted.status !== "PRESENT") throw new Error(submitted.status);
+    expect(submitted.binding.branchRef).toBe("refs/heads/moe/own");
+  });
+
   it.each([false, true])("refuses changed submitted bytes before verification/acceptance (pending receipt: %s)", async (pending) => {
     const w = world(); await w.claim();
     expect(await w.dispatch("review.submit", { subjectRef: w.nodeRef, findings: [], packageItems: [], round: 1 }))
@@ -242,9 +266,19 @@ describe("runtime review submission without development payload hints", () => {
     });
     const reports = await verifier.verifyOnce();
     expect(runs).toBe(0);
-    expect(reports).toMatchObject([{ outcome: "VERIFIER_WORKSPACE_CHANGED" }]);
+    // Still never tested and never accepted. With no receipt yet, the refusal is no longer
+    // repeated forever: it becomes a failed round, so the node goes back to a seat to resubmit
+    // and a second pass has nothing left to refuse (UnAI 2026-09-19: two nodes looped here).
+    expect(reports).toMatchObject([{ outcome: pending ? "VERIFIER_WORKSPACE_CHANGED" : "FAILED_ROUND_RECORDED" }]);
     expect(readVerifierReceipt(w.store, PROJECT_ID, verifierReceiptId(PROJECT_ID, w.nodeRef, round.decisionId)).ok).toBe(pending);
-    expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).accepted).toBeUndefined();
+    const after = readReviewLedger(w.store, PROJECT_ID, w.nodeRef);
+    expect(after.accepted).toBeUndefined();
+    expect(after.rounds.length).toBe(pending ? 1 : 2);
+    if (!pending) {
+      expect(after.rounds[1]?.routing.route).not.toBe("ACCEPT");
+      expect(await verifier.verifyOnce()).toEqual([]);
+    }
+    expect(runs).toBe(0);
   });
 
   it("earns acceptance by testing the exact host-prepared candidate", async () => {

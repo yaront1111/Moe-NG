@@ -1,6 +1,9 @@
+import { existsSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import type { NodeMission } from "./agent-wrapper.js";
-import { ensureNodeTree } from "./node-worktrees.js";
+import { NODE_TREES_DIRECTORY, ensureNodeTree, nodeTreeName } from "./node-worktrees.js";
 
 /**
  * The node's mission, moved into the node's own working tree (owner decision 2026-09-16). Moe
@@ -29,6 +32,21 @@ const inspectHolder: ProjectHolder = (projectRoot) => {
     return read.ok ? read.reservation?.nodeRef ?? null : null;
   } catch { return null; }
 };
+
+/**
+ * The workspace `createNodeTreeMissions` briefs this node into, answered WITHOUT making anything:
+ * the checkout it already holds, else its own tree when that tree exists, else the project. The
+ * review submission captures its evidence here, so it binds the same tree the verifier tests.
+ */
+export function nodeWorkspaceOf(projectRoot: string, nodeRef: string, holder: ProjectHolder = inspectHolder): string {
+  if (holder(projectRoot) === nodeRef) return projectRoot;
+  const name = nodeTreeName(nodeRef);
+  if (name === null) return projectRoot;
+  try {
+    const tree = join(realpathSync.native(resolve(projectRoot)), NODE_TREES_DIRECTORY, name);
+    return existsSync(join(tree, ".git")) ? tree : projectRoot;
+  } catch { return projectRoot; }
+}
 
 export function createNodeTreeMissions(log: (line: string) => void, holder: ProjectHolder = inspectHolder) {
   const reported = new Set<string>();
