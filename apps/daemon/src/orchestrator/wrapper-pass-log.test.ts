@@ -69,6 +69,28 @@ describe("createPassLogger", () => {
     ]);
   });
 
+  it("says HALTED on every pass while the staffing latch is set, and never as idle", () => {
+    // The latch is permanent until restart. Printed once and then deduped, it read as a quiet
+    // board: the one line that said why sat in the scrollback under "nothing to staff".
+    const { lines, log } = logger();
+    const halted: RunOnceReport = {
+      active: 1, halted: "AGENT_CLEANUP_FAILED:work.release:WORK_ITEM_NOT_VISIBLE",
+      spawned: [], surfaceOutcome: "AGENT_CLEANUP_FAILED:work.release:WORK_ITEM_NOT_VISIBLE",
+    };
+
+    log(halted);
+    log(halted);
+    log(halted);
+
+    expect(lines).toHaveLength(3);
+    for (const line of lines) {
+      expect(line).toContain("HALTED");
+      expect(line).toContain("AGENT_CLEANUP_FAILED:work.release:WORK_ITEM_NOT_VISIBLE");
+      expect(line).toContain("restarted");
+      expect(line).not.toContain("nothing to staff");
+    }
+  });
+
   it("prints the idle line once per distinct idle state, and again after activity", () => {
     const { lines, log } = logger();
     log(pass([], 0));

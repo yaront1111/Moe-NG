@@ -556,8 +556,10 @@ describe("createAgentWrapper", () => {
         throw new Error("no session spawned");
       }
       await expect(throwing.settle()).rejects.toThrowError(failureMessage);
+      // The latch is carried as `halted` too, so the pass log can say so every pass.
       expect(await throwing.runOnce()).toEqual({
         active: 0,
+        halted: failureMessage,
         spawned: [],
         surfaceOutcome: failureMessage,
       });
@@ -681,6 +683,7 @@ describe("createAgentWrapper", () => {
       await expect(refusing.settle()).rejects.toThrow(settlement);
       expect(await refusing.runOnce()).toEqual({
         active: 0,
+        halted: settlement,
         spawned: [],
         surfaceOutcome: settlement,
       });

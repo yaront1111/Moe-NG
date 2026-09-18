@@ -31,9 +31,12 @@ export function withLatestVerifierFailure(
     const store = context.store();
     if (store === undefined) return null;
     const ledger = readReviewLedger(store, context.projectId, nodeRef);
-    // A KNOWN-unreadable ledger, spelled the same as a thrown one below: retried next pass by
-    // name, never reported as a brief that does not exist.
-    if (ledger.unreadable) throw new NodeBriefUnreadableError(`review ledger ${nodeRef}`);
+    // `unreadable` here is the READ MODEL'S VERDICT ON CONTENT — an event that will not decode, a
+    // round sequence that does not chain, a lineage that contradicts itself — not a store fault.
+    // Withheld, as before: a brief that could not be proved must not be staffed, and it must not
+    // be retried every pass either, which a NodeBriefUnreadableError would do. A store that
+    // THROWS lands in the catch below, and that is the only unreadable this function names.
+    if (ledger.unreadable) return null;
     const guidance = readReviewImplementationGuidance(store, context.projectId, nodeRef, ledger);
     if (guidance.status === "INVALID") return null;
     if (guidance.status === "PRESENT") brief = Object.freeze({ ...brief, instructions: [brief.instructions,

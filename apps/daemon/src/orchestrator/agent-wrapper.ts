@@ -283,7 +283,9 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   const runPass = async (): Promise<RunOnceReport> => {
     const priorFailure = staffing.failureOutcome();
     if (priorFailure !== null) {
-      return { active: staffing.activeCount(), spawned: [], surfaceOutcome: priorFailure };
+      return {
+        active: staffing.activeCount(), halted: priorFailure, spawned: [], surfaceOutcome: priorFailure,
+      };
     }
     // MANY providers per wrapper, one resolved per spawn, so the pause is consulted PER
     // STEP against that seat's own provider (decideSeatProvider) and PROVIDER_PAUSED is
@@ -353,10 +355,12 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       if (report.refusal?.code === "AGENT_SPAWNER_CLOSED") break;
     }
     const idled = stalled !== null && spawned.length === 0;
+    const halted = staffing.failureOutcome();
     return { active: staffing.activeCount(), spawned,
       ...(repositoryWaiting.length === 0 ? {} : { repositoryWaiting }),
       ...(idled && stalled !== null ? { paused: stalled } : {}),
-      surfaceOutcome: staffing.failureOutcome() ?? (idled ? PROVIDER_PAUSED_OUTCOME : "SURFACE") };
+      ...(halted === null ? {} : { halted }),
+      surfaceOutcome: halted ?? (idled ? PROVIDER_PAUSED_OUTCOME : "SURFACE") };
   };
 
   // Serialize passes, not child lifetimes: overlapping surface snapshots could
