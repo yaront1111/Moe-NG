@@ -181,15 +181,22 @@ describe("runProjectStackHostMain", () => {
 });
 
 describe("project stack production wrapper launch", () => {
-  it("loads the physical host entry through Node's shipped JavaScript bridges", () => {
+  it("loads the physical host entry through its JavaScript bridges under plain strip-only node", () => {
+    // The runner boundary starts this entry with no transform flag, so neither does this probe.
+    // The negative control proving plain node refuses a parameter property is in moe-up-main.test.ts.
     const entry = join(import.meta.dirname, "project-stack-host-main.ts");
-    const source = `import(${JSON.stringify(pathToFileURL(entry).href)}).then(() => {})`;
-    const probe = spawnSync(process.execPath, ["--experimental-transform-types", "-e", source], {
+    const loaded = "HOST_ENTRY_LOADED";
+    const source = `import(${JSON.stringify(pathToFileURL(entry).href)})`
+      + `.then(() => console.log(${JSON.stringify(loaded)}))`;
+    const probe = spawnSync(process.execPath, ["-e", source], {
       cwd: join(import.meta.dirname, "..", "..", "..", ".."),
       encoding: "utf8",
       timeout: 60_000,
     });
-    expect(`${probe.stdout ?? ""}${probe.stderr ?? ""}`).not.toContain("Error [");
+    const text = `${probe.stdout ?? ""}${probe.stderr ?? ""}`;
+    expect(text).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+    expect(text).not.toContain("Error [");
+    expect(text).toContain(loaded);
     expect(probe.status).toBe(0);
   }, 60_000);
 

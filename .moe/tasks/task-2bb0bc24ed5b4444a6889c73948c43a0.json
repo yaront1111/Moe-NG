@@ -118,7 +118,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T06:48:51.208Z",
-  "updatedAt": "2026-09-18T08:33:09.627Z",
+  "updatedAt": "2026-09-18T08:33:44.088Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T07:55:12.153Z",
     "plannedStepCount": 6,
@@ -160,7 +160,8 @@
     "apps/daemon/src/review/governance-decision-ledger.ts",
     "apps/daemon/src/orchestrator/wrapper-governance-pass.ts",
     "apps/daemon/src/orchestrator/wrapper-governance-pass.test.ts",
-    ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json"
+    ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json",
+    ".moe/tasks/task-8bc14883ca524cb99c0dfe667d1399cd.json"
   ],
   "completionSummary": "Legacy governance rows no longer blind the ledger. governance-decision-ledger.ts recordOf admits exactly 2 key sets: RECORD_KEYS (13) and RECORD_KEYS minus findingSubject (12, derived by filter). The 12-key row is upcast with findingSubject \"LEGACY:unrecorded\". Any other key set, version or JSON still returns null.\n\nwrapper-governance-pass.ts maps each `why` via Readonly<Record<HumanNeededWhy,string>>. A 5th union member is TS2741. LEDGER_UNREADABLE now logs \"the daemon could not read its governance decision history from the store, a store problem and not a model that declined to answer\". The other 3 lines are byte-identical.\n\nDoD1: pre-fix RED `expected null to be 2` at ledger.test.ts:306. Legacy arms green. 5-case fail-closed table (unknown key, 13 keys with a wrong name, 12 keys missing rationale, old shape with bad version, not-json). Decider arm: {asked:0, LEDGER_UNREADABLE} vs a control that reaches the advisor.\n\nDoD2: pass arm asserts the 4 exact lines as a set.\n\nDoD3: live copy of UnAI store (probe source in comment-239f2f1a). Pre-fix fundedOn null, fixed 2. decide = BOUND_SPENT at bound 1 (advisor asked 0). NO_ANSWER at bound 10 (asked 1). Live store size/mtime unchanged.\n\nDrills in-memory: A (revert) and B (any 12-key) both RED; ledger SHA unchanged.\n\nDoD4: scoped 27/313 passed. typecheck exit 0 (19 projects). Full daemon suite 13 failed | 732 passed (745), all foreign; serial re-run identical: 12 strip-only parameter-property at agent-spawn-contract.ts:79, plus wrapper-review-missions (identical with HEAD blobs served). Owned delta empty.\n\nLater orchestrator run: moe-up-main.test.ts:924 negative control red after a PEER removed that parameter property (dirty agent-spawn-contract.ts, not mine).\n\nFollow-ups: UnAI default bound 1 means node 257b0697 will log bound spent; log dedupe; exact-key reader census; read-side value validation.",
   "commits": [
@@ -182,6 +183,22 @@
       "treeId": "1d796b1dfd1f8c7e494d1a8f0b4fb8414f855c3c",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "1109e7c52ddd9c2393213cff99a0c54d98a4aebf",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T08:23:20Z",
+      "paths": [
+        ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json",
+        ".moe/tasks/task-8bc14883ca524cb99c0dfe667d1399cd.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T08:33:44.088Z",
+      "treeId": "5b7425df5145baff56be00333ed02039a7f14c1a",
+      "status": "DONE",
+      "pushed": false
     }
   ],
   "touchedFiles": [
@@ -193,9 +210,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6433dce1@2026-09-18T07:58:24Z",
-    "at": "2026-09-18T08:23:17.093Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T08:23:20Z",
+    "at": "2026-09-18T08:33:44.088Z"
   },
   "completedAt": "2026-09-18T08:33:09.627Z",
   "reviewCompletedAt": "2026-09-18T08:33:09.627Z",

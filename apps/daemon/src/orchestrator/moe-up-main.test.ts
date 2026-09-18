@@ -904,38 +904,58 @@ describe("moe up entrypoint wiring", () => {
 });
 
 /**
- * The wrapper entry must load under PLAIN strip-only node, and under the
- * launcher's flag, against the real entry rather than asserted in a comment.
- * This first arm used to assert the opposite (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX)
+ * Every child `moe up` starts must load under PLAIN strip-only node, the way the
+ * launcher runs it, proven against the real entries rather than asserted in a
+ * comment. The first arm used to assert the opposite (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX)
  * as the tripwire for a parameter property in `agent-spawn-contract.ts`; that
- * syntax is gone (task-4444d180) and `erasableSyntaxOnly` in the daemon's
- * tsconfig now refuses it at typecheck. This arm is the runtime side of that
- * fence: a construct that slips past typecheck reddens it here, not in a user's
- * `moe up`. The flag itself is kept; `moe-up-spawn.ts` says why.
+ * syntax is gone (task-4444d180). `erasableSyntaxOnly` in the daemon's tsconfig
+ * refuses it at typecheck, but only inside the daemon's program: these arms also
+ * load what each child imports at RUNTIME, which no typecheck reaches. The
+ * `moe start` host entry has its own arm in `project-stack-host-main.test.ts`.
  */
-describe("moe up transform-types flag", () => {
-  const loadWrapperEntry = (argv: readonly string[]): { code: number | null; text: string } => {
+describe("moe up children load under plain strip-only node", () => {
+  const plainNode = (argv: readonly string[]): { code: number | null; text: string } => {
     const probe = spawnSync(process.execPath, [...argv], {
       cwd: REPO_ROOT, encoding: "utf8", timeout: 60_000,
     });
     return { code: probe.status, text: `${probe.stdout ?? ""}${probe.stderr ?? ""}` };
   };
-  const entry = launchEntryPaths(REPO_ROOT).wrapperEntry;
-  // `import()` loads the graph without running main (import.meta.main is false);
-  // the marker proves the import RESOLVED, not merely that one error was absent.
-  const loaded = "WRAPPER_ENTRY_LOADED";
-  const importOnly = `import(${JSON.stringify(pathToFileURL(entry).href)})`
-    + `.then(() => console.log(${JSON.stringify(loaded)}))`;
+  const { daemonEntry, dependencies, wrapperEntry } = launchEntryPaths(REPO_ROOT);
+  // `import()` loads each graph without running main (import.meta.main is false);
+  // the marker proves every import RESOLVED, not merely that one error was absent.
+  const loaded = "CHILD_ENTRIES_LOADED";
+  const importOnly = (...files: readonly string[]): string => `Promise.all([${
+    files.map((file) => `import(${JSON.stringify(pathToFileURL(file).href)})`).join(", ")
+  }]).then(() => console.log(${JSON.stringify(loaded)}))`;
 
-  it("loads the wrapper entry under plain strip-only node", () => {
-    const { code, text } = loadWrapperEntry(["-e", importOnly]);
+  it("loads the wrapper entry, and the payload-hint table it imports at runtime", () => {
+    // `agent-wrapper-main.ts` hands this control-room module's URL to `loadPayloadHints`,
+    // which imports it after boot; it is outside the daemon's tsconfig program.
+    const hints = join(REPO_ROOT, "apps", "control-room", "src", "live", "live-dispatch-payloads.ts");
+    const { code, text } = plainNode(["-e", importOnly(wrapperEntry, hints)]);
     expect(text).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
     expect(text).toContain(loaded);
     expect(code).toBe(0);
   }, 60_000);
 
+  it("loads the daemon entry, and the --dependencies provider it imports at runtime", () => {
+    const { code, text } = plainNode(["-e", importOnly(daemonEntry, dependencies)]);
+    expect(text).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+    expect(text).toContain(loaded);
+    expect(code).toBe(0);
+  }, 60_000);
+
+  it("refuses a parameter property, so a node that transforms cannot turn the arms above green", () => {
+    const probe = "class Probe { constructor(readonly value: number) {} }";
+    const { code, text } = plainNode(["--input-type=module-typescript", "-e", probe]);
+    // Node echoes the refused source line into its output, so a sentinel written into the
+    // probe would appear even though nothing ran: the CODE and the exit status are the evidence.
+    expect(text).toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+    expect(code).toBe(1);
+  }, 60_000);
+
   it("loads the same entry once the launcher's flag is passed", () => {
-    const { code, text } = loadWrapperEntry([NODE_TRANSFORM_TYPES_FLAG, "-e", importOnly]);
+    const { code, text } = plainNode([NODE_TRANSFORM_TYPES_FLAG, "-e", importOnly(wrapperEntry)]);
     expect(text).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
     expect(text).toContain(loaded);
     expect(code).toBe(0);
