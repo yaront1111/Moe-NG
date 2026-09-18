@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:02:52.886Z",
-  "updatedAt": "2026-09-18T20:40:37.460Z",
+  "updatedAt": "2026-09-18T20:40:55.413Z",
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -247,6 +247,24 @@
       "treeId": "c8cbc740375c2955b442a83f418e34d15d493016",
       "status": "WORKING",
       "pushed": false
+    },
+    {
+      "sha": "46123b3023311576a272f95a2abce80d34474e10",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-18T20:13:47Z",
+      "paths": [
+        ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
+        ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts",
+        "apps/daemon/src/orchestrator/node-publisher.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-18T20:40:55.413Z",
+      "treeId": "060ee9d53283088f699b4527099b4d0116ddad92",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -259,14 +277,16 @@
     "apps/daemon/src/repository/repository-execution-port.test.ts",
     "apps/daemon/src/orchestrator/node-publisher.ts",
     "apps/daemon/src/orchestrator/node-publisher.test.ts",
-    "apps/daemon/CLAUDE.md"
+    "apps/daemon/CLAUDE.md",
+    ".moe/tasks/task-78dea88bfd1f491b9a0b0c3f9c0519fe.json",
+    ".moe/tasks/task-f3182818e7924be996d3543798a9d444.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-69773bc1@2026-09-18T20:12:44Z",
-    "at": "2026-09-18T20:21:28.430Z"
+    "kind": "completion",
+    "sessionId": "worker-952c612b@2026-09-18T20:13:47Z",
+    "at": "2026-09-18T20:40:55.413Z"
   },
   "reviewStartedAt": "2026-09-18T20:40:37.458Z",
   "verification": {
@@ -276,5 +296,9 @@
     "reportedAt": "2026-09-18T20:40:37.458Z",
     "source": "agent-reported"
   },
-  "completionSummary": "A publish whose push git REJECTED (a numeric non-zero exit) and whose remote tip still equals the tip read just before the push is now resolved automatically. The publisher records a REFUSED PUBLISH_NOT_LANDED receipt under the same decisionId, whose detail names both tips, then releases the hold as PUBLISH_NOT_TRANSMITTED (legal only from PUBLISHING). The card un-sticks, and a fresh human decision can push again. A push that succeeded, threw, timed out or lost its answer, or followed an unreadable pre-push tip, stays UNKNOWN. So does a crash between push and record. The evidence is a separate moe-publication-transmission/1 event; moe-publication-intent/1 is unchanged.\nFORWARD-ONLY: a publish stuck before this row has no transmission record and stays UNKNOWN until task-21be6e90's operator command lands.\nWHERE THE BYTES ARE:\n- Steps 2-6 and the CLAUDE.md bullet were swept into peer checkpoint 50d7a0a9. Row comment comment-1fdbbf78 lists the paths.\n- The governor's origin/main merge f7d014d6 wove in main's pre-flight and named UNKNOWN reasons.\n- This session made 2 owned edits, which ride in the completion commit:\n  - giveBack now names a release refused after the receipt (\"PUBLISH_NOT_LANDED receipted, but the reservation release was refused: <code>\"). Before, it named a remote mismatch.\n  - The STUCK arms pin each pass's exact reason. The merge had loosened them to a prefix regex.\nGATES (HEAD b38a6e5b):\n- Scoped run: Test Files 56 passed (56), 610 passed.\n- typecheck: 19/19, 0 errors.\n- Full daemon suite: 762/763 files. The one red is inherited from main; filed as task-d6ada082.\n- node-publisher-approved.test.ts is byte-identical to origin/main.\n- 8 in-memory mutation drills went red at their intended arms, and the control stayed green. sha256 is unchanged.\nREVIEW: comment-93bfa0ad covers the hook-after-move, concurrent-push, force-back, crash and replay cases, UNREADABLE handling, the same decisionId, and release-once. One residual is disclosed: git exits non-zero "
+  "completionSummary": "A publish whose push git REJECTED (a numeric non-zero exit) and whose remote tip still equals the tip read just before the push is now resolved automatically. The publisher records a REFUSED PUBLISH_NOT_LANDED receipt under the same decisionId, whose detail names both tips, then releases the hold as PUBLISH_NOT_TRANSMITTED (legal only from PUBLISHING). The card un-sticks, and a fresh human decision can push again. A push that succeeded, threw, timed out or lost its answer, or followed an unreadable pre-push tip, stays UNKNOWN. So does a crash between push and record. The evidence is a separate moe-publication-transmission/1 event; moe-publication-intent/1 is unchanged.\nFORWARD-ONLY: a publish stuck before this row has no transmission record and stays UNKNOWN until task-21be6e90's operator command lands.\nWHERE THE BYTES ARE:\n- Steps 2-6 and the CLAUDE.md bullet were swept into peer checkpoint 50d7a0a9. Row comment comment-1fdbbf78 lists the paths.\n- The governor's origin/main merge f7d014d6 wove in main's pre-flight and named UNKNOWN reasons.\n- This session made 2 owned edits, which ride in the completion commit:\n  - giveBack now names a release refused after the receipt (\"PUBLISH_NOT_LANDED receipted, but the reservation release was refused: <code>\"). Before, it named a remote mismatch.\n  - The STUCK arms pin each pass's exact reason. The merge had loosened them to a prefix regex.\nGATES (HEAD b38a6e5b):\n- Scoped run: Test Files 56 passed (56), 610 passed.\n- typecheck: 19/19, 0 errors.\n- Full daemon suite: 762/763 files. The one red is inherited from main; filed as task-d6ada082.\n- node-publisher-approved.test.ts is byte-identical to origin/main.\n- 8 in-memory mutation drills went red at their intended arms, and the control stayed green. sha256 is unchanged.\nREVIEW: comment-93bfa0ad covers the hook-after-move, concurrent-push, force-back, crash and replay cases, UNREADABLE handling, the same decisionId, and release-once. One residual is disclosed: git exits non-zero ",
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/src/orchestrator/node-publisher.ts"
+  ]
 }
