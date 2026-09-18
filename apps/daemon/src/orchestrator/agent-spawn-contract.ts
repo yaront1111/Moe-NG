@@ -71,17 +71,27 @@ export type AgentProcessFailureReason = "EXIT_NONZERO" | "EXIT_SIGNAL" | "SPAWN_
 
 export class AgentProcessFailureError extends Error {
   readonly code = "AGENT_PROCESS_FAILED";
+  readonly reason: AgentProcessFailureReason;
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly tail: readonly string[];
+  readonly outputSeen: boolean;
   /**
    * `outputSeen` is the spawner's own stream reading; a failure minted without one (a test
    * stub, a SPAWN_ERROR before any pipe existed) defaults to what its tail proves, so the flag
    * can never contradict the lines beside it.
    */
-  constructor(readonly reason: AgentProcessFailureReason, readonly exitCode: number | null,
-    readonly signal: NodeJS.Signals | null, readonly tail: readonly string[] = [],
-    readonly outputSeen: boolean = tail.length > 0) {
+  constructor(reason: AgentProcessFailureReason, exitCode: number | null,
+    signal: NodeJS.Signals | null, tail: readonly string[] = [],
+    outputSeen: boolean = tail.length > 0) {
     super(`AGENT_PROCESS_FAILED:${reason}${exitCode !== null ? `:${String(exitCode)}`
       : signal !== null ? `:${signal}` : ""}`);
     this.name = "AgentProcessFailureError";
+    this.reason = reason;
+    this.exitCode = exitCode;
+    this.signal = signal;
+    this.tail = tail;
+    this.outputSeen = outputSeen;
   }
 }
 
