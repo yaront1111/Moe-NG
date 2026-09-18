@@ -1,0 +1,37 @@
+{
+  "id": "task-4444d18096d24fb285bc78b03edd04f6",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "bug: parameter property in agent-spawn-contract.ts breaks every plain-Node entry that reaches compiled-node-source.ts (moe mcp exits 1)",
+  "description": "SOURCE: qa-84420029 in #governors msg-cc7225e9 (2026-09-18 05:09Z), found while reviewing task-14a2f0e4; re-measured by governor-cc0cc843 at HEAD 486edfc1 (moe/work-2026-09-18).\n\nDEFECT. Peer commit 20896d47 (squashed to origin/main via PR #54 f9d4e2fb) added `import { NodeBriefUnreadableError } from \"./agent-spawn-contract.js\"` to apps/daemon/src/orchestrator/compiled-node-source.ts:26 and wrapper-review-missions.ts:2. That pulls agent-spawn-contract.ts into the plain-Node module graph, and its `AgentProcessFailureError` constructor (line 79, dated e867ee93 2026-08-16) uses TS PARAMETER PROPERTIES (`constructor(readonly reason: ..., readonly exitCode ...)`), which Node 24 strip-only mode refuses.\n\nMEASURED (governor, Node v24.16.0):\n  node --input-type=module -e \"import('./apps/daemon/src/orchestrator/compiled-node-source.ts')...\"\n  -> ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX: TypeScript parameter property is not supported in strip-only mode\nMEASURED (qa-84420029): apps/daemon/src/runtime-entrypoint.test.ts 3 arms red (root namespace, recovery succession, Foundation ingress); `node apps/daemon/src/cli/moe-cli-main.ts mcp <project>` exits 1 with `MOE_CLI_MCP_UNAVAILABLE: TypeScript parameter property is not supported in strip-only mode` — i.e. task-14a2f0e4's headless MCP launcher is dead on arrival at HEAD. Attribution: serving only bb56f065's compiled-node-source.ts from memory turns the same run green.\nNOT MEASURED: whether `moe start` in the packaged artifact is also broken.\n\nKNOWN PRIOR ART / CONSUMERS (read before planning):\n- apps/daemon/src/orchestrator/moe-up-spawn.ts:41-58 documents this exact trap and works around it with NODE_TRANSFORM_TYPES_FLAG (`--experimental-transform-types`) for the moe-up children only, saying \"Drop it once the syntax is gone — the negative-control test in moe-up-main.test.ts says when.\" Removing the syntax will move that negative control; decide it deliberately (drop the flag per its own comment, or re-pin with a reason) — never delete the arm to go green.\n- Census of non-erasable syntax (rg over apps/packages/tests/tools/adapters): the ONLY production site is agent-spawn-contract.ts:79. Test/harness sites: tests/security/lane-receipts.ts:49, tests/e2e/foundation/e2e-process.ts:58, apps/daemon/src/projects/project-review-drain.test.ts:69 (vitest transforms these; they matter only if a typecheck guard covers them).\n- No tsconfig sets `erasableSyntaxOnly` (TypeScript here is 7.0.2; base sets verbatimModuleSyntax only), which is why `pnpm typecheck` never caught it.\n\nROOT-CAUSE FIX EXPECTED: make the module erasable (explicit fields instead of parameter properties) AND close the class of bug at the chokepoint so the next parameter property/enum/namespace reds typecheck instead of a runtime entry.",
+  "definitionOfDone": [
+    "Pre-fix red recorded, then green at the delivered tree: plain `node` (no flags) imports apps/daemon/src/orchestrator/compiled-node-source.ts without ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX, and `node apps/daemon/src/cli/moe-cli-main.ts mcp <git-initialised scratch project>` no longer fails MOE_CLI_MCP_UNAVAILABLE on a parameter property.",
+    "apps/daemon/src/runtime-entrypoint.test.ts passes in full (the three arms named in the description included), run on its own with the daemon vitest config.",
+    "Recurrence guard: the daemon's typecheck refuses non-erasable TypeScript syntax (e.g. `erasableSyntaxOnly`), proven by a negative control — re-introducing a parameter property in a daemon src file reds `pnpm typecheck` — with the control reverted and its restore proven.",
+    "The moe-up-spawn.ts NODE_TRANSFORM_TYPES_FLAG and its negative control in moe-up-main.test.ts are resolved deliberately (flag dropped per its own comment, or kept with a stated reason and the pin re-measured); no test arm deleted or matcher widened to go green.",
+    "`pnpm typecheck` green repo-wide and the daemon suite shows no new reds versus the pre-fix baseline (pre-existing/timeout flakes re-run alone and named)."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "GOVERNOR",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 124,
+  "comments": [
+    {
+      "id": "comment-421ff1b224d042028fc574a527dcee04",
+      "author": "governor-cc0cc843",
+      "content": "Governor measurement, closes the description's NOT MEASURED line partly: the packaged artifact dist/moe-windows (compiled-node-source.ts written 2026-09-18 07:55:52 +0300) does NOT carry the `import { NodeBriefUnreadableError } from \"./agent-spawn-contract.js\"` edge, so the artifact AS PACKED is not reached by this regression through compiled-node-source.ts. Its agent-spawn-contract.ts:79 still has the parameter property (reached today by the wrapper, which moe-up launches with --experimental-transform-types). The next re-pack from main WILL carry the edge (origin/main 0dcf6ba9 compiled-node-source.ts:26 has it), so this row should land before the next pack:windows.",
+      "timestamp": "2026-09-18T06:24:47.926Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T06:22:27.676Z",
+  "updatedAt": "2026-09-18T06:24:47.926Z"
+}

@@ -20,12 +20,12 @@
     "DECIDE THE WITHHOLDING RULE DELIBERATELY AND WRITE IT DOWN. The consumer's DoD depends on which horn you take, and an undocumented choice reads as an accident to the row that consumes it."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "DELIVERED ELSEWHERE — archived as closed (PLANNING->DONE is not an allowed transition). Governor closure on verified landed content, requested by architect-73d103f8 (msg-822c6eee). Measured against origin/main 0dcf6ba9: the capability is on main via 04b01548 (PR #30, ancestor=yes) — affordance-planning-offers.ts:277 mints offer(input, \"release.decide\", releaseDossierAggregateId(goal.goalId)), union widened at :131, and affordance-planning-offers.test.ts:789 names this row (\"THE RELEASE DECISION CARD (task-21209552, DoD 1-4)\"). This row's OWN completion commit 57446237 (Moe-Landed-By qa-f2906c26, 18 files / 262 tests EXIT 0) is NOT an ancestor of origin/main; its only containing ref is refs/moe/rescue/task-161b7e9d566b4c47b429490a54a6cca1/20260909T215449Z. Stranded and superseded by the PR #30 content — do not re-land it. Closed rather than re-planned so a seat does not duplicate landed code in the shared tree.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "dependsOn": [
@@ -37,5 +37,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T17:51:53.121Z",
-  "updatedAt": "2026-09-06T17:51:53.121Z"
+  "updatedAt": "2026-09-18T06:25:02.410Z",
+  "planRevision": 0,
+  "metrics": {
+    "firstClaimAt": "2026-09-18T05:03:13.061Z"
+  },
+  "contextFetchedBy": [
+    "architect-73d103f8"
+  ]
 }
