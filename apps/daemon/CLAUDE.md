@@ -122,7 +122,19 @@ its own: a caller that injects no dependency provider is refused, never served a
   journaled, next pass retries), `UNKNOWN` with `PUBLISH_EFFECT_RECONCILIATION_REQUIRED: <the
   check that failed>` (git's exit code and last words ride along from
   `repository/git-publication-port.ts`, URL secrets redacted), `PUSHED`, `REFUSED` or
-  `WORKSPACE_UNSET`. A journaled intent is never permission to push again. A free repository
+  `WORKSPACE_UNSET`. A journaled intent is never permission to push again, so the remote is
+  pre-flighted BEFORE any intent: `PublicationGitPort.contains(candidate, remoteTip)` (`git
+  merge-base --is-ancestor` over the candidate's own objects; a tip this repository never
+  fetched is `known: false`, hence not contained) and a tip the approved sha does not contain
+  records a REFUSED receipt `PUBLISH_REMOTE_DIVERGED` with the operator's instruction (fetch and
+  merge, then decide again), releases the reservation `ABORTED_BEFORE_EXECUTION` and pushes
+  nothing. Every other pre-flight failure (observe or contains refused: `PUBLISH_REMOTE_UNREADABLE`,
+  `PUBLISH_REPOSITORY_CHANGED`, …) is likewise a REFUSED receipt under the git port's own code
+  and words plus "decide again to retry", never `WAITING`: `pendingPublication` names the goal
+  while no intent exists, so a waiting pre-flight would turn every delivery away until the remote
+  read again, and a dead token would starve the whole product. Without that pre-flight an
+  operator merge on GitHub was a permanent UNKNOWN with every
+  delivery REPOSITORY_EXECUTION_BUSY (UnAI 2026-09-18). A free repository
   is left to an approved publish that has not held it yet: `RepositoryDeliveryConfig.publishWaiting`
   (wired to `pendingPublication`) turns deliveries away in `admission` and `start`, because the
   delivery pass runs before the publisher's and won every race (UnAI 2026-09-18).

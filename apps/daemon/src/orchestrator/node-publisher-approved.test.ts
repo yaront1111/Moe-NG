@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { PublicationGitPort } from "../repository/publication-effect-contracts.js";
 import { readPublicationIntent } from "../repository/publication-effect-ledger.js";
 import { publicationRepositoryId } from "../repository/publication-approval-contracts.js";
+import type { PublicationRefusal } from "../repository/publication-approval-contracts.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
 import { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId } from "../repository/publish-receipt-contracts.js";
 import type { RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
@@ -28,6 +29,7 @@ function requestPublish(store: ReturnType<typeof openStore>, commandId: string, 
 }
 function reservation() {
   let held: RepositoryExecutionHandle | null = null;
+  const releases: string[] = [];
   const port: RepositoryExecutionPort = {
     acquire: (_ws, owner, controller) => {
       if (held !== null) return { ok: false, code: "REPOSITORY_EXECUTION_BUSY", detail: "busy" };
@@ -48,7 +50,12 @@ function reservation() {
     },
     release: (_ws, owner, revision, reason) => {
       expect(held?.owner).toBe(owner); expect(held?.reservation.revision).toBe(revision);
-      expect(reason).toBe("PUBLISHED"); held = null; return { ok: true, released: true };
+      // The real port's rule (repository-execution-port.ts): PUBLISHED leaves PUBLISHING only,
+      // ABORTED_BEFORE_EXECUTION leaves a RESERVED reservation that never executed.
+      const allowed = reason === "PUBLISHED" ? held?.reservation.phase === "PUBLISHING"
+        : reason === "ABORTED_BEFORE_EXECUTION" && held?.reservation.phase === "RESERVED";
+      if (!allowed) return { ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID", detail: `${reason} from ${held?.reservation.phase ?? "nothing"}` };
+      releases.push(reason); held = null; return { ok: true, released: true };
     },
   };
   // A coding seat's hold, as the delivery coordinator leaves it: another owner, EXECUTING.
@@ -57,12 +64,21 @@ function reservation() {
     held = { owner, reservation: { ...owner, controllerId: "controller-1", controllerPid: 1234, identity, phase: "EXECUTING",
       baselineId: "baseline-1", sessionId: "sess-1", pid: 4242, revision: 7 } };
   };
-  return { port, held: () => held, hold, free: () => { held = null; } };
+  return { port, held: () => held, hold, free: () => { held = null; }, releases: () => [...releases] };
 }
 function world(bound = true, store = openStore()) {
   const decisionId = requestPublish(store, "publish-1", bound); const fence = reservation();
   let pushes = 0; let remote: string | null = null; let failPush = false; let throwPush = false; let unreadable = false;
+  let containsRefusal: PublicationRefusal | null = null;
+  // What the candidate's repository holds: every known object, and those the approved sha contains.
+  const known = new Set([approval.sha]); const contained = new Set([approval.sha]);
   const git: PublicationGitPort = {
+    async contains(given, remoteSha) {
+      expect(given).toEqual(candidate);
+      expect(readPublicationIntent(store, PROJECT_ID, GOAL, decisionId)).toBeNull();
+      if (containsRefusal !== null) return containsRefusal;
+      return remoteSha === null ? { ok: true, contains: true, known: true } : { ok: true, contains: contained.has(remoteSha), known: known.has(remoteSha) };
+    },
     async push(given) {
       pushes += 1; expect(given).toEqual(candidate);
       expect(fence.held()?.reservation.phase).toBe("PUBLISHING");
@@ -80,8 +96,11 @@ function world(bound = true, store = openStore()) {
     storeId: "D:/store.db", controller: { controllerId: "controller-1", controllerPid: 1234 }, processAlive: () => false };
   return { config, store, decisionId, fence, pushes: () => pushes,
     remote: (sha: string | null) => { remote = sha; }, fail: () => { failPush = true; }, throw: () => { throwPush = true; },
-    unreadable: (value: boolean) => { unreadable = value; } };
+    unreadable: (value: boolean) => { unreadable = value; }, refuseContains: (refusal: PublicationRefusal | null) => { containsRefusal = refusal; },
+    ancestor: (sha: string) => { known.add(sha); contained.add(sha); }, foreign: (sha: string) => { known.add(sha); } };
 }
+const receiptOf = (w: ReturnType<typeof world>) => readPublishLedger(w.store, PROJECT_ID).get(GOAL)?.receipts.get(w.decisionId);
+const runsRead = (w: ReturnType<typeof world>) => readRunGoalPublication(w.store, PROJECT_ID, readPublishLedger(w.store, PROJECT_ID).get(GOAL));
 
 describe("approved node publication", () => {
   it("journals before pushing the immutable candidate while holding the repository, then records exact remote equality", async () => {
@@ -176,6 +195,65 @@ describe("approved node publication", () => {
     expect(w.fence.held()?.reservation.phase).toBe("PUBLISHING"); expect(w.pushes()).toBe(1);
     expect(await createNodePublisher(w.config).publishOnce()).toMatchObject([{ outcome: "PUSHED" }]);
     expect(w.pushes()).toBe(1); expect(w.fence.held()).toBeNull();
+  });
+  describe("pre-flight before any intent (UnAI 2026-09-18: an operator merged on GitHub behind Moe's back)", () => {
+    const FOREIGN = "b".repeat(40);
+    it("refuses a diverged remote by name, journals nothing, pushes nothing and gives the repository back", async () => {
+      const w = world(); w.remote(FOREIGN); w.foreign(FOREIGN);
+      const publisher = createNodePublisher(w.config);
+      expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "REFUSED", detail: "PUBLISH_REMOTE_DIVERGED: remote approved-branch is at bbbbbbbbbb, "
+        + "which the approved aaaaaaaaaa does not contain: fetch and merge (or rebase) it into the workspace branch, then decide again" }]);
+      expect(w.pushes()).toBe(0);
+      expect(readPublicationIntent(w.store, PROJECT_ID, GOAL, w.decisionId)).toBeNull();
+      expect(w.fence.held()).toBeNull(); expect(w.fence.releases()).toEqual(["ABORTED_BEFORE_EXECUTION"]);
+      expect(receiptOf(w)).toMatchObject({ outcome: "REFUSED", refusal: { code: "PUBLISH_REMOTE_DIVERGED", detail: expect.stringContaining("fetch and merge") },
+        sha: approval.sha, branch: approval.branch, url: null });
+      // The request has its receipt: deliveries are no longer turned away, the card names the code.
+      expect(pendingPublication(w.store, PROJECT_ID)).toBeNull();
+      expect(runsRead(w)).toMatchObject({ outcome: "REFUSED", code: "PUBLISH_REMOTE_DIVERGED", decisionId: w.decisionId, branch: approval.branch });
+      expect(await publisher.publishOnce()).toEqual([]); expect(w.pushes()).toBe(0);
+    });
+    it("treats a remote tip this repository has never seen as diverged", async () => {
+      const w = world(); w.remote("c".repeat(40));
+      expect(await createNodePublisher(w.config).publishOnce()).toMatchObject([{ outcome: "REFUSED", detail: expect.stringContaining("PUBLISH_REMOTE_DIVERGED: remote approved-branch is at cccccccccc") }]);
+      expect(w.pushes()).toBe(0); expect(w.fence.held()).toBeNull();
+      expect(readPublicationIntent(w.store, PROJECT_ID, GOAL, w.decisionId)).toBeNull();
+    });
+    it("pushes exactly once over a remote tip the approved sha contains, and over an absent branch", async () => {
+      const ancestor = "d".repeat(40);
+      const w = world(); w.remote(ancestor); w.ancestor(ancestor);
+      expect(await createNodePublisher(w.config).publishOnce()).toMatchObject([{ outcome: "PUSHED" }]);
+      expect(w.pushes()).toBe(1); expect(w.fence.held()).toBeNull(); expect(w.fence.releases()).toEqual(["PUBLISHED"]);
+      const absent = world();
+      expect(await createNodePublisher(absent.config).publishOnce()).toMatchObject([{ outcome: "PUSHED" }]);
+      expect(absent.pushes()).toBe(1); expect(absent.fence.releases()).toEqual(["PUBLISHED"]);
+    });
+    // NEVER WAITING before an intent: pendingPublication() names the goal while no intent exists, so a
+    // WAITING pre-flight would turn every delivery away from a free repository until the remote read
+    // again — a dead token would starve the whole product. One more decision is the price of a blip.
+    it("refuses by the git port's own code and words when the remote cannot be read before any intent, journaling nothing and giving the repository back", async () => {
+      const w = world(); w.unreadable(true); const publisher = createNodePublisher(w.config);
+      expect(await publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "REFUSED",
+        detail: "PUBLISH_REMOTE_UNREADABLE: git exited 128: Could not resolve host; decide again to retry" }]);
+      expect(w.pushes()).toBe(0); expect(w.fence.held()).toBeNull(); expect(w.fence.releases()).toEqual(["ABORTED_BEFORE_EXECUTION"]);
+      expect(readPublicationIntent(w.store, PROJECT_ID, GOAL, w.decisionId)).toBeNull();
+      expect(receiptOf(w)).toMatchObject({ outcome: "REFUSED", refusal: { code: "PUBLISH_REMOTE_UNREADABLE", detail: "git exited 128: Could not resolve host; decide again to retry" },
+        sha: approval.sha, branch: approval.branch, url: null });
+      expect(pendingPublication(w.store, PROJECT_ID)).toBeNull();
+      expect(runsRead(w)).toMatchObject({ outcome: "REFUSED", code: "PUBLISH_REMOTE_UNREADABLE", decisionId: w.decisionId });
+      // The receipt closes the request: a readable remote later does not revive it without a new decision.
+      w.unreadable(false);
+      expect(await publisher.publishOnce()).toEqual([]); expect(w.pushes()).toBe(0);
+    });
+    it("refuses by the port's own permanent code when the candidate's repository cannot answer contains() before any intent", async () => {
+      const w = world(); w.remote("d".repeat(40)); w.refuseContains({ ok: false, code: "PUBLISH_REPOSITORY_CHANGED", detail: "PUBLISH_REPOSITORY_CHANGED" });
+      expect(await createNodePublisher(w.config).publishOnce()).toEqual([{ goalId: GOAL, outcome: "REFUSED", detail: "PUBLISH_REPOSITORY_CHANGED: PUBLISH_REPOSITORY_CHANGED; decide again to retry" }]);
+      expect(w.pushes()).toBe(0); expect(w.fence.held()).toBeNull(); expect(w.fence.releases()).toEqual(["ABORTED_BEFORE_EXECUTION"]);
+      expect(readPublicationIntent(w.store, PROJECT_ID, GOAL, w.decisionId)).toBeNull();
+      expect(receiptOf(w)).toMatchObject({ outcome: "REFUSED", refusal: { code: "PUBLISH_REPOSITORY_CHANGED" }, sha: approval.sha, url: null });
+      expect(pendingPublication(w.store, PROJECT_ID)).toBeNull();
+      expect(runsRead(w)).toMatchObject({ outcome: "REFUSED", code: "PUBLISH_REPOSITORY_CHANGED" });
+    });
   });
   it("refuses legacy unbound decisions without starting Git", async () => {
     const w = world(false); expect(await createNodePublisher(w.config).publishOnce()).toMatchObject([{ outcome: "REFUSED" }]);

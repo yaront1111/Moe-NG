@@ -52,6 +52,42 @@ describe("immutable publication Git port", () => {
     const long = await noisy.push(candidate);
     expect(long.ok).toBe(false); if (!long.ok) expect(long.detail.length).toBeLessThan(450);
   });
+  it("answers whether the remote tip is contained in the approved sha from the candidate's own objects, before any push", async () => {
+    // An operator who merged on GitHub behind Moe's back (UnAI 2026-09-18) leaves a tip this
+    // repository never fetched: cat-file -e answers 1, and that is "not contained", not a failure.
+    const tip = "b".repeat(40);
+    const arm = (presence: number, ancestry: number, stderr = "") => {
+      const calls: string[][] = [];
+      const run: GitRunner = async (_cwd, args) => {
+        calls.push([...args]);
+        if (args.includes("cat-file")) return { code: presence, stderr, stdout: "" };
+        if (args.includes("merge-base")) return { code: ancestry, stderr, stdout: "" };
+        return { code: 0, stderr: "", stdout: args.includes("--git-path") ? "D:/approved/.git/objects\n" : "" };
+      };
+      return { calls, port: createGitPublicationPort({ run, resolveIdentity: () => ({ ok: true, identity }) }) };
+    };
+    const ancestor = arm(0, 0);
+    expect(await ancestor.port.contains(candidate, tip)).toEqual({ ok: true, contains: true, known: true });
+    const ancestry = ancestor.calls.find((args) => args.includes("merge-base"));
+    expect(ancestry).toEqual([expect.stringMatching(/^--git-dir=/u), "merge-base", "--is-ancestor", tip, candidate.approval.sha]);
+    expect(ancestry?.[0]).not.toContain(identity.gitDirectory);
+    expect(ancestor.calls.find((args) => args.includes("cat-file"))).toEqual([expect.stringMatching(/^--git-dir=/u), "cat-file", "-e", tip]);
+    expect(ancestor.calls.some((args) => args.includes("push") || args.includes("ls-remote"))).toBe(false);
+    expect(await arm(0, 1).port.contains(candidate, tip)).toEqual({ ok: true, contains: false, known: true });
+    expect(await arm(1, 0).port.contains(candidate, tip)).toEqual({ ok: true, contains: false, known: false });
+    // Equal and absent tips are fast-forwards by definition: no Git is spawned for them.
+    const trivial = arm(1, 1);
+    expect(await trivial.port.contains(candidate, candidate.approval.sha)).toEqual({ ok: true, contains: true, known: true });
+    expect(await trivial.port.contains(candidate, null)).toEqual({ ok: true, contains: true, known: true });
+    expect(trivial.calls).toEqual([]);
+    expect(await arm(0, 128, "fatal: bad object\n").port.contains(candidate, tip))
+      .toEqual({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "git exited 128: fatal: bad object" });
+    expect(await arm(128, 0, "fatal: not a git repository\n").port.contains(candidate, tip))
+      .toEqual({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "git exited 128: fatal: not a git repository" });
+    expect(await arm(0, 0).port.contains(candidate, "not-a-sha")).toMatchObject({ ok: false, code: "PUBLISH_REMOTE_UNREADABLE" });
+    const substituted = createGitPublicationPort({ run: async () => { throw new Error("must not run"); }, resolveIdentity: () => ({ ok: true, identity: { ...identity, root: "D:/other" } }) });
+    expect(await substituted.contains(candidate, tip)).toMatchObject({ ok: false, code: "PUBLISH_REPOSITORY_CHANGED" });
+  });
   it("refuses a substituted canonical repository before spawning Git", async () => {
     let calls = 0;
     const port = createGitPublicationPort({ run: async () => { calls += 1; throw new Error("must not run"); },

@@ -19,7 +19,8 @@ function world() {
     requestBytes: encoder.encode("{}"), targetAggregateId: aggregateId });
   let pushes = 0;
   const git: PublicationGitPort = { async push() { pushes += 1; throw new Error("unbound request must not push"); },
-    async observe() { throw new Error("unbound request must not query remote"); } };
+    async observe() { throw new Error("unbound request must not query remote"); },
+    async contains() { throw new Error("unbound request must not query remote"); } };
   return { store, decisionId: response.decision.decisionId, pushes: () => pushes,
     config: { git, projectId: PROJECT_ID, store, workspace: "D:/ws", repository: createRepositoryExecutionPort(),
       storeId: "D:/store", controller: { controllerId: "legacy-test", controllerPid: process.pid } } };

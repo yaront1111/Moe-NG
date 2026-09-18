@@ -5,7 +5,7 @@ import { join, resolve, sep } from "node:path";
 import { landingEnvironment, nodeGitRunner } from "./git-landing-port.js";
 import type { GitRunner } from "./git-landing-port.js";
 import { decodePublicationCandidate, publicationRefused, publicationRepositoryId, validPublicationSha } from "./publication-approval-contracts.js";
-import type { PublicationCandidate } from "./publication-approval-contracts.js";
+import type { PublicationCandidate, PublicationRefusal } from "./publication-approval-contracts.js";
 import type { PublicationGitPort } from "./publication-effect-contracts.js";
 import { resolveRepositoryExecutionIdentity } from "./repository-execution-identity.js";
 import { publicationCredentialArguments } from "./git-publication-credentials.js";
@@ -64,17 +64,23 @@ export function createGitPublicationPort(options: GitPublicationOptions = {}): P
       if (target.startsWith(`${temporaryRoot}${sep}`)) rmSync(target, { recursive: true, force: true });
     }
   };
+  /** Lends the candidate repository's objects to the isolated directory; none of its refs or config. */
+  const borrow = async (candidate: PublicationCandidate, directory: string): Promise<PublicationRefusal | null> => {
+    const objects = await run(candidate.identity.root, [`--git-dir=${candidate.identity.gitDirectory}`, "rev-parse", "--path-format=absolute", "--git-path", "objects"]);
+    const objectPath = objects.stdout.replace(/\r?\n$/u, "");
+    if (objects.code !== 0 || objectPath === "" || /[\r\n]/u.test(objectPath)) return publicationRefused("PUBLISH_OBJECTS_UNREADABLE");
+    mkdirSync(join(directory, "objects", "info"), { recursive: true });
+    writeFileSync(join(directory, "objects", "info", "alternates"), `${objectPath.replaceAll("\\", "/")}\n`);
+    return null;
+  };
   return Object.freeze({
     async push(raw: PublicationCandidate) {
       const candidate = admit(raw);
       if (candidate === null) return publicationRefused("PUBLISH_REPOSITORY_CHANGED");
       try {
         return await isolated(candidate, async (directory) => {
-          const objects = await run(candidate.identity.root, [`--git-dir=${candidate.identity.gitDirectory}`, "rev-parse", "--path-format=absolute", "--git-path", "objects"]);
-          const objectPath = objects.stdout.replace(/\r?\n$/u, "");
-          if (objects.code !== 0 || objectPath === "" || /[\r\n]/u.test(objectPath)) return publicationRefused("PUBLISH_OBJECTS_UNREADABLE");
-          mkdirSync(join(directory, "objects", "info"), { recursive: true });
-          writeFileSync(join(directory, "objects", "info", "alternates"), `${objectPath.replaceAll("\\", "/")}\n`);
+          const borrowed = await borrow(candidate, directory);
+          if (borrowed !== null) return borrowed;
           const object = await run(directory, [`--git-dir=${directory}`, "cat-file", "-t", candidate.approval.sha]);
           if (object.code !== 0 || object.stdout.trim() !== "commit") return publicationRefused("PUBLISH_COMMIT_UNREADABLE");
           const authentication = await publicationCredentialArguments(configRunner, candidate);
@@ -83,6 +89,27 @@ export function createGitPublicationPort(options: GitPublicationOptions = {}): P
           return pushed.code === 0 ? { ok: true as const } : refusedWith("PUBLISH_PUSH_UNKNOWN", gitFailureWords(pushed.code, pushed.stderr));
         });
       } catch (error) { return refusedWith("PUBLISH_PUSH_UNKNOWN", `push threw: ${said(error)}`); }
+    },
+    async contains(raw: PublicationCandidate, remoteSha: string | null) {
+      const candidate = admit(raw);
+      if (candidate === null) return publicationRefused("PUBLISH_REPOSITORY_CHANGED");
+      // An absent branch, or one already at the approved sha, is a fast-forward by definition.
+      if (remoteSha === null || remoteSha === candidate.approval.sha) return { ok: true as const, contains: true, known: true };
+      if (!validPublicationSha(remoteSha)) return refusedWith("PUBLISH_REMOTE_UNREADABLE", `remote tip ${remoteSha} is not a git object id`);
+      try {
+        return await isolated(candidate, async (directory) => {
+          const borrowed = await borrow(candidate, directory);
+          if (borrowed !== null) return borrowed;
+          // `cat-file -e` exits 1, and only 1, for an object this repository never fetched: not
+          // contained and not a failure (the operator's own commits are exactly what is missing).
+          const present = await run(directory, [`--git-dir=${directory}`, "cat-file", "-e", remoteSha]);
+          if (present.code === 1) return { ok: true as const, contains: false, known: false };
+          if (present.code !== 0) return refusedWith("PUBLISH_REMOTE_UNREADABLE", gitFailureWords(present.code, present.stderr));
+          const ancestry = await run(directory, [`--git-dir=${directory}`, "merge-base", "--is-ancestor", remoteSha, candidate.approval.sha]);
+          if (ancestry.code === 0 || ancestry.code === 1) return { ok: true as const, contains: ancestry.code === 0, known: true };
+          return refusedWith("PUBLISH_REMOTE_UNREADABLE", gitFailureWords(ancestry.code, ancestry.stderr));
+        });
+      } catch (error) { return refusedWith("PUBLISH_REMOTE_UNREADABLE", `merge-base threw: ${said(error)}`); }
     },
     async observe(raw: PublicationCandidate) {
       const candidate = admit(raw);
