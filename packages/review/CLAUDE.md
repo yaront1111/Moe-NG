@@ -91,7 +91,7 @@ durable fact and consumes the verdict. Its one job is to make a reviewer's autho
   All seven exist today; adding a module without one reds the daemon's runtime graph, not `tsc`.
 - `tests/security/boundary-roster.security.ts` pins `"packages/review": 1` and rosters exactly
   `REVIEW_DECISION_LAYERS` (axis `integrity`). A second `export const *_LAYER(S)` in this package
-  reds `EXPECTED_ROSTER_SIZE` (180) and the distribution together.
+  reds `EXPECTED_ROSTER_SIZE` (181) and the distribution together.
 - `tests/security/integrity-hostile-cases.ts` imports this package by **relative path**
   (`../../packages/review/src/index.js`) because the lane tsconfig makes `@moe/review`
   unreachable by name; its three review arms replay a superseded round and race an

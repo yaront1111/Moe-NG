@@ -14,10 +14,12 @@
  * the description listed belong to sibling slices. Reconciling the two lists would have
  * produced a gap and an overlap at once, so only the roster counts.
  *
- * THE ROSTER IS READ FROM ITS COMMITTED BYTES. `BOUNDARY_ROSTER` is not exported, so this
- * file parses the artifact rather than importing a copy — the stronger of the two: it
- * reddens if the roster re-tags a member, and it cannot drift. The parse asserts its own
- * yield, so a regex that silently matched nothing reddens instead of passing vacuously.
+ * THE ROSTER IS READ FROM ITS COMMITTED BYTES. `BOUNDARY_ROSTER` IS exported — and
+ * `durable-store-boundaries.security.ts` imports it, which re-registers the roster's own suites
+ * inside that fork — so this file parses the artifact by CHOICE rather than by necessity. It is
+ * the stronger of the two: it reddens if the roster re-tags a member, it cannot drift, and it
+ * adds no foreign suites to this slice's report. The parse asserts its own yield, so a regex
+ * that silently matched nothing reddens instead of passing vacuously.
  *
  * FORGERY IS THE CENTRAL MOVE ON THIS AXIS, and it is asserted in TWO HALVES. Every boundary
  * here guards a digest, a codec or an authority record, so a probe that mutated a field and

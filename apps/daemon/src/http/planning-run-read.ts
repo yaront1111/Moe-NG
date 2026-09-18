@@ -94,8 +94,17 @@ function reviewableNow(lifecycle: string, approval: PlanningRunApprovalState): b
  * lifecycle short of PLAN_REVIEW is NOT here (it is answered with `reviewable:false`), nor is
  * unsealed bodies (answered with `authority:null`). Transport faults - a malformed `{runId}` body,
  * an absent port - carry the listener's own codes and never enter this vocabulary.
+ *
+ * AUTHORITY_UNREADABLE is the one thing `authority:null` must never be allowed to mean. A store
+ * that cannot answer for the authority aggregate used to be served as an UNSEALED run — a 200
+ * RUN frame with `plan:null` — and the control room rendered it as "The plan is not sealed yet;
+ * nothing to review" and held the approval control disarmed. That is the same fail-closed rule
+ * `PLANNING_RUN_APPROVAL_STATES` states for a decision this daemon cannot read: not a fact it may
+ * present as absent. A REFUSAL keeps the wire shape byte-identical for the shipped bundle,
+ * whose decoder admits exactly the RUN frame's keys and shows any refusal's code plainly.
  */
 export const PLANNING_RUN_READ_CODES = Object.freeze([
+  "PLANNING_RUN_READ_AUTHORITY_UNREADABLE",
   "PLANNING_RUN_READ_CAPABILITY_DENIED",
   "PLANNING_RUN_READ_PROJECT_MISMATCH",
   "PLANNING_RUN_READ_RUN_UNKNOWN",
@@ -186,13 +195,19 @@ const objectOf = (value: unknown): Readonly<Record<string, unknown>> | null =>
 const stringOf = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
-/** `store.readEvents`, fail-closed: a store that cannot answer for the authority aggregate is an
- *  unsealed run, never a throw across the transport. */
-function readAggregate(store: SqliteEventStore, aggregateId: string): readonly StoredEvent[] {
+/** The authority read THREW. Kept apart from an empty aggregate, which is a real unsealed run. */
+const AUTHORITY_UNREADABLE = Symbol("PLANNING_RUN_READ_AUTHORITY_UNREADABLE");
+
+/** `store.readEvents`, fail-closed and never a throw across the transport — but a store that
+ *  cannot answer for the authority aggregate is NOT an unsealed run, and answering `[]` here
+ *  made it one. */
+function readAggregate(
+  store: SqliteEventStore, aggregateId: string,
+): readonly StoredEvent[] | typeof AUTHORITY_UNREADABLE {
   try {
     return store.readEvents(aggregateId);
   } catch {
-    return [];
+    return AUTHORITY_UNREADABLE;
   }
 }
 
@@ -205,9 +220,10 @@ const bytesOf = (base64: string): Uint8Array => new Uint8Array(Buffer.from(base6
  */
 function verifyBodies(
   store: SqliteEventStore, authorityRef: string, submissionHash: string,
-): VerifiedBodies | null {
-  const matches = readAggregate(store, authorityRef)
-    .filter((event) => event.eventType === BODIES_EVENT_TYPE);
+): VerifiedBodies | null | typeof AUTHORITY_UNREADABLE {
+  const read = readAggregate(store, authorityRef);
+  if (typeof read === "symbol") return read;
+  const matches = read.filter((event) => event.eventType === BODIES_EVENT_TYPE);
   if (matches.length !== 1) return null;
   const decoded = decodeBoundedJsonBytes((matches[0] as StoredEvent).payload);
   const payload = decoded.ok ? objectOf(decoded.value) : null;
@@ -285,6 +301,8 @@ export function readPlanningRun(
   }
   const authorityRef = planningAuthorityAggregateId(runId);
   const bodies = verifyBodies(store, authorityRef, submissionHash);
+  // Refused, not served unsealed: see PLANNING_RUN_READ_CODES.
+  if (typeof bodies === "symbol") return refused("PLANNING_RUN_READ_AUTHORITY_UNREADABLE");
   const envelopeDigest = stringOf(record["envelopeDigest"]);
   const approval = approvalStateOf(store, goalRef, runId);
   return Object.freeze({

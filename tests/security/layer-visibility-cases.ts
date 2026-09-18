@@ -7,7 +7,7 @@
  * DECLARES; it judges nothing and asserts nothing.
  *
  * WHY IT EXISTS. `boundary-roster.security.ts` asserts "scan minus roster is empty" and a
- * cardinality of 168. Both are true, and both are narrower than they read: `DECLARATION_PATTERN`
+ * cardinality of 181. Both are true, and both are narrower than they read: `DECLARATION_PATTERN`
  * is anchored `^export const`, so the claim covers EXPORTED declarations only. Two live
  * populations sit outside it, and neither was measured before this module landed.
  *
@@ -171,7 +171,11 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 // reason as that sibling — the stamp never leaves the browser, so rostering it would advertise
 // a channel that does not exist. Enrolled here, not in LAYER_ROSTER: EXPECTED_ROSTER_SIZE is
 // unedited, which is the arithmetic that confirms the route.
-const EXPECTED_PRIVATE_COUNT = 82;
+// 82 -> 83 on 2026-09-18 for ABSENT_LAYER (v2/goals/design-version-note.tsx). NOTHING MOVED IN
+// PRODUCTION: `isProductionModule` accepted `.ts` only, so no `.tsx` was ever opened by either
+// scan and this declaration had never been counted. The same widening moved EXPECTED_ROSTER_SIZE
+// (180 -> 181, NEW_PRODUCT_LAYER) and both literal counts below — a blind spot, not a landing.
+const EXPECTED_PRIVATE_COUNT = 83;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -194,6 +198,10 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "RELEASE_LAYER", file: "apps/control-room/src/v2/goals/release-port.ts" },
   { constant: "AGENT_PROVIDER_LAYER", file: "apps/control-room/src/v2/ops/agent-provider-port.ts" },
   { constant: "ADVANCED_FRAMES_LAYER", file: "apps/control-room/src/v2/shell/advanced-frames.ts" },
+  // Not a stamp at all: the card MATCHES the daemon's own `LEDGER` layer to tell "no design was
+  // compiled" apart from "the read failed". Module-private for the reason the sibling ports are
+  // — it leaves the browser on nothing — and invisible until `isProductionModule` learned `.tsx`.
+  { constant: "ABSENT_LAYER", file: "apps/control-room/src/v2/goals/design-version-note.tsx" },
   { constant: "ACTIVATION_RECEIPTS_LAYER", file: "apps/daemon/src/bootstrap/activation-receipts.ts" },
   { constant: "ADMISSION_GATE_LAYER", file: "apps/daemon/src/activation/admission-gate-resolver.ts" },
   { constant: "AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority-contracts.ts" },
@@ -404,8 +412,14 @@ const resolvedLayerLiterals = (): readonly string[] => {
 // (CONTROL_ROOM_LIVE_DOCUMENTS, HUMAN_AUTHORITY_GATE, and timeline-contract.ts's
 // INPUT/PAGING/RENDER) are spelled at no surviving `layer:` site. Re-measured by running the
 // TASK-LV arms over the tree with the dead set removed.
-const EXPECTED_LITERAL_COUNT = 106;
-const EXPECTED_UNRESOLVED_LITERAL_COUNT = 37;
+// 106 -> 119 and 37 -> 45 on 2026-09-18, all of it the `.tsx` blind spot closing: thirteen
+// distinct literals live in React modules the scan had never opened, eight of them resolving to
+// no declaration. The other five already resolve — CONTROL_ROOM_AGENT_PROVIDER,
+// CONTROL_ROOM_DEPLOY, CONTROL_ROOM_GATE1, CONTROL_ROOM_PUBLISH and CONTROL_ROOM_RELEASE are
+// the values their sibling ports declare — so the resolved side moved 69 -> 74 and the
+// unresolved side 37 -> 45. Measured by running the TASK-LV arms with the widened extension rule.
+const EXPECTED_LITERAL_COUNT = 119;
+const EXPECTED_UNRESOLVED_LITERAL_COUNT = 45;
 
 /**
  * The frozen unresolved census. THE ALLOWLIST IS THE DELIVERABLE, NOT A TODO: closing these
@@ -425,6 +439,17 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   "CRITERION_EXECUTOR", // criterion-evidence/{criterion-approval,criterion-runner,criterion-receipt}.ts
   "DAEMON_COMMAND_SEAM", // daemon-command contracts and adapters
   "REPOSITORY_WORKFLOW_READ", // http/repository-workflow-read.ts
+  // THE `.tsx` COHORT, visible from 2026-09-18 when `isProductionModule` stopped accepting `.ts`
+  // alone. Every one is a screen or card stamping its own answer on a read that failed before any
+  // port could name a layer; none is a declaration anywhere, so no pattern width reaches them.
+  "CONTROL_ROOM_BOARD", // v2/board/board-screen.tsx
+  "CONTROL_ROOM_GOALS", // v2/goals/design-version-note.tsx
+  "CONTROL_ROOM_INTEGRATION", // v2/ops/live-integration.tsx
+  "CONTROL_ROOM_NEEDS_YOU", // v2/approvals/live-needs-you.tsx
+  "CONTROL_ROOM_OPS", // v2/ops/activation-screen.tsx and v2/ops/live-ops.tsx
+  "CONTROL_ROOM_PLAN_REVIEW", // v2/goals/approve-plan.tsx
+  "CONTROL_ROOM_RELEASE_READ", // v2/goals/live-goal-release.tsx
+  "CONTROL_ROOM_RUNS", // v2/runs/live-runs.tsx
   "CARRY_EVIDENCE_ASSEMBLER",
   "CONFIRMATORY_FREEZE_GIT",
   "CONFIRMATORY_FREEZE_MANIFEST_ADMISSION",

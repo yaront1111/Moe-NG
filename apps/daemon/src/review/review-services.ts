@@ -152,7 +152,12 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
   // Before package preparation, so the submission admission refuses without capturing Git.
-  if (!findingAttributionsValid(store, request.projectId, subjectRef, findings)) {
+  const attributions = findingAttributionsValid(store, request.projectId, subjectRef, findings);
+  // A plan the store could not serve is a store fault, not an accusation about the findings.
+  if (typeof attributions === "symbol") {
+    return refuse(request.kind, "REVIEW_FINDING_ATTRIBUTION_UNREADABLE", "DAEMON_PREREQUISITE");
+  }
+  if (!attributions) {
     return refuse(request.kind, "REVIEW_FINDING_ATTRIBUTION_INVALID", "DAEMON_PREREQUISITE");
   }
   const built = buildReviewPackage(items);

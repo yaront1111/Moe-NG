@@ -115,10 +115,15 @@ function durableInstant(store: SqliteEventStore, aggregateId: string): string | 
   return newest === undefined ? null : newest.committedAt;
 }
 
+/** The read-back THREW. `false` stays reserved for a read that landed and found other bytes. */
+const READ_BACK_UNREADABLE = Symbol("FOUNDATION_ARTIFACT_LEDGER_UNREADABLE");
+
 /** The bytes this call would have written, already on the aggregate. */
-function alreadySealed(store: SqliteEventStore, aggregateId: string, bytes: Uint8Array): boolean {
+function alreadySealed(
+  store: SqliteEventStore, aggregateId: string, bytes: Uint8Array,
+): boolean | typeof READ_BACK_UNREADABLE {
   let events: readonly StoredEvent[];
-  try { events = store.readEvents(aggregateId); } catch { return false; }
+  try { events = store.readEvents(aggregateId); } catch { return READ_BACK_UNREADABLE; }
   return events.some((event) => event.eventType === FOUNDATION_ARTIFACT_EVENT_TYPE
     && sameBytes(event.payload, bytes));
 }
@@ -206,8 +211,14 @@ export function sealFoundationArtifactRoster(
   } catch { committed = false; }
   // REPLAY-IDEMPOTENT ON IDENTICAL BYTES; a body that DIFFERS is a real conflict
   // and a second truth about one attempt's roster is never composed here.
-  if (!committed && !alreadySealed(store, aggregateId, encoded.bytes)) {
-    return refuse("FOUNDATION_ARTIFACT_LEDGER_CONFLICT");
+  if (!committed) {
+    const sealed = alreadySealed(store, aggregateId, encoded.bytes);
+    // A failed commit followed by a read-back that could not land used to answer CONFLICT —
+    // per this module's own header, "a re-seal offering DIFFERENT bytes", one attempt asserting
+    // two rosters. Two store faults in a row are not that, and the honest code for a read this
+    // module cannot make is the one it already answers at `:154`.
+    if (typeof sealed === "symbol") return refuse("FOUNDATION_ARTIFACT_LEDGER_UNREADABLE");
+    if (!sealed) return refuse("FOUNDATION_ARTIFACT_LEDGER_CONFLICT");
   }
   return Object.freeze({ manifest: sealed.manifest, ok: true as const });
 }

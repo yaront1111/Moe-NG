@@ -1,8 +1,8 @@
 /**
  * HOSTILE COVERAGE — the PLATFORM AND RUNTIME-CLOSURE group of the runtime-provider axis.
  *
- * Six of the roster's thirty-one `axis: "runtime-provider"` boundaries; the other twenty-five
- * live in the launch, evidence and project-runtime slices.
+ * Six of the roster's thirty-three `axis: "runtime-provider"` boundaries; the other twenty-seven
+ * live in the control-room, launch, evidence and project-runtime slices.
  * The partition is declared once in `runtime-provider-invariants.ts` and its union is checked
  * against the roster's committed bytes in the evidence file, so a boundary owned by nobody
  * reddens. `CLAUDE_RUNTIME_PIN_LAYER`'s cases live in `runtime-provider-pin-cases.ts` and

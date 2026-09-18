@@ -1,5 +1,8 @@
 import type { OfferWire } from "../../apps/control-room/src/v2/approvals/offer-wire.js";
+import type { SurfaceFrame } from "../../apps/control-room/src/live/live-board-feed.js";
 import { mapBootstrapReadAnswer } from "../../apps/control-room/src/live/live-bootstrap-receipt.js";
+import type { LiveSetup } from "../../apps/control-room/src/live/live-config.js";
+import { createNewProductPorts } from "../../apps/control-room/src/v2/products/live-new-product.js";
 import { driveActivationChain } from "../../apps/control-room/src/v2/ops/activation-port.js";
 import {
   ENVIRONMENT_SET_KIND, ENVIRONMENT_UNSET_KIND, createEnvironmentVariablesPort,
@@ -80,6 +83,22 @@ const environmentWrite = async (kind: "set" | "unset", response: unknown): Promi
     : await port.unset("preview", "PROBE_NAME");
 };
 
+/**
+ * THE NEW PRODUCT CARD'S BROWSER HALF — the first `.tsx` boundary this lane drives, invisible to
+ * the roster scan until `isProductionModule` learned the extension. Both probes stop at the
+ * SURFACE READ, before any offer is spent, which is the property worth pinning: an unreadable or
+ * offerless surface must refuse at this module's OWN layer rather than fall through into
+ * `spendOffer` and post a `repository.bootstrap` the daemon never offered — a command that
+ * creates, commits and binds a real repository on disk.
+ *
+ * The setup is cast at the seam for the reason `environmentWire` is: neither probe reaches the
+ * wire, and `LiveSetup` is the whole gated client surface. No credential is supplied or read.
+ */
+const newProductSubmit = async (readSurface: () => Promise<SurfaceFrame>): Promise<unknown> =>
+  await createNewProductPorts({ headers: {} } as unknown as LiveSetup, readSurface).submit({
+    dir: "probe-dir", productName: "probe-product",
+  });
+
 interface Spec {
   readonly boundary: string;
   readonly expected: RefusalExpectation;
@@ -118,6 +137,14 @@ const specs: readonly Spec[] = [
     // two kinds, one refusal. Neither can report the write as accepted.
     hostile: () => environmentWrite("set", "accepted"),
     observe: () => environmentWrite("unset", null),
+  },
+  {
+    boundary: "NEW_PRODUCT_LAYER",
+    expected: { code: "BOOTSTRAP_SURFACE_UNREADABLE", layer: "CONTROL_ROOM_NEW_PRODUCT" },
+    hostile: () => newProductSubmit(() => Promise.reject(new Error("surface unavailable"))),
+    // An offerless surface is a DIFFERENT refusal at the same layer: reachable, and offering no
+    // bootstrap. It must not be reported as a read failure, and neither may submit the command.
+    observe: () => newProductSubmit(async () => ({ offers: [], steps: [] }) as never),
   },
 ];
 

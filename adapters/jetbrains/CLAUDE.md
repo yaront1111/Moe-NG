@@ -101,7 +101,7 @@ allowed, and reports the contract's verdict unchanged.
   `keys.length === 12` and `INVENTORY[5].componentId === "ide-adapter-jetbrains"`.
 - This package declares **no `*_LAYER` constant**, and
   `tests/security/boundary-roster.security.ts` has no `adapters/jetbrains` key (only
-  `"adapters/ide-contract": 2`, `EXPECTED_ROSTER_SIZE 180`). A new column-0
+  `"adapters/ide-contract": 2`, `EXPECTED_ROSTER_SIZE 181`). A new column-0
   `export const X_LAYER` here reds the security lane.
 - Arm counts are pinned by hand: `COVERED_ARMS.length === 22` in `jetbrains-host.test.ts`
   (compared against what actually ran), `gateLegs.length === 8` with 5 distinct reasons and
