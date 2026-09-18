@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T20:39:33.812Z",
-  "updatedAt": "2026-09-18T06:28:03.306Z",
+  "updatedAt": "2026-09-18T06:28:06.766Z",
   "metrics": {
     "firstClaimAt": "2026-09-17T20:52:06.923Z",
     "plannedStepCount": 7,
@@ -178,7 +178,11 @@
     "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
     ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
     ".moe/tasks/task-14a2f0e4221e4def9153a2082a9385bf.json",
-    ".moe/tasks/task-adc4b229cae840c086cc1acc83fd4989.json"
+    ".moe/tasks/task-adc4b229cae840c086cc1acc83fd4989.json",
+    ".moe/tasks/task-0bd37766500c427aacf4f59abbd6dad1.json",
+    ".moe/tasks/task-2120955202764428a53be598d0f149b4.json",
+    ".moe/tasks/task-3689f5bb9099462cbf2b3c6ee51df15a.json",
+    ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json"
   ],
   "completionSummary": "REOPEN 1: all 6 QA issues fixed, each first verified on scratch git. Evidence: comment-572ae759 (gates, foreign red), comment-e8179468 (issue by issue, step-7 answers, follow-ups).\nDoD 1: the checkpoint now commits via the port's new `commitTracked`: `git commit --only`, no `git add`. The live `/.moe-next/` info/exclude therefore no longer fails it. Both test fixtures now write that exclude with the PRODUCTION writer, prepareRuntimeMetadataExcludes. Live-repro arm: ok, starts===1, baseline non-null, CHECKPOINTED + BASELINE_RECORDED, only `.moe-next/start.ps1` committed, as Moe. Throwaway UnAI clone + the host's writer: DIRTY -> CHECKPOINTED -> observe ok with 0 entries.\nDoD 2: the product-only and mixed arms are green: BASELINE_UNAVAILABLE / BASELINE_WORKSPACE_DIRTY, product untouched. The fence now also refuses `\\`, NUL and a leading `:`, besides `..` and absolute paths. 10 swept cases + a census assert UNKNOWN_PATHS, HEAD unchanged and a byte-identical index. In-memory drills show each clause, once removed, commits product.\nDoD 3: N/A, reason CORRECTED. `.moe-next/` IS wholly ignored in live projects, but by Moe's own `.git/info/exclude` block (UnAI line 9 `/.moe-next/`), not by .gitignore. Untracking stays wrong: UnAI's 4 tracked files (README.md, node-specs/01-core-memory-identities.json, seed.ps1, start.ps1) are content the operator committed (114672e, 2ce84e5, 2274ba8, fc9832f).\nDoD 4: FAILED / INEFFECTIVE / UNKNOWN_PATHS are distinct logged codes, attempted once per unchanged set. A FAILED checkpoint now leaves HEAD and `.git/index` byte-identical (hook-refusal, unmatched-path and runtime guard arms).\nGate: 4-file run `Test Files 4 passed (4)` / `Tests 61 passed (61)`. `pnpm --filter @moe/daemon test`: `13 failed | 732 passed (745)`. These are the same 13 FOREIGN files QA named (20896d47, agent-spawn-contract.ts:79); none is an owned path. Typecheck exit 0.",
   "reviewCompletedAt": "2026-09-18T06:26:47.620Z",
@@ -320,14 +324,33 @@
       "treeId": "97399a0c83fd5aab4b22b7ecfcdf477563dd0fe9",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "51a7910e29ddb2141579f3b846778df01fb3fbaa",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-84420029@2026-09-18T06:13:07Z",
+      "paths": [
+        ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
+        ".moe/tasks/task-0bd37766500c427aacf4f59abbd6dad1.json",
+        ".moe/tasks/task-2120955202764428a53be598d0f149b4.json",
+        ".moe/tasks/task-3689f5bb9099462cbf2b3c6ee51df15a.json",
+        ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json"
+      ],
+      "recordedBy": "qa-84420029",
+      "recordedAt": "2026-09-18T06:28:06.766Z",
+      "treeId": "afa2dcdc83ccbc8124f91edf18266938f33a31d1",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6433dce1@2026-09-18T05:40:12Z",
-    "at": "2026-09-18T06:13:45.525Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-84420029@2026-09-18T06:13:07Z",
+    "at": "2026-09-18T06:28:06.766Z"
   },
   "touchedFiles": [
     "apps/daemon/src/orchestrator/runtime-metadata-checkpoint.ts",
