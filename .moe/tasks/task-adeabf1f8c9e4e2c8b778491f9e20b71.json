@@ -69,7 +69,7 @@
     }
   ],
   "planRevision": 9,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -79,10 +79,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1018.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-8f2c8cdb7ff240d68cfa050eb7ddcb20",
+      "author": "architect-c7fb990e",
+      "content": "FOR QA (architect-c7fb990e, measured 2026-09-18): this row's test file apps/daemon/src/repository/publish-resolve-contracts.test.ts is NOT in its completion commit 7986045b. `git show --stat 7986045b` lists only publish-resolve-contracts.ts, its .js bridge and four .moe task JSONs.\n\nThe test landed earlier, in 96db094d (20:44:37Z). That commit is a porcelain commit made outside the wrapper just before PR #56, and it carries task-8bc14883's reused trailer. `git log --oneline -1 -- apps/daemon/src/repository/publish-resolve-contracts.test.ts` returns 96db094d.\n\nGrade the test at HEAD, or with `git show 96db094d -- apps/daemon/src/repository/publish-resolve-contracts.test.ts`. The filer confirmed the blob matches their file (d02386b4, comment on task-717f4c0b). Do not reject for the test's absence from 7986045b: this row did not cause that. See task-717f4c0b's comments.",
+      "timestamp": "2026-09-18T20:55:42.365Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:11:04.144Z",
-  "updatedAt": "2026-09-18T20:51:51.741Z",
+  "updatedAt": "2026-09-18T20:59:32.577Z",
   "dependsOn": [
     "task-f3182818e7924be996d3543798a9d444"
   ],
@@ -90,7 +97,9 @@
     "firstClaimAt": "2026-09-18T19:27:22.833Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-18T20:59:32.577Z",
+    "wallClockMs": 5529744
   },
   "stepsCompleted": [
     "step-1",
@@ -105,7 +114,8 @@
   },
   "planApprovedAt": "2026-09-18T19:28:51.688Z",
   "contextFetchedBy": [
-    "worker-69773bc1"
+    "worker-69773bc1",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-18T20:41:00.848Z",
   "reviewStartedAt": "2026-09-18T20:51:33.159Z",
@@ -158,5 +168,12 @@
     "kind": "completion",
     "sessionId": "worker-69773bc1@2026-09-18T20:40:49Z",
     "at": "2026-09-18T20:51:51.741Z"
-  }
+  },
+  "declaredFiles": [
+    "apps/daemon/src/repository/publish-resolve-contracts.ts",
+    "apps/daemon/src/repository/publish-resolve-contracts.js"
+  ],
+  "completedAt": "2026-09-18T20:59:32.577Z",
+  "reviewCompletedAt": "2026-09-18T20:59:32.577Z",
+  "reviewSummary": "APPROVED by qa-09357cdf at HEAD 6e7d910f (moe/work-2026-09-18). Bytes: completion 7986045b (.ts 84 lines + 1-line .js bridge, pushed) + the test (87 lines), swept into peer checkpoint 96db094d (Moe-Task task-8bc14883; bug task-717f4c0b). Worktree == HEAD; all 3 SHA256 == worker's recorded hashes. Attribution miss, not a delivery defect.\nDoD1: mirrors release-decide-contracts.ts part for part (kind const, frozen _CODE_LAYER_MAP, roster derived+sorted, distributed correlated type, factory with no layer arg). Plain node v24.16 import of the bridge, no flags: 4 exports, frozen. DoD2: Set-equality + sorted pin + per-code toBe(GOAL_PREREQUISITE_LAYER). DoD3: daemon tsconfig includes src/**/*.ts, so the directive is in pnpm typecheck scope. DoD4: census walks all of apps/; probe 0 literal/positional/declaration hits.\nRe-ran: contracts test \"Test Files 1 passed (1) / Tests 6 passed (6)\"; pnpm typecheck \"Scope: 19 of 20\", 19 Done incl apps/daemon, exit 0; pnpm test:security \"12 passed (12) / 1009 passed (1009)\"; 26 daemon src-walking tests + 2 contracts tests \"28 passed / 502 passed | 2 skipped\"; 7 root walkers (runtime-entrypoint, package-loadability, pack-windows x2, release-version-surfaces, journey-coverage, lane-landing) \"104 passed\".\nOwn drills, zero repo writes. In-memory vitest transform (%TEMP% config, QA_DRILL_APPLIED each run): NONE 6/6; map+code -> pin + sweep red; map+code with restated roster -> ONLY Set-equality red; wrong layer -> by-value red; extra param -> \"expected 2 to be 1\"; unfrozen -> isFrozen red. Out-of-tree tsc on committed blobs: control exit 0; arm layer corrected -> TS2578; directive removed -> TS2322 at layer line; prod layer type -> string -> TS2578; prod map value moved -> TS2322+TS2578.\nFollow-up for task-2c3f878b/a47babf8: the arm comment says an uncorrelated weakening would red, but with one layer that weakening is type-identical. When a second-layer code joins, re-measure where the directive goes (it moves to the declaration)."
 }
