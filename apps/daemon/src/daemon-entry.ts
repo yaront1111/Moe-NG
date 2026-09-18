@@ -194,11 +194,26 @@ type ResolvedDependencies = DaemonEntryRefused | (ResolvedOptionalDaemonPorts & 
   readonly v2Deps?: CommandAdapterDeps;
 });
 
-function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDependencies {
+/** One line for a throw, on the entry's log: name, errno code when there is one, message. */
+function thrownLine(error: unknown): string {
+  const thrown = describeThrown(error);
+  return `${thrown.name}${thrown.code === null ? "" : ` ${thrown.code}`}: ${thrown.message}`;
+}
+
+/**
+ * Two codes cover every way a provider can fail to compose, and the codes ALONE told the
+ * operator nothing: PROVIDER_THREW for any of 36 calls, DEPENDENCIES_INVALID for any of 34
+ * optional seams. The log now names the call and the throw beside the unchanged code.
+ */
+function resolveDependencies(
+  provider: DaemonDependencyProvider,
+  log: ((line: string) => void) | undefined,
+): ResolvedDependencies {
   let provided: unknown;
   try {
     provided = provider.provide();
-  } catch {
+  } catch (error) {
+    log?.(`provider.provide() threw: ${thrownLine(error)}`);
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
   if (!isCommandAdapterDeps(provided)) {
@@ -208,7 +223,8 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
   let providedV2: unknown;
   try {
     providedV2 = provider.provideV2?.();
-  } catch {
+  } catch (error) {
+    log?.(`provider.provideV2() threw: ${thrownLine(error)}`);
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
   if (providedV2 !== undefined && !isCommandAdapterDeps(providedV2)) {
@@ -217,8 +233,12 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
 
   const ports = resolveOptionalDaemonPorts(provider);
   if (!ports.ok) {
-    return refuseEntry(ports.failure === "THREW"
-      ? "DAEMON_ENTRY_PROVIDER_THREW" : "DAEMON_ENTRY_DEPENDENCIES_INVALID");
+    if (ports.failure === "THREW") {
+      log?.(`optional port "${ports.port}" threw: ${thrownLine(ports.thrown)}`);
+      return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
+    }
+    log?.(`optional port "${ports.port}" is INVALID: not a factory function, or a port without its required methods`);
+    return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
   }
   return Object.freeze({
     deps: provided,
@@ -246,8 +266,7 @@ function runBootReconciliation(
     const outcome = port.sweep();
     return outcome.ok ? null : outcome;
   } catch (error) {
-    const thrown = describeThrown(error);
-    log?.(`boot reconciliation threw: ${thrown.name}${thrown.code === null ? "" : ` ${thrown.code}`}: ${thrown.message}`);
+    log?.(`boot reconciliation threw: ${thrownLine(error)}`);
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
 }
@@ -283,7 +302,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
     }
     schedules = schedule;
-    const resolved = resolveDependencies(dependencies);
+    const resolved = resolveDependencies(dependencies, options.log);
     if (!resolved.ok) return resolved;
 
     // BEFORE the listener, never after: a daemon that becomes ready while the last

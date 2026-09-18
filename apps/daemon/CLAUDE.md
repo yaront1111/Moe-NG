@@ -19,13 +19,11 @@ its own: a caller that injects no dependency provider is refused, never served a
 - `startDaemon` / `refuseEntry` / `isDependencyProvider` (`daemon-entry.ts`) — argv and
   signals stay in `daemon-main.ts` so the lifecycle is testable in process.
   `DaemonDependencyProvider.provide()` / `provideV2()` is the one seam authority reaches the
-  transport through.
+  transport through. A refused start says WHICH seam on the entry's `log` (`optional port
+  "<key>" is INVALID` / `threw: <name> <code>: <message>`, `provider.provide() threw: …`,
+  `boot reconciliation threw: …`) beside the unchanged DAEMON_ENTRY_* code.
 - `createDaemonCommandPorts` (`daemon-command-registry.ts`) and `createMcpDispatchPort`
   (`mcp-dispatch-port.ts`) are the two dispatch fronts over the same durable pipeline.
-  A dispatch that THROWS behind either MCP transport is `UNKNOWN_ERROR` to the seat and
-  `MCP_DISPATCH_THREW` on the diagnostics plane (`mcp-dispatch-fault-report.ts`; a session port
-  throwing under the HTTP screen is `MCP_SESSION_SCREEN_THREW` beside it), wired by
-  all three MCP entries; grep that name before blaming a seat for a tool it "misused".
 - `createStoreDependencies` / `readStoreDependencyEnv` (`daemon-store-dependencies.ts`) is
   the shipped provider `--dependencies=` points at; it re-exports `agentCapabilitiesFor`
   because the agent wrapper has always imported it from that path.
