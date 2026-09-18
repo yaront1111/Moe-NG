@@ -97,8 +97,8 @@
     }
   ],
   "planRevision": 14,
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-84420029",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -135,12 +135,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T06:22:27.676Z",
-  "updatedAt": "2026-09-18T09:05:16.905Z",
+  "updatedAt": "2026-09-18T09:17:09.478Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T07:58:26.478Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-18T09:17:09.478Z",
+    "wallClockMs": 4723000
   },
   "stepsCompleted": [
     "step-1",
@@ -175,7 +177,49 @@
     "apps/daemon/tsconfig.json",
     "apps/daemon/src/projects/project-review-drain.test.ts",
     "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+    "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+    ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json",
+    ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json"
+  ],
+  "completionSummary": "DoD1: before the fix, plain node gave ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and `moe mcp` exited 1 with MOE_CLI_MCP_UNAVAILABLE. Now: IMPORT OK, and `moe mcp` serves a stdio client (initialize, tools/list = 43 tools, exit 0).\nFix: AgentProcessFailureError uses explicit readonly fields. The parameter list is unchanged, so no call site changed.\nDoD2: runtime-entrypoint.test.ts alone: 5/5 (was 3 failed).\nDoD3: erasableSyntaxOnly is set in apps/daemon/tsconfig.json, and project-review-drain.test.ts:69 was converted. Negative control: HEAD blob rewritten, then `pnpm typecheck` exits 1 with TS1294 at agent-spawn-contract.ts(79,15)..(81,5). Restore proven by SHA256: d807c26b equals d807c26b. A probe in packages/contracts also reds, so the guard covers package sources too.\nDoD4: governor ruling msg-541e4475 (B): the flag is KEPT, because it is one argv shape shared with `moe start`. Removing it is task-8bc14883ca524cb99c0dfe667d1399cd. The tripwire is inverted to \"loads the wrapper entry under plain strip-only node\" (marker, exit 0), and the flagged arm is kept. The :281/:354 checks are unchanged (39/39). Loader-hook drill serving the pre-fix blob: the plain arm reds on ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and the flagged arm stays green.\nDoD5: pre-fix baseline was 13 failed files (c5328ac5); now 745/745. wrapper-review-missions was proven foreign, and was fixed by peer 81f25498.\nArtifact dist/moe-windows as packed: only agent-wrapper-main fails under plain node, and it is launched with the flag, so `moe start` is not broken.\nDELIVERY: peer \"main\" commits 147c62fe and fdb0eee2 committed all 5 owned paths byte-identically, with no Moe-Task trailer. They reached main by squash f254ab66 (#55). The checkout is now on main (owner switch), so this row's own completion commit will be empty.\nFollow-ups: c684a69e (split, file now 422 lines), c19ba3a9 (widen guard; pin for an explicit outputSeen argument).",
+  "commits": [
+    {
+      "sha": "310aaf7821f52e3c57066cec8b6392f978ae960b",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-e0435164@2026-09-18T08:17:15Z",
+      "paths": [
+        ".moe/tasks/task-2bb0bc24ed5b4444a6889c73948c43a0.json",
+        ".moe/tasks/task-4444d18096d24fb285bc78b03edd04f6.json"
+      ],
+      "recordedBy": "worker-e0435164",
+      "recordedAt": "2026-09-18T09:06:22.939Z",
+      "treeId": "b7e6d92d8e581826205593ff80418a1edfda07b8",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/projects/project-review-drain.test.ts",
+    "apps/daemon/tsconfig.json",
     "apps/daemon/src/orchestrator/moe-up-main.test.ts"
   ],
-  "completionSummary": "DoD1: before the fix, plain node gave ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and `moe mcp` exited 1 with MOE_CLI_MCP_UNAVAILABLE. Now: IMPORT OK, and `moe mcp` serves a stdio client (initialize, tools/list = 43 tools, exit 0).\nFix: AgentProcessFailureError uses explicit readonly fields. The parameter list is unchanged, so no call site changed.\nDoD2: runtime-entrypoint.test.ts alone: 5/5 (was 3 failed).\nDoD3: erasableSyntaxOnly is set in apps/daemon/tsconfig.json, and project-review-drain.test.ts:69 was converted. Negative control: HEAD blob rewritten, then `pnpm typecheck` exits 1 with TS1294 at agent-spawn-contract.ts(79,15)..(81,5). Restore proven by SHA256: d807c26b equals d807c26b. A probe in packages/contracts also reds, so the guard covers package sources too.\nDoD4: governor ruling msg-541e4475 (B): the flag is KEPT, because it is one argv shape shared with `moe start`. Removing it is task-8bc14883ca524cb99c0dfe667d1399cd. The tripwire is inverted to \"loads the wrapper entry under plain strip-only node\" (marker, exit 0), and the flagged arm is kept. The :281/:354 checks are unchanged (39/39). Loader-hook drill serving the pre-fix blob: the plain arm reds on ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and the flagged arm stays green.\nDoD5: pre-fix baseline was 13 failed files (c5328ac5); now 745/745. wrapper-review-missions was proven foreign, and was fixed by peer 81f25498.\nArtifact dist/moe-windows as packed: only agent-wrapper-main fails under plain node, and it is launched with the flag, so `moe start` is not broken.\nDELIVERY: peer \"main\" commits 147c62fe and fdb0eee2 committed all 5 owned paths byte-identically, with no Moe-Task trailer. They reached main by squash f254ab66 (#55). The checkout is now on main (owner switch), so this row's own completion commit will be empty.\nFollow-ups: c684a69e (split, file now 422 lines), c19ba3a9 (widen guard; pin for an explicit outputSeen argument)."
+  "unattributedPaths": [
+    "apps/control-room/src/v2/goals/goal-release.test.tsx",
+    "apps/control-room/src/v2/goals/goal-release.tsx",
+    "apps/daemon/src/mcp-dispatch-fault-report.test.ts",
+    "apps/daemon/src/mcp-dispatch-fault-report.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-e0435164@2026-09-18T08:17:15Z",
+    "at": "2026-09-18T09:06:22.939Z"
+  },
+  "completedAt": "2026-09-18T09:17:09.478Z",
+  "reviewCompletedAt": "2026-09-18T09:17:09.478Z",
+  "reviewSummary": "APPROVED by qa-84420029, measured at HEAD 310aaf78.\nBYTES: the 5 owned paths landed in peer commits 147c62fe and fdb0eee2, which touch only these paths, then reached main via f254ab66. main equals HEAD on all 5. The completion commit 310aaf78 holds only .moe json. Investigated; not a reject.\nMUTANT: HEAD with only the 147c62fe hunk reversed, served in memory by a module.register hook. Every run logged a SERVED hit.\nDoD1: plain node import of compiled-node-source.ts gives IMPORT OK; the mutant gives ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX. `moe mcp` on a git-init plus `moe init` scratch project, over stdio: initialize returns moe-next, tools/list 43, exit 0. Mutant: exit 1, `MOE_CLI_MCP_UNAVAILABLE: TypeScript parameter property is not supported in strip-only mode`.\nDoD2: runtime-entrypoint.test.ts alone: 5/5. Mutant: 3 failed | 2 passed, exactly the 3 named tests.\nDoD3: daemon tsconfig sets erasableSyntaxOnly. Throwaway tsconfigs outside the repo: daemon + parameter property gives exactly TS1294 (2,15); the erasable twin exits 0; base + parameter property exits 0.\nDoD4: flag kept per msg-541e4475/amend-1, with the reason in moe-up-spawn.ts; removal is task-8bc14883 (WORKING). The tripwire was inverted, not deleted. Pins :281/:354 intact. moe-up-main 39/39. Mutant: the plain test fails, the flag test stays green.\nDoD5: pnpm typecheck exit 0, 19/19. Daemon suite under full-suite-gate: 747/747 files, 12341 passed | 21 skipped, exit 0.\nCensus: Node strip over 3332 files rejects only the two tests/** harness files, outside the daemon project (c19ba3a9). The dist/moe-windows re-pack's entries load under plain node.\nNoted: agent-spawn-contract.ts is 422 lines, over the cap before this row (403); split deferred by the plan (c684a69e)."
 }

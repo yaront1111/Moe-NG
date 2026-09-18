@@ -1,0 +1,30 @@
+{
+  "id": "task-4ba1e00a3aa64a83a1b883566377e3ab",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "Release cannot open a pull request when the workspace branch IS the remote's default branch (UnAI: master → master)",
+  "description": "Measured live on UnAI 2026-09-18 (goal \"Uai — Personal AI Chief of Staff\", build 4bc2ef7b + a36854f6).\n\nThe lander commits every accepted node onto the workspace branch (`[lander] COMMITTED (361909707c on master, 46 files)`), the publisher's candidate is `symbolic-ref HEAD` of that workspace (`apps/daemon/src/repository/publication-candidate.ts:21`), so `repository.publish` pushes `master` to `origin`. `release.decide` then opens the PR from the publisher's most recent PUSHED receipt branch (`release-decide-service.ts:85-108`, `pushedBranchOf`) against the operator-typed `base`, which the Release card defaults to \"main\" (`goal-release.tsx:78`).\n\nOn UnAI the remote's default branch is `master` (`git ls-remote --symref origin HEAD` → `refs/heads/master`), so:\n1. base \"main\" names a branch that does not exist on the remote → gh refuses;\n2. even with base \"master\", head == base → no pull request can exist between a branch and itself.\n\nSo Release on a trunk-committing workspace can never succeed, and the operator learns it only after Publish, after typing a base, after Approve, as a refusal receipt. The Release card fix a36854f6 explains why Approve is greyed before publish; this task is the flow behind it.\n\nDecide and implement ONE of (the owner's call; state the choice in the plan):\nA. Publisher pushes a goal branch (e.g. `moe/release/<goalId>` cut at the landed sha) when the workspace branch equals the remote default branch, and Release opens the PR from that branch. The workspace branch stays untouched.\nB. The Release card reads the remote's default branch (daemon measures `symbolic-ref refs/remotes/origin/HEAD` or `ls-remote --symref`) and defaults `base` to it, and refuses early with a named code (e.g. RELEASE_HEAD_IS_BASE) when the publish head equals that base, saying what the operator can do instead.\n\nEither way: the card must never default `base` to a branch the remote does not have.",
+  "definitionOfDone": [
+    "A named refusal (not a gh stderr dump) when the release head equals the base branch, surfaced on the Release card with the branch names.",
+    "The Release card's base defaults to the remote's measured default branch, never a hard-coded \"main\"; a remote without a measurable default leaves the field empty and says so.",
+    "A live-shaped test: workspace branch == remote default branch, one landed commit, publish then release → either a PR from a distinct release branch (option A) or the named early refusal (option B); the arm names which option was chosen.",
+    "Existing release/publish suites green; `pnpm --filter @moe/daemon test` for src/release/** and src/repository/**, `pnpm --filter @moe/control-room test` for goal-release.",
+    "packages/apps CLAUDE.md of the touched folder updated with the rule chosen."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1012.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-18T09:08:47.382Z",
+  "updatedAt": "2026-09-18T09:08:47.382Z"
+}
