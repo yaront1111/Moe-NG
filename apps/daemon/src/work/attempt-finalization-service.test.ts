@@ -723,6 +723,44 @@ describe("attempt finalization (task-48c79a29) — the strict re-reads", () => {
     expect(armed).toBe(true);
     expect(rawCounts(store)).toEqual({ bindings: 0, releases: 0 });
   });
+
+  it("refuses ATTEMPT_UNREADABLE, not HORIZON_MOVED, when the re-read cannot land", () => {
+    // The arm above proves an aggregate that MOVED between capture and re-check refuses
+    // HORIZON_MOVED. A re-read that THREW took the same arm — with a null upstream, so no code
+    // travelled at all — because `attemptVersions` answers null for a throw and the guard
+    // treated null as moved. The first capture already names that fault; this pins that the
+    // re-read does too. Armed the same way, on the source re-reads' own `readEventsByTypeAfter`,
+    // so the throw lands strictly after the capture and only on the guard's re-read.
+    const { store } = finalizationWorld("horizon-unreadable");
+    seedReceipt(store, {
+      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, verificationId: VERIFICATION_ID,
+    });
+    let armed = false;
+    const dispatchAggregate = deriveDispatchAggregateId(FINAL_ACTIVATION_AGGREGATE);
+    const hostile = withStoreOverride(store, {
+      readEventsByTypeAfter: (...args: never[]): unknown => {
+        armed = true;
+        return (store.readEventsByTypeAfter as unknown as (...a: never[]) => unknown)(...args);
+      },
+      readEvents: (aggregateId: string): unknown => {
+        if (armed && aggregateId === dispatchAggregate) {
+          throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+        }
+        return store.readEvents(aggregateId);
+      },
+    });
+    const outcome = finalizeVerifiedAttempt(hostile, who, select());
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("an unreadable horizon was finalized over");
+    expect(outcome.code).toBe("ATTEMPT_FINALIZATION_ATTEMPT_UNREADABLE");
+    expect(outcome.layer).toBe(ATTEMPT_FINALIZATION_LAYER);
+    // The upstream TRAVELS: the moved arm carries null by design, this one carries the fault.
+    expect(outcome.source).toEqual({
+      code: "ATTEMPT_AGGREGATE_UNREADABLE", layer: ATTEMPT_FINALIZATION_LAYER,
+    });
+    expect(armed).toBe(true);
+    expect(rawCounts(store)).toEqual({ bindings: 0, releases: 0 });
+  });
 });
 
 /**

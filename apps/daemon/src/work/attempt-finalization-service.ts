@@ -80,10 +80,9 @@ export interface AttemptFinalizationAnswer {
 export type AttemptFinalizationOutcome =
   | AttemptFinalizationAnswer | AttemptFinalizationRefused;
 
-function sameAttemptVersions(
-  before: AttemptVersions, after: AttemptVersions | null,
-): boolean {
-  if (after === null) return false;
+/** Two READ observation pairs, compared. An unreadable pair never reaches here: the caller
+ *  names it before comparing, because "could not read" is not "moved". */
+function sameAttemptVersions(before: AttemptVersions, after: AttemptVersions): boolean {
   return before.every((observation, index) => {
     const current = after[index];
     return current !== undefined
@@ -124,7 +123,17 @@ export function finalizeVerifiedAttempt(
   }
   const sources = reReadSources(store, bound, durable);
   if ("ok" in sources) return sources;
-  if (!sameAttemptVersions(before, attemptVersions(store, bound))) {
+  const after = attemptVersions(store, bound);
+  // The re-read that could not land answers exactly what the first capture answers eight
+  // lines up, with the same upstream. Folding it into HORIZON_MOVED — and with a NULL upstream,
+  // so no code travelled at all — stated that a second writer moved the attempt's aggregates
+  // under the finalizer, which a SQLITE_BUSY proves nothing about.
+  if (after === null) {
+    return refuseFinalization("ATTEMPT_FINALIZATION_ATTEMPT_UNREADABLE", {
+      code: "ATTEMPT_AGGREGATE_UNREADABLE", layer: ATTEMPT_FINALIZATION_LAYER,
+    });
+  }
+  if (!sameAttemptVersions(before, after)) {
     return refuseFinalization("ATTEMPT_FINALIZATION_HORIZON_MOVED", null);
   }
 
