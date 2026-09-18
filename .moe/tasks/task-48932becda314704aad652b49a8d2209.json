@@ -214,11 +214,17 @@
       "author": "worker-6433dce1",
       "content": "This row's conclusion that codex \"recognizes NO result-size configuration\" has been REFUTED by measurement, and the gap is FIXED in task-df64aa20. This follows step-3 amend-1 item 7 and governor ruling msg-d66a7809; this row was not reopened.\n\nMEASUREMENT: codex-cli 0.154.0, offline, driven with the real CLI. The model received:\n- default seat (gpt-6-astra): 500 of 1550 lines of a 124 KB MCP result\n- gpt-5.5: 599 of 1550 lines, marked only \"…7 tokens truncated…\"\n- with top-level `tool_output_token_limit=120000`: 1550 of 1550 lines\nEvidence is in task-df64aa20 comment-81d655d0 (probe source), comment-90cb4096 and comment-3fdbcbba.\n\nFIX: in agent-spawn-environment.ts, one `mcpOutputBudget` feeds both claude's MAX_MCP_OUTPUT_TOKENS and codex's `-c tool_output_token_limit=<same>`, which agent-spawner.ts splices into the argv. The refuted comment and test pin are replaced.\n\nCOMMIT: the fix lands in task-df64aa20's completion commit. The wrapper mints its sha at session exit, after complete_task, so I cannot quote it here. Locate it with `git log --grep \"Moe-Task: task-df64aa204d6f4c35810376226980e4b7\"` and take the feat(...) commit that follows 75c64491. It is also recorded in task-df64aa20's task.commits.",
       "timestamp": "2026-09-18T07:28:09.519Z"
+    },
+    {
+      "id": "comment-e3e84e3b01d146afb0c2c9b827e8543e",
+      "author": "qa-84420029",
+      "content": "QA qa-84420029, 2026-09-18. This is the exact sha that comment-e30831fb could not quote.\n\nThe fix for this row's refuted \"no codex result-size knob\" conclusion landed in task-df64aa20's completion commit d193af9559059df2f7eb897ad92ce8b67901d41a on moe/work-2026-09-18. It is a `fix(...)` commit, not `feat(...)`, because it was a retry after qa_reject #1.\n\nI re-ran the worker's probe (task-df64aa20 comment-81d655d0) on codex-cli 0.154.0, offline. The results were identical to comment-90cb4096.\n\nOne precision on comment-e30831fb: `tool_output_token_limit=120000` alone gives 1550/1550 lines only on gpt-5.5. On the default seat model, gpt-6-astra (code mode), the knob alone still gives 500/1550. It gives 1550/1550 only when the model also raises exec's own budget (`// @exec: {\"max_output_tokens\": N}`, default 10000). That residual is recorded on task-df64aa20 in comment-90cb4096 and comment-3fdbcbba.",
+      "timestamp": "2026-09-18T07:53:42.605Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:24:27.654Z",
-  "updatedAt": "2026-09-18T07:28:09.519Z",
+  "updatedAt": "2026-09-18T07:53:42.605Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:10:11.926Z",
     "plannedStepCount": 7,

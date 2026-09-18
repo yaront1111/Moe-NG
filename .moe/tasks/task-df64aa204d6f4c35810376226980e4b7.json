@@ -74,8 +74,8 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-84420029",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -128,14 +128,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:39:55.125Z",
-  "updatedAt": "2026-09-18T07:40:30.403Z",
+  "updatedAt": "2026-09-18T07:54:10.283Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:18:57.861Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 4,
     "executedStepCount": 6,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-18T07:54:10.283Z",
+    "wallClockMs": 1089312422
   },
   "contextFetchedBy": [
     "qa-84420029",
@@ -192,7 +194,10 @@
     "apps/daemon/src/orchestrator/agent-spawner.ts",
     "apps/daemon/src/orchestrator/agent-spawner.test.ts",
     "apps/daemon/src/daemon-v2-command-registry.ts",
-    "apps/daemon/src/environment/environment-composed-canary.test.ts"
+    "apps/daemon/src/environment/environment-composed-canary.test.ts",
+    ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
+    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+    ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
   ],
   "completionSummary": "Reopen 1: DoD 2 is closed by a measurement and a fix, under governor ruling msg-d66a7809 (step-3 amend-1, 4 owned paths).\n\nMEASURED on codex-cli 0.154.0, offline: the real CLI, the chain-seat argv, a stub provider, and a stub MCP tool returning 124,000 B (1550 lines, ~31000 tokens). Evidence: probe comment-81d655d0, results comment-90cb4096, catalog comment-3fdbcbba. Lines the model received:\n- gpt-6-astra (default seat, code mode): 500/1550. Exec pragma alone: 599/1550. Knob plus pragma: 1550/1550.\n- gpt-5.5 (direct tools): 599/1550, with the marker \"…7 tokens truncated…\" while ~950 lines were gone. That is observed codex behaviour that UNDERSTATES the cut. With the knob: 1550/1550.\n\nFIX:\n- agent-spawn-environment.ts: mcpOutputBudget() is now the single source for claude's MAX_MCP_OUTPUT_TOKENS and codex's `-c tool_output_token_limit=<same>` (operator value if 1..999999999, else 120000). The refuted comment is replaced.\n- agent-spawner.ts: splice, net 0 lines.\n- Tests: the pin is re-aimed, and parity arms (2 kinds x 2 budgets) and junk arms are added.\n- canary test: its line-ref is now symbolic.\n\nDRILLS: 6/6 red on the intended arm.\n\nGATES, all on final bytes:\n- daemon: Test Files 13 failed | 732 passed (745). The FAIL set is identical at merge-base (my hunks backed out, restore proven by SHA256). The reds are task-4444d180's param-property regression (agent-spawn-contract.ts:79, peer 20896d47) plus wrapper-review-missions. Delta: none.\n- typecheck: EXIT 0, 19/19.\n- e2e: Test Files 33 passed | 1 skipped (34), codex-seat-loop 9/9. Detail in comment-bd2b2b5f.\n\nRESIDUAL: astra's exec default of 10000 tokens still truncates a first read. This is disclosed in-band and no config lever moves it; a follow-up would be daemon-side paging. 48932bec was notified in comment-ec02fc11 and comment-e30831fb.",
   "commits": [
@@ -227,16 +232,37 @@
       "treeId": "d193e7c0a1abc04ccc6f33ac3eeed42e938da258",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "d193af9559059df2f7eb897ad92ce8b67901d41a",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-6433dce1@2026-09-18T06:52:21Z",
+      "paths": [
+        ".moe/tasks/task-027dda26004f4596927420abfbffbd6e.json",
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+        ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json",
+        "apps/daemon/src/environment/environment-composed-canary.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.ts"
+      ],
+      "recordedBy": "worker-6433dce1",
+      "recordedAt": "2026-09-18T07:40:57.131Z",
+      "treeId": "422c14d409e4792e1abade8b8f424c013f5322f8",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-84420029@2026-09-18T06:31:11Z",
-    "at": "2026-09-18T06:39:48.714Z"
+    "kind": "completion",
+    "sessionId": "worker-6433dce1@2026-09-18T06:52:21Z",
+    "at": "2026-09-18T07:40:57.131Z"
   },
-  "reviewCompletedAt": "2026-09-18T06:39:06.132Z",
+  "reviewCompletedAt": "2026-09-18T07:54:10.283Z",
   "rejectionDetails": {
     "failedDodItems": [
       "MCP RESULT-SIZE HANDLING MEASURED, not assumed: drive an oversized read through the codex path and record what happens. If codex truncates where claude pages, that is the defect this row fixes; if it does not, record the measurement that shows so."
@@ -299,5 +325,14 @@
         }
       ]
     }
-  ]
+  ],
+  "touchedFiles": [
+    "apps/daemon/drill-task-df64aa20-worker-6433dce1.config.ts",
+    "apps/daemon/src/environment/environment-composed-canary.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.ts"
+  ],
+  "completedAt": "2026-09-18T07:54:10.283Z",
+  "reviewSummary": "Reopen 1 APPROVED at d193af95, the completion commit and HEAD. The owned paths are diff-clean against it.\n\nDoD 2, MEASURED AND FIXED. I rebuilt the probe from comment-81d655d0; its sha256 is 44e4eacb, the same as the worker's file. I re-ran it on codex-cli 0.154.0, offline. Every figure matched comment-90cb4096, chars and markers included:\n- astra: default 500/1550, knob 500, pragma 599, knob+pragma 1550\n- gpt-5.5: default 599, knob 1550\nWith env-only MAX_MCP_OUTPUT_TOKENS, gpt-5.5 still gets 599/1550, and codex.exe contains that string 0 times, so \"codex never reads it\" holds. One mcpOutputBudget now feeds claude's env and codex's `-c tool_output_token_limit`. The refuted comment is replaced and the pin is re-aimed.\n\nDRILLS: in-memory transform with a %TEMP% config, so no repo file was touched. Clean control 59/59. Each mutant went red on its intended arm:\n- A, splice removed: exact-argv, parity and junk arms\n- B, constant: parity\n- C, no validation: junk\n- D, reads process.env: parity\n- E, claude passthrough: junk\n\nGATES on d193af95, under the full-suite-gate lease:\n- typecheck EXIT 0: 19 echoes, 19 Done, 0 error TS.\n- test:e2e EXIT 0, tsc echo present: `Test Files 33 passed | 1 skipped (34)`, `Tests 262 passed | 7 skipped (269)`. codex-seat-loop 9/9, named.\n- agent-spawner.test.ts 59/59.\n- daemon suite EXIT 1: `Test Files 13 failed | 732 passed (745)`, `Tests 17 failed | 12304 passed | 23 skipped`. The same 18 FAILs as comment-bd2b2b5f. They come from agent-spawn-contract.ts:79 strip-only and NODE_BRIEF_UNREADABLE, both via peer 20896d47, owned by task-4444d180. This diff adds no module edge.\n\nDoD 1 and 3-5 re-held.\nRESIDUAL: astra's exec default of 10000 tokens still truncates a first read; this is disclosed, and paging is the follow-up (comment-90cb4096).\nPRE-EXISTING: agent-spawner.ts is 480 lines, net 0 here."
 }
