@@ -64,7 +64,7 @@
     }
   ],
   "planRevision": 9,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -83,16 +83,24 @@
       "author": "worker-07e6de2a",
       "content": "Follow-ups, not rows (plan step 4D):\n1. Defence in depth: the resolve SERVICE still accepts a crafted repository.publish_resolve during the in-flight window. The card and affordance mint no longer offer it; a direct dispatch can still write a REFUSED receipt before the publisher's PUSHED write. Same first-writer rule as the original bug, just no longer reachable from the UI.\n2. goal-deployment-read.ts:44 and release-evidence-read.ts:225 still call readRunGoalPublication without now, so they still read UNKNOWN during the flight seconds. Deliberate: both treat PENDING and UNKNOWN the same (not PUSHED). Deployable sha stays null either way.",
       "timestamp": "2026-09-19T08:34:23.167Z"
+    },
+    {
+      "id": "comment-76085255998240be921f7d2b63b78dee",
+      "author": "qa-6e60f228",
+      "content": "QA follow-ups (qa-6e60f228, reviewed 779f540b). These are not rows, per DELIVERY BIAS. None blocks: the delivered bytes behave correctly.\n\n1. The runs-read wiring is UNPINNED. runs-read.ts:271 passes Date.parse(now), and that is the Publish card's served read. I ran an in-memory mutant (out-of-tree vitest transform, enforce:pre, anchor-throw, QA_DRILL_APPLIED=1) that dropped that argument. affordance-read-planning.test.ts plus runs-read.test.ts stayed 76/76 GREEN. The card() helper calls readRunGoalPublication directly with its own now, so it cannot see this wiring. The afford mutant (drop Date.parse(now) at affordance-read.ts:407) and the pre-fix mutant (intent => UNKNOWN) both go RED on IN FLIGHT and JUST INSIDE, so the offer half is pinned. To pin the card half, readRuns needs a goal it can serve. The seed world here does not work: readRuns({goalRef: SEED_GOAL}) refuses RUNS_READ_GOAL_UNKNOWN because the goal is not catalog-bound. Use the bound-goal world from control-room live-runs.test.ts DAEMON_RUNS_SOURCE instead (bootstrap-test-fixtures driveThrough goal.create, then goal.create_with_source). My probe on that world (cwd apps/daemon, node --experimental-strip-types) wrote an intent at 08:00Z with no observation and read createRunsReadPort({clock}).readRuns({goalRef}) at several clocks:\n- +1s: PENDING/null\n- B-1ms: PENDING/null\n- B: UNKNOWN/PUBLISH_EFFECT_RECONCILIATION_REQUIRED\n- 'not-a-time': UNKNOWN\n- the wall clock (45 min later): UNKNOWN\n\n2. A NEGATIVE AGE reads PENDING. If the read clock is behind intendedAt, for example after a backward step of the host clock, then now - intendedAt < B holds. The same probe with the read clock 1 h before intendedAt gave PENDING/null. A stuck publish is then hidden for the skew plus 5 min. Treating every negative age as UNKNOWN is wrong, because of the ms race between the read's clock() and a concurrent intent commit. A clamp such as `age < -B => UNKNOWN` would bound it.\n\n3. The bound VALUE is not pinned. Every arm is relative to the exported B, so changing the multiplier from 4 to 40 stays green; only a non-finite B would red it. The bound counts 4 network port calls (observe, push, ls-remote --symref, observe). The roughly 9 local execFile calls on that path (init --bare x4, rev-parse, cat-file, config --get-urlmatch x3) share the 1x margin. Each of those also has a 60 s timeout, so this is realistic but not the execFile-level worst case.\n\n4. affordance-read.ts was 669 lines at the parent and is 670 here (+1 comment line). It was already over the 400 cap, so this is NOT charged to this row. Whoever owns splitting affordance-read.ts should take it.\n\n5. The worker's comment-80a5e9b5 follow-ups stand: the resolve service still accepts a crafted in-flight dispatch, and goal-deployment-read and release-evidence-read call without now.",
+      "timestamp": "2026-09-19T08:46:56.135Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-19T03:26:53.454Z",
-  "updatedAt": "2026-09-19T08:36:29.877Z",
+  "updatedAt": "2026-09-19T08:47:12.866Z",
   "metrics": {
     "firstClaimAt": "2026-09-19T08:17:04.263Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-19T08:47:12.866Z",
+    "wallClockMs": 1808603
   },
   "stepsCompleted": [
     "step-1",
@@ -117,7 +125,8 @@
   },
   "planApprovedAt": "2026-09-19T08:21:24.392Z",
   "contextFetchedBy": [
-    "worker-07e6de2a"
+    "worker-07e6de2a",
+    "qa-6e60f228"
   ],
   "workStartedAt": "2026-09-19T08:21:55.562Z",
   "declaredFiles": [
@@ -140,7 +149,40 @@
     "apps/daemon/src/repository/git-publication-port.ts",
     "apps/daemon/src/http/run-goal-publication.ts",
     "apps/daemon/src/http/runs-read.ts",
-    "apps/daemon/src/http/affordance-read.ts"
+    "apps/daemon/src/http/affordance-read.ts",
+    ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json"
   ],
-  "completionSummary": "Fresh publish in-flight (intent, no receipt, no observation, now < PUBLISH_IN_FLIGHT_BOUND_MS) reads PENDING/code null; affordance mint offers no repository.publish_resolve. Bound=4*60s+60s=300_000 (observe, push, measureDefaultBranch, observe after intent). Stuck-by-age, observation, and legacy-no-transmission still UNKNOWN+Resolve. Clock only from runs-read and affordance-read. DoD pinned on production read+offer; journey test green. Plan suite: Test Files 9 passed, 240 passed. Also goal-deployment-read+release-read 11/258. typecheck exit 0. Drills M1/M2/M3 red :1576/:1607/:1584. Follow-ups comment-80a5e9b5."
+  "completionSummary": "Fresh publish in-flight (intent, no receipt, no observation, now < PUBLISH_IN_FLIGHT_BOUND_MS) reads PENDING/code null; affordance mint offers no repository.publish_resolve. Bound=4*60s+60s=300_000 (observe, push, measureDefaultBranch, observe after intent). Stuck-by-age, observation, and legacy-no-transmission still UNKNOWN+Resolve. Clock only from runs-read and affordance-read. DoD pinned on production read+offer; journey test green. Plan suite: Test Files 9 passed, 240 passed. Also goal-deployment-read+release-read 11/258. typecheck exit 0. Drills M1/M2/M3 red :1576/:1607/:1584. Follow-ups comment-80a5e9b5.",
+  "commits": [
+    {
+      "sha": "779f540b8fab4d2005fa57c61fbf7e943179aa44",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-19T08:21:31Z",
+      "paths": [
+        ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/http/run-goal-publication.ts",
+        "apps/daemon/src/http/runs-read.ts",
+        "apps/daemon/src/repository/git-publication-port.ts"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-19T08:36:39.869Z",
+      "treeId": "06103c68e8158198bc23429ab49cc1ec3e1e91db",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-07e6de2a@2026-09-19T08:21:31Z",
+    "at": "2026-09-19T08:36:39.869Z"
+  },
+  "completedAt": "2026-09-19T08:47:12.866Z",
+  "reviewCompletedAt": "2026-09-19T08:47:12.866Z",
+  "reviewSummary": "APPROVED 779f540b (moe/work-2026-09-18, pushed). Owned paths are clean, with no diff between the completion sha and HEAD. Re-runs:\n- recorded leg + goal-deployment-read + release-read: Test Files 11 passed, 258 passed, exit 0\n- daemon typecheck: exit 0\n- control-room live-runs.test.ts: 1 file, 71 passed\n- 12 adjacent publish/affordance suites: 208 passed\nIn-memory drills (out-of-tree config, anchor-throw, each applied once; production SHA256 unchanged afterwards, temp dir deleted):\n- the pre-fix mutant (intent => UNKNOWN) turns IN FLIGHT and JUST INSIDE RED, matching the recorded step-2 RED\n- dropping Date.parse(now) at affordance-read.ts:407 turns both RED\nDoD1 holds: the offer mint is pinned through the shipped port. A probe of production runs-read on a bound goal read PENDING/null in flight and at B-1ms, and UNKNOWN/PUBLISH_EFFECT_RECONCILIATION_REQUIRED at B, with a garbage clock and on the wall clock.\nDoD2 holds: STUCK BY AGE, LEGACY STUCK (no transmission) and STUCK BY OBSERVATION are green, and publish-resolve-journey is green. The intent is journaled once (replay keeps intendedAt), so a stuck publish cannot hide forever.\nCallers without now keep UNKNOWN, and there are no wall-clock port reads in the publish tests.\nThe bound of 4 network calls x 60 s + 60 s matches the corrected measurement (:137-139 is the pre-flight).\nFollow-ups in comment-76085255, not blocking:\n- runs-read.ts:271 wiring is unpinned (drop-arg mutant stays 76/76 green)\n- a negative age reads PENDING\n- the bound value is unpinned\n- affordance-read.ts was already over the cap before this row (669 to 670 lines, +1 comment), so it is not charged here"
 }
