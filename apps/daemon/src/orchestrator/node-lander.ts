@@ -10,10 +10,12 @@ import {
   recordLandingBaseline, recordLandingReceipt,
 } from "../repository/landing-ledger.js";
 import { DELETED_BLOB, landingReceiptId } from "../repository/landing-receipt-contracts.js";
-import type { LandingBaselineEntry, LandingRefusal } from "../repository/landing-receipt-contracts.js";
+import type { LandingBaselineEntry, LandingCommit, LandingRefusal } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { untrackedImports } from "./landing-imports.js";
+import { runGit } from "./node-integration.js";
+import { adoptedSeatCommit } from "./node-lander-adopt.js";
 import { checkLandingVerification, unrecordedLandingReport } from "./node-lander-verification.js";
 import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
@@ -31,6 +33,10 @@ import { commitJournaledLanding, landingJournalGate } from "./node-lander-journa
  * landing commits exactly the paths whose content differs from that baseline.
  * The operator's own uncommitted work, present before the seat started, is
  * never swept into a Moe commit.
+ *
+ * A seat in its own tree may have committed the work itself. That commit, verified and not yet on
+ * the project's branch, IS the landing: it is recorded COMMITTED as it stands, with no Git effect
+ * (node-lander-adopt.ts). Dirt on top of it lands the ordinary way, as a commit whose parent it is.
  *
  * One landing per acceptance: the receipt id is a function of the verifier
  * receipt, so a wrapper restart lands nothing twice, and a structural refusal is
@@ -50,6 +56,8 @@ export interface NodeLanderConfig {
   readonly nodeMission: (nodeRef: string) => NodeMission | null;
   readonly nodes: () => readonly { nodeRef: string }[];
   readonly projectId: string;
+  /** The project's own checkout, whose HEAD decides whether a seat's commit is still unmerged. Absent or null = never adopt. */
+  readonly projectRoot?: string | null;
   /** INJECTED in tests; production reads the node's review ledger. */
   readonly readAccepted?: (nodeRef: string) => { readonly verifierReceiptId: string } | null;
   /** A root-relative path's current text, or null; production reads the workspace. */
@@ -168,6 +176,23 @@ export function createNodeLander(config: NodeLanderConfig) {
     };
   };
 
+  /** The COMMITTED receipt, for a commit Moe made and for one the seat made itself alike. */
+  const committedReport = (
+    nodeRef: string, workspace: string, verifierReceiptId: string, commit: LandingCommit, note: string,
+  ): LanderReport => {
+    let recorded: ReturnType<typeof recordLandingReceipt>;
+    try { recorded = recordLandingReceipt(config.store, {
+      commit, decidedAt: clock(), projectId: config.projectId, refusal: null,
+      subjectRef: nodeRef, verifierReceiptId, workspace,
+    }); } catch { return { detail: "LANDING_RECEIPT_INVALID", nodeRef, outcome: "LANDING_RECEIPT_INVALID" }; }
+    if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
+    return {
+      detail: `${commit.sha.slice(0, 10)} on ${commit.branch}, ${String(commit.files.length)} file(s)${note}`,
+      nodeRef,
+      outcome: "COMMITTED",
+    };
+  };
+
   const landOne = async (nodeRef: string, verifierReceiptId: string): Promise<LanderReport | null> => {
     const receiptId = landingReceiptId(config.projectId, nodeRef, verifierReceiptId);
     const existing = readLandingReceipt(config.store, config.projectId, receiptId);
@@ -221,7 +246,16 @@ export function createNodeLander(config: NodeLanderConfig) {
       return unrecordedLandingReport(checked, nodeRef)
         ?? refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
     }
+    const message = landingMessage(brief, nodeRef, verifierReceiptId);
     if (delivered.length === 0) {
+      // A clean tree is not always "owed no bytes": the seat may have committed the work itself, as
+      // it must to answer a merge conflict. UnAI 2026-09-19: that was credited NOTHING_TO_COMMIT and
+      // the branch was never merged. The verified HEAD is adopted instead — see node-lander-adopt.ts.
+      // No Git effect, so no landing intent; the binding was matched against the tree just above.
+      const adopted = adoptedSeatCommit(runGit, config.projectRoot ?? null, checked.binding, message);
+      if (adopted !== null) {
+        return committedReport(nodeRef, brief.workspace, verifierReceiptId, adopted, ", adopted from the seat's own commit");
+      }
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
       });
@@ -231,7 +265,6 @@ export function createNodeLander(config: NodeLanderConfig) {
     const { root } = observed.observation;
     const carried = untrackedImports(delivered, untracked, (path) => readText(root, path));
     const paths = [...delivered, ...carried];
-    const message = landingMessage(brief, nodeRef, verifierReceiptId);
     const committed = await commitJournaledLanding({ handle: config.reservationHandle, store: config.store,
       port: checked.port, workspace: brief.workspace, paths, message, binding: checked.binding, verifierReceiptId });
     if (!committed.ok) {
@@ -245,27 +278,12 @@ export function createNodeLander(config: NodeLanderConfig) {
         code: committed.code, detail: committed.detail,
       });
     }
-    let recorded: ReturnType<typeof recordLandingReceipt>;
-    try { recorded = recordLandingReceipt(config.store, {
-      commit: {
-        branch: committed.receipt.branch, files: paths, message,
-        parentSha: committed.receipt.parentSha, sha: committed.receipt.sha,
-      },
-      decidedAt: clock(),
-      projectId: config.projectId,
-      refusal: null,
-      subjectRef: nodeRef,
-      verifierReceiptId,
-      workspace: brief.workspace,
-    }); } catch { return { detail: "LANDING_RECEIPT_INVALID", nodeRef, outcome: "LANDING_RECEIPT_INVALID" }; }
-    if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
     const imports = carried.length === 0 ? "" : `, ${String(carried.length)} imported untracked file(s) carried`;
     const attempts = earlier.length === 0 ? "" : `, ${String(earlier.length)} from an earlier attempt`;
-    return {
-      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)${imports}${attempts}`,
-      nodeRef,
-      outcome: "COMMITTED",
-    };
+    return committedReport(nodeRef, brief.workspace, verifierReceiptId, {
+      branch: committed.receipt.branch, files: paths, message,
+      parentSha: committed.receipt.parentSha, sha: committed.receipt.sha,
+    }, `${imports}${attempts}`);
   };
 
   /** Land every accepted node that has no landing receipt yet. Silent for the rest. */

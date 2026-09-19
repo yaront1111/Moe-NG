@@ -93,6 +93,8 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   const landerFor = (nodeRef: string, root: string, baselineId: string | null, reservationHandle?: RepositoryExecutionHandle) => createNodeLander({
     git, verifiedWorkspace, nodeMission: missionIn(root), nodes: () => [{ nodeRef }], projectId, store,
     baselineId: () => baselineId,
+    // Whose HEAD decides whether a seat's own commit on a node branch is still unmerged work.
+    projectRoot: config.compiledWorkspace,
     ...(reservationHandle === undefined ? {} : { reservationHandle }),
   });
   let closed = false;

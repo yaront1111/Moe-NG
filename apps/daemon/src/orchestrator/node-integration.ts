@@ -43,7 +43,8 @@ export interface IntegrationReport {
 export type IntegrationGit = (cwd: string, args: readonly string[]) =>
   { readonly code: number; readonly stderr?: string; readonly stdout: string };
 
-const runGit: IntegrationGit = (cwd, args) => {
+/** Exported so the lander's adoption probe asks Git the same way; never copy it a third time. */
+export const runGit: IntegrationGit = (cwd, args) => {
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith("GIT_")));
   try {
     const stdout = execFileSync("git", [...args], {
