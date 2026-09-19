@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { GOAL_ID, PROJECT_ID, closeStores, driveThrough, openStore, FIXTURE_PUBLICATION_APPROVAL } from "../bootstrap/bootstrap-test-fixtures.js";
 import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import { recordLandingReceipt } from "./landing-ledger.js";
 import { publicationGoalIntegrated } from "./publication-goal-integration.js";
 import { REPOSITORY_LANDING_INTENT_KIND, recordRepositoryLandingIntent } from "./repository-landing-intent.js";
 import { writeRecoveryFact } from "./repository-recovery-facts.js";
@@ -145,4 +147,34 @@ it("refuses a goal whose only node refused for a POST-INTENT reason", () => {
   expect(publicationGoalIntegrated(store, PROJECT_ID, GOAL_ID, candidate,
     () => { checks += 1; return true; })).toBe(false);
   expect(checks).toBe(0);
+});
+
+/**
+ * A commit made in a node's own tree is on the project branch only once the integrator recorded
+ * that sha MERGED. UnAI 2026-09-19: one node's conflicted, withdrawn tree landing refused every
+ * publish of a master that held the 94 merged ones.
+ */
+it("neither credits nor checks a commit made in a node's tree until the integrator merged it", () => {
+  const { candidate, nodeRef, store } = publishWorld();
+  seedReviewAcceptance(store, nodeRef);
+  const sha = "c".repeat(40);
+  expect(recordLandingReceipt(store, {
+    commit: { branch: "moe/node-a", files: ["src/landed.ts"], message: "Land node-a", parentSha: null, sha },
+    decidedAt: "2026-08-16T01:00:00.000Z", projectId: PROJECT_ID, refusal: null, subjectRef: nodeRef,
+    verifierReceiptId: readReviewLedger(store, PROJECT_ID, nodeRef).accepted!.verifierReceiptId,
+    workspace: "D:/fixture/repo/.moe-next/trees/node-a",
+  })).toMatchObject({ ok: true });
+
+  let checks = 0;
+  const contains = (): boolean => { checks += 1; return true; };
+  expect(publicationGoalIntegrated(store, PROJECT_ID, GOAL_ID, candidate, contains)).toBe(false);
+  expect(checks).toBe(0);
+
+  const aggregateId = `repository-integration/${createHash("sha256").update(PROJECT_ID, "utf8").digest("hex")}`;
+  const facts = { at: "2026-08-16T01:01:00.000Z", branch: "moe/node-a", mergeSha: "f".repeat(40), nodeRef, projectId: PROJECT_ID, sha, version: "moe-repository-integration/1" };
+  store.commit({ aggregateId, commandBytes: new TextEncoder().encode(JSON.stringify({ eventType: "NodeBranchMerged" })), commandId: "rin-publication-0",
+    committedAt: "2026-08-16T01:01:00.000Z", expectedVersion: store.getAggregateVersion(aggregateId),
+    events: [{ eventId: "rin-publication-0-e1", eventType: "NodeBranchMerged", payload: new TextEncoder().encode(JSON.stringify(facts)) }] });
+  expect(publicationGoalIntegrated(store, PROJECT_ID, GOAL_ID, candidate, contains)).toBe(true);
+  expect(checks).toBe(1);
 });

@@ -5,7 +5,10 @@ import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js"
 import { legacyCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import { landingEnvironment } from "./git-landing-port.js";
+import { landedFromTree } from "../http/dependency-integration.js";
 import { landedWithNoEffect } from "./landing-receipt-contracts.js";
+import type { LandingReceiptV1 } from "./landing-receipt-contracts.js";
+import { nodeCommitMerged } from "./repository-integration-read.js";
 import { validPublicationSha } from "./publication-approval-contracts.js";
 import type { PublicationCandidate } from "./publication-approval-contracts.js";
 /**
@@ -30,8 +33,15 @@ export function publicationGoalIntegrated(store: SqliteEventStore, projectId: st
       for (const key of keys) if (!legacy.has(key)) refs.add(compiledExecutionRef(projectId, graph, key));
     }
     const reviews = readReviewLedgers(store, projectId, refs);
+    // A commit made in a node's own tree is on the project branch only once the integrator
+    // recorded it MERGED (the dependency gate's rule). Until then it was never in the ancestry, so
+    // it is neither credited nor checked: UnAI 2026-09-19, one node's conflicted, withdrawn landing
+    // refused every publish of the 94 that had merged.
+    // ponytail: one integration-aggregate walk per tree landing; fold once if publish gets hot.
+    const onProjectBranch = (receipt: LandingReceiptV1): boolean => receipt.commit === null
+      || !landedFromTree(receipt.workspace) || nodeCommitMerged(store, projectId, receipt.subjectRef, receipt.commit.sha);
     const landed = [...reviews.landings.values()]
-      .filter((receipt) => receipt.outcome === "COMMITTED" || landedWithNoEffect(receipt, reviews.landingIntents));
+      .filter((receipt) => (receipt.outcome === "COMMITTED" && onProjectBranch(receipt)) || landedWithNoEffect(receipt, reviews.landingIntents));
     if (landed.length === 0) return false;
     // The ancestry check runs over the COMMITTED subset ALONE. A no-effect receipt has no sha, so
     // including it would refuse on `validPublicationSha(undefined)` rather than be skipped.
