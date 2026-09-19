@@ -116,21 +116,30 @@ its own: a caller that injects no dependency provider is refused, never served a
   that resolves a conflict must be a real two-parent commit, which the single-parent plumbing
   commit cannot make. Adoption at the SAME sha is deliberate: a do-nothing resolution conflicts
   and is withdrawn again instead of being credited as owing no bytes.
-- **A seat is killed on SILENCE, and only backstopped by the cap.** `claude -p` prints nothing
-  until it finishes, so bytes-on-stdout is 0 for a seat's whole life. `seat-liveness-probe.ts`
-  looks at the OS once per tick (win32: PowerShell CIM `Win32_Process`; POSIX: `ps`) for the
-  seat's descendants and tree CPU; `seat-liveness.ts` calls a seat active on output, on a live
-  tool child (descendants above the smallest count seen — the launcher chain, cmd.exe → model),
-  or on CPU growth ≥ `CPU_ACTIVITY_FLOOR_MS` per tick. `MOE_AGENT_SILENCE_MS` (20 min) kills
-  after no activity; `MOE_AGENT_TIMEOUT_MS` (2 h) kills regardless. Each kill line names which
-  limit fired and the last activity seen; the quiet notice carries the same three facts. The
-  tick runs at `min(quietNoticeMs || 60 s, silenceMs)`; `quietNoticeMs: 0` silences the notice
-  only, never the kill. A probe that cannot see the tree answers `{ ok: false, reason }` (a
-  bounded timeout / exit + stderr tail / thrown message), grants no liveness (fail-closed), puts
-  `tree unobserved: <reason>` in the notice and the kill line, and the spawner's `warn` sink
-  (teed at WARN as `SEAT_PROBE_FAILED`) says so once per seat on the first failed tick, before
-  any kill. `CPU_ACTIVITY_FLOOR_MS` is unmeasured against a no-tool-child model turn; its
-  comment holds the calibration recipe. Any new `MOE_*` knob the wrapper reads must also join
+- **A seat is killed on observed stillness, and only backstopped by the cap.** Claude seats run
+  `--output-format stream-json --verbose --include-partial-messages`, so every event counts as
+  output; `seat-output-tail.ts` decodes the stream back to the text-mode report, and the console
+  sinks, the bounded tail and the SEAT_EXIT record see only that report (each `result` text, plus
+  non-event lines verbatim). A codex seat still prints nothing until it finishes.
+  `seat-liveness-probe.ts` looks at the OS once per tick (win32: PowerShell CIM `Win32_Process`;
+  POSIX: `ps`) for the seat's descendants and tree CPU; `seat-liveness.ts` calls a seat active on
+  output, on a live tool child (descendants above the smallest count seen — the launcher chain,
+  cmd.exe → model), or, for a codex seat only, on any CPU growth. `MOE_AGENT_SILENCE_MS` (20 min)
+  kills a streaming claude seat after a whole window of observed ticks with no event and no tool
+  child (its CPU is reported only), and a codex seat after no output, no tool child and no CPU
+  growth at all; `MOE_AGENT_TIMEOUT_MS` (2 h) kills regardless. Each kill line names which limit
+  fired and the last activity seen; the quiet notice carries the same three facts. The tick runs
+  at `min(quietNoticeMs || 60 s, silenceMs)`; `quietNoticeMs: 0` silences the notice only, never
+  the kill. A tick that cannot see the tree (no probe, no pid, a failure or a throw) is neither
+  activity nor silence, so while the probe is blind only the absolute cap can end the seat. CPU
+  is evidence, never a threshold: measured on this host a hung `claude -p` burns 125-547 ms of
+  tree CPU per ~60 s and a working one 219-1219 (human ruling 2026-09-18, task-eca3780d), so a
+  hung codex seat that still burns CPU is bounded by the cap alone, while a hung claude request
+  emits no event and is killed for silence (task-815f803d). A probe that cannot see the tree
+  answers `{ ok: false, reason }` (a bounded timeout / exit + stderr tail / thrown message), puts
+  `tree unobserved: <reason>` in every later notice, and the spawner's `warn` sink (teed at WARN
+  as `SEAT_PROBE_FAILED`) says so once per seat on the first failed tick. A silence kill line
+  never carries that unobserved reason. Any new `MOE_*` knob the wrapper reads must also join
   `PROJECT_STACK_ENVIRONMENT_KEYS` in `packages/runner` or the Windows broker drops it silently.
 - **The lease follows liveness.** `claimTtlMs` (30 min, not a knob) is the reap horizon for a
   DEAD child only: while the child lives, `orchestrator/agent-claim-renewal.ts` renews the claim
@@ -155,9 +164,21 @@ its own: a caller that injects no dependency provider is refused, never served a
   non-zero exit, `PUBLISH_PUSH_REJECTED`) and whose remote tip is still that pre-push tip is
   released automatically: a REFUSED `PUBLISH_NOT_LANDED` receipt, then the hold goes back as
   `PUBLISH_NOT_TRANSMITTED`. Both halves are required, because git can exit non-zero after the
-  ref moved, and a push that landed and was force-pushed back leaves the tip unchanged too. A push
-  that succeeded, timed out, threw, or lost its answer is never auto-resolved and waits for an
-  operator. So does a publish stuck before this rule existed: it has no evidence to resolve on.
+  ref moved, and a push that landed and was force-pushed back leaves the tip unchanged too. Any
+  other UNKNOWN publish waits for the operator: a push that succeeded, timed out, threw or lost its
+  answer, and any publish stuck before these rules existed, which has no evidence to resolve on.
+  Each UNKNOWN pass records what it saw (`internal.repository.publication_observation`: the remote
+  tip, the expected sha, git's answer; written only when that changes) and the Publish card shows
+  it. The operator, or the owner's paired browser holding ADMIN (owner ruling comment-00ce6540 on
+  task-4f16c331), decides on it with `repository.publish_resolve` (`NOT_TRANSMITTED` or `ABANDON`,
+  `repository/publish-resolve-service.ts`): ONE REFUSED receipt, `PUBLISH_RESOLVED_<resolution>`,
+  carrying that observation, and never a push. The command cannot release the hold, which only its
+  owning controller may (`REPOSITORY_EXECUTION_CONTROLLER_MISMATCH`), so the publisher gives it back
+  as `PUBLISH_RESOLVED` on its next pass; deliveries stay BUSY until then, and a fresh decision then
+  pushes once. The kind is human-only: its async entry admits the configured operator or a paired
+  durable HUMAN holding ADMIN, and it is on no MCP roster (excluded through `OPERATOR_PRINCIPAL_KINDS`,
+  and never delegated to `moe mcp --as-operator`).
+  `repository/publish-resolve-journey.test.ts` drives the whole exit on real git.
 
 - **The publisher names its outcome.** `orchestrator/node-publisher.ts` reports `WAITING`
   (the single repository reservation is held by a seat, a landing or a criterion check; nothing
@@ -180,6 +201,12 @@ its own: a caller that injects no dependency provider is refused, never served a
   is left to an approved publish that has not held it yet: `RepositoryDeliveryConfig.publishWaiting`
   (wired to `pendingPublication`) turns deliveries away in `admission` and `start`, because the
   delivery pass runs before the publisher's and won every race (UnAI 2026-09-18).
+- **A trunk workspace publishes a goal branch, never the default.** When the workspace branch
+  is the remote's measured default, or that default has not been measured, `publication-candidate.ts`
+  approves `moe/release/<goalId>` and the publisher pushes that ref, never the default branch
+  itself. Release opens the PR from that head into the measured default. `RELEASE_HEAD_IS_BASE`
+  is the named refusal when a head and base still coincide, as they do for goals published onto
+  the default before this rule.
 
 ## Gotchas
 
@@ -193,8 +220,11 @@ its own: a caller that injects no dependency provider is refused, never served a
   **`FORBIDDEN_FIXTURES.length === 37`** — the second is a deny-list of fixture helper names
   (`streamPort`, `approveNodes`, `exactKeys`, …) that must *not* reach the package root. One
   new export in `index.ts` reds the count arm and the exact-namespace arm together.
-- `daemon-command-vocabulary.test.ts` pins **65 kinds** plus per-family sizes (BOOTSTRAP 18,
-  GRAPH 5, REVIEW 4, SESSION 3, STEP 3, WORK 3, COMPILER 4, …). By contrast
+- `daemon-command-vocabulary.test.ts` holds the ONE hand-written census of the wired kinds
+  (`ROWS`, in `PAYLOAD_KEYS` order) and of the operator-only set (`OPERATOR_ONLY`), by exact
+  set equality and no counts; every other daemon test derives both from production. A new
+  operator kind moves that file, its `ROWS` row in `daemon-command-registry.test.ts`, and its
+  hand classification in `mcp-tool-allowlist.ts` (delegable or never). Similarly
   `gates-roster-coherence.test.ts` deliberately freezes nothing: it enumerates served kinds off
   a real composed registry, asserts served ⊆ advertised (equality is false by design — some
   kinds are advertised and deliberately unserved) and exact set equality against
@@ -219,6 +249,11 @@ its own: a caller that injects no dependency provider is refused, never served a
 - AGENTS.md's 250/400-line source rail bites here: `index.ts` packs export names several per
   line for that reason, and `daemon-entry.ts` re-exports the listener surface rather than
   adding another line to `index.ts`.
+- **A fact written once under a DETERMINISTIC decision key, on an aggregate other writers share,
+  goes through `repository/decision-fact-slots.ts`.** The store records a lost version race as a
+  `NO_BUSINESS_EFFECT` decision under the caller's key, replayed forever: one race burned the key
+  (task-978669b6: `PUBLISH_RECEIPT_INVALID`, every delivery `REPOSITORY_EXECUTION_BUSY`). Slot 0 is
+  the canonical key; only a lost race moves on. A versioned key (the observation's) needs none.
 
 ## Testing
 

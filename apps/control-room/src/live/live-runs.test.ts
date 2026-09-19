@@ -247,6 +247,9 @@ const DAEMON_RUNS_SOURCE = String.raw`
 const f = await import("./src/bootstrap/bootstrap-test-fixtures.js");
 const { recordDeployReceipt } = await import("./src/deployment/deploy-ledger.js");
 const { createRunsReadPort } = await import("./src/http/runs-read.js");
+const { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId } = await import("./src/repository/publish-receipt-contracts.js");
+const { publicationRepositoryId } = await import("./src/repository/publication-approval-contracts.js");
+const ledger = await import("./src/repository/publication-effect-ledger.js");
 const store = f.openStore();
 try {
   f.driveThrough(store, "goal.create");
@@ -265,8 +268,24 @@ try {
     decisionId: "cross-end-deploy", sha: "a".repeat(40), imageDigest: "sha256:" + "b".repeat(64),
     refusal: null, releaseDecision: null, url: "https://receipt.example", decidedAt: "2026-09-06T11:00:00.000Z" });
   if (!receipt.ok) throw new Error(receipt.code);
-  process.stdout.write(JSON.stringify({ empty,
-    populated: createRunsReadPort({ projectId: f.PROJECT_ID, store }).readRuns({}) }));
+  const populated = createRunsReadPort({ projectId: f.PROJECT_ID, store }).readRuns({});
+  // An UNKNOWN publish whose last pass found the branch absent on the remote: the real writers, then the real read.
+  const encoder = new TextEncoder(), at = "2026-09-19T08:00:00.000Z", identity = { root: "D:/ws", gitDirectory: "D:/ws/.git" };
+  const candidate = { identity, approval: { branch: "main", sha: "c".repeat(40), remoteUrl: "https://github.com/o/r.git",
+    repositoryId: publicationRepositoryId(identity) } };
+  const decisionId = store.commitExpectedVersionDecision({ commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
+    committedResultBytes: encoder.encode(JSON.stringify({ candidate, goalId: f.GOAL_ID, remoteUrl: candidate.approval.remoteUrl })),
+    correlationId: "cross-end-publish", decidedAt: at, events: [{ eventId: "cross-end-publish-requested",
+      eventType: "RepositoryPublishRequested", payload: encoder.encode("{}") }],
+    expectedVersion: store.getAggregateVersion(publishAggregateId(f.GOAL_ID)),
+    key: { commandId: "cross-end-publish", principalId: "operator-local", projectId: f.PROJECT_ID },
+    requestBytes: encoder.encode("{}"), targetAggregateId: publishAggregateId(f.GOAL_ID) }).decision.decisionId;
+  ledger.recordPublicationIntent(store, { version: "moe-publication-intent/1", candidate, decisionId, goalId: f.GOAL_ID,
+    projectId: f.PROJECT_ID, ownerDigest: "d".repeat(64), controllerId: "cross-end", reservationRevision: 1, intendedAt: at });
+  ledger.notePublicationObservation(store, { projectId: f.PROJECT_ID, goalId: f.GOAL_ID, decisionId, observedSha: null,
+    expectedSha: candidate.approval.sha, observedAt: at });
+  process.stdout.write(JSON.stringify({ empty, populated,
+    published: createRunsReadPort({ projectId: f.PROJECT_ID, store }).readRuns({}) }));
 } finally { f.closeStores(); }
 `;
 
@@ -288,7 +307,7 @@ function expectSameKeys(served: unknown, decoded: unknown): void {
   } else expect(decoded).toStrictEqual(served);
 }
 
-it("decodes actual daemon-served deployment keys bidirectionally without dropping or inventing facts", () => {
+it("decodes actual daemon-served deployment and publish keys bidirectionally without dropping or inventing facts", () => {
   const cwd = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "daemon");
   const stdout = execFileSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", DAEMON_RUNS_SOURCE],
     { cwd, encoding: "utf8", shell: false, windowsHide: true, timeout: 30_000, maxBuffer: 1_000_000 });
@@ -304,6 +323,13 @@ it("decodes actual daemon-served deployment keys bidirectionally without droppin
   if (answer.status !== "RUNS") throw new Error("Actual daemon wire failed browser decoding");
   expectSameKeys(recordOf(frame)["goals"], answer.goals);
   expect(answer.goals).toStrictEqual(recordOf(frame)["goals"]);
+  // The publish body with its observation, exactly as the daemon serves it (added 2026-09-19).
+  expect(frames["published"]).toMatchObject({ goals: [{ publish: { outcome: "UNKNOWN",
+    observation: { expectedSha: "c".repeat(40), observedAt: "2026-09-19T08:00:00.000Z", observedSha: null, reason: "UNRECORDED" } } }] });
+  const published = mapRunsAnswer(200, frames["published"]);
+  if (published.status !== "RUNS") throw new Error("Actual daemon publish body failed browser decoding");
+  expectSameKeys(recordOf(frames["published"])["goals"], published.goals);
+  expect(published.goals).toStrictEqual(recordOf(frames["published"])["goals"]);
 }, 35_000);
 
 describe("review facts added 2026-09-15", () => {
@@ -331,5 +357,37 @@ describe("review facts added 2026-09-15", () => {
     ["an owner with an extra key", { ...NODE.review, findings: [{ ...attributedFinding, attributedTo: { ...attributedFinding.attributedTo, why: "x" } }] }],
   ])("refuses %s instead of showing a partial review", (_label, review) => {
     expect(mapRunsAnswer(200, frame(review)).status).not.toBe("RUNS");
+  });
+});
+
+describe("the publish body's last observation (added 2026-09-19)", () => {
+  const OBSERVATION = Object.freeze({ expectedSha: "a".repeat(40), observedAt: "2026-09-19T08:00:00.000Z", observedSha: "c".repeat(40), reason: "REJECTED" });
+  const PUBLISH = Object.freeze({ branch: "main", code: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED", decisionId: "publish-1", observation: OBSERVATION,
+    outcome: "UNKNOWN", remoteUrl: "https://github.com/o/r.git", requestedAt: "2026-09-19T07:00:00.000Z", sha: "a".repeat(40), url: null });
+  const publishing = (publish: unknown) => ({ ...RUNS, goals: [{ ...GOAL, publish }] });
+  const { observation: _omitted, ...withoutObservation } = PUBLISH;
+  const { reason: _dropped, ...withoutReason } = OBSERVATION;
+
+  it("decodes an observation by value, an absent remote branch as a null tip, and no observation as null", () => {
+    const bodies = [PUBLISH, { ...PUBLISH, observation: { ...OBSERVATION, observedSha: null } },
+      { ...PUBLISH, code: null, observation: null, outcome: "PENDING" }];
+    for (const publish of bodies) {
+      expect(mapRunsAnswer(200, publishing(publish))).toStrictEqual({ goals: [{ ...GOAL, publish }], status: "RUNS", totals: TOTALS });
+    }
+    expect(bodies).toHaveLength(3);
+  });
+
+  it.each([
+    ["an unknown extra key on the publish body", { ...PUBLISH, detail: "git said no" }],
+    ["an unknown extra key on the observation", { ...PUBLISH, observation: { ...OBSERVATION, stderr: "fatal: Authentication failed" } }],
+    ["a publish body without the observation key", withoutObservation],
+    ["an observation without its reason", { ...PUBLISH, observation: withoutReason }],
+    ["an observation that is not an object", { ...PUBLISH, observation: "REJECTED" }],
+    ["an empty expected sha", { ...PUBLISH, observation: { ...OBSERVATION, expectedSha: "" } }],
+    ["a numeric observed tip", { ...PUBLISH, observation: { ...OBSERVATION, observedSha: 7 } }],
+    ["an empty reason", { ...PUBLISH, observation: { ...OBSERVATION, reason: "" } }],
+    ["a missing time", { ...PUBLISH, observation: { ...OBSERVATION, observedAt: null } }],
+  ])("refuses %s: exact-key decoding was widened, never loosened", (_label, publish) => {
+    expect(mapRunsAnswer(200, publishing(publish))).toStrictEqual(INVALID);
   });
 });

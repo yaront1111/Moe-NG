@@ -47,15 +47,14 @@ import { dirname, join } from "node:path";
 import { createConnection } from "node:net";
 import { readCurrentDeployReceipt } from "../../../apps/daemon/src/deployment/deploy-ledger.js";
 import { deployTargetAggregateId } from "../../../apps/daemon/src/deployment/deploy-target-contracts.js";
-import { publicationRepositoryId } from "../../../apps/daemon/src/repository/publication-approval-contracts.js";
 import { publishAggregateId } from "../../../apps/daemon/src/repository/publish-receipt-contracts.js";
-import { resolveRepositoryExecutionIdentity } from "../../../apps/daemon/src/repository/repository-execution-identity.js";
 import { lanePids, mintLaneOperatorSeat, readWireProtocolVersion, survivingPids,
   withDaemonBackedControlRoom } from "./daemon-ports.js";
 import type { DaemonLane, LaneOperatorSeat } from "./daemon-ports.js";
 import { LANDING_BUDGET_MS, landLaneNode } from "./lane-landing.js";
 import { lanePost } from "./lane-preview.js";
 import { seededGoalId } from "./lane-preview-arms.js";
+import { readPublicationApproval } from "./publication-approval-read.js";
 
 /** Admitted by `admitRemoteUrl`; the lane never reaches a network with it. */
 const REMOTE_URL = "https://github.com/moe-lane/deploy-environment.git";
@@ -94,11 +93,9 @@ async function landAndPublish(lane: DaemonLane, goalId: string): Promise<string>
   expect(landed.ok ? "ok" : `LANDING: ${landed.detail}`).toBe("ok");
   if (!landed.ok) throw new Error("unreachable: the assertion above fails first");
   expect(landed.sha, "the lander commits a real sha git resolves").toMatch(/^[0-9a-f]{40}$/u);
-  const identity = resolveRepositoryExecutionIdentity(lane.workspace);
-  expect(identity.ok, JSON.stringify(identity)).toBe(true);
-  if (!identity.ok) throw new Error("unreachable: the assertion above fails first");
-  const approval = { branch: "main", remoteUrl: REMOTE_URL,
-    repositoryId: publicationRepositoryId(identity.identity), sha: landed.sha };
+  const approval = await readPublicationApproval(lane, goalId, REMOTE_URL);
+  expect(approval, "the daemon's preview names the commit this drive just landed")
+    .toMatchObject({ remoteUrl: REMOTE_URL, sha: landed.sha });
   const answer = await command(lane, "repository.publish", publishAggregateId(goalId),
     { approval, goalId, remoteUrl: REMOTE_URL }, mintLaneOperatorSeat(lane));
   expect(answer, `PUBLISH: ${JSON.stringify(answer)}`).toMatchObject({ outcome: "ACCEPTED" });

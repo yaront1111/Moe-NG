@@ -72,6 +72,8 @@ export interface ReleaseEvidenceView {
   readonly goalTitle: string;
   readonly preview: ReleasePreviewView | null;
   readonly receipt: ReleaseReceiptView | null;
+  /** The default branch the remote itself reported, absent when it has never been measured or could not be. */
+  readonly remoteDefaultBranch?: string;
   readonly reviewRounds: readonly ReleaseReviewRoundView[];
   /** The published sha this evidence is measured at, or null when nothing is pushed yet. */
   readonly sha: string | null;
@@ -146,18 +148,27 @@ function receiptOf(value: unknown): ReleaseReceiptView | null {
 }
 
 function evidenceOf(value: unknown): ReleaseEvidenceView | null {
-  const row = effectRecord(value, ["ancestryMeasured", "criteria", "goalId", "goalTitle",
+  const nine = effectRecord(value, ["ancestryMeasured", "criteria", "goalId", "goalTitle",
+    "preview", "receipt", "remoteDefaultBranch", "reviewRounds", "sha"]);
+  const row = nine ?? effectRecord(value, ["ancestryMeasured", "criteria", "goalId", "goalTitle",
     "preview", "receipt", "reviewRounds", "sha"]);
   if (row === null || typeof row.ancestryMeasured !== "boolean" || !effectText(row.goalId)
     || !effectText(row.goalTitle) || !(row.sha === null || effectSha(row.sha))) return null;
+  let remoteDefaultBranch: string | undefined;
+  if (nine !== null) {
+    if (!effectText(nine.remoteDefaultBranch)) return null;
+    remoteDefaultBranch = nine.remoteDefaultBranch;
+  }
   const criteria = effectList(row.criteria, criterionOf, MAX_CRITERIA);
   const reviewRounds = effectList(row.reviewRounds, roundOf, 256);
   if (criteria === null || reviewRounds === null) return null;
   const preview = row.preview === null ? null : previewOf(row.preview);
   const receipt = row.receipt === null ? null : receiptOf(row.receipt);
   if ((row.preview !== null && preview === null) || (row.receipt !== null && receipt === null)) return null;
-  return { ancestryMeasured: row.ancestryMeasured, criteria, goalId: row.goalId,
-    goalTitle: row.goalTitle, preview, receipt, reviewRounds, sha: row.sha as string | null };
+  const evidence: ReleaseEvidenceView = { ancestryMeasured: row.ancestryMeasured, criteria,
+    goalId: row.goalId, goalTitle: row.goalTitle, preview, receipt, reviewRounds,
+    sha: row.sha as string | null };
+  return remoteDefaultBranch === undefined ? evidence : { ...evidence, remoteDefaultBranch };
 }
 
 export function mapReleaseAnswer(status: number, body: unknown): ReleaseOutcome {

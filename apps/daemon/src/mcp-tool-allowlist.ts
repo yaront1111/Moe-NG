@@ -179,6 +179,9 @@ export const MCP_NEVER_DELEGATED_KINDS: readonly string[] = Object.freeze([
   "criterion_check.approve",
   "criterion_check.verify",
   "repository.recover",
+  // The operator asserting what their own remote holds: recover's class of evidence, but served
+  // from an ASYNC entry that fences on the operator principal, not on the transport origin.
+  "repository.publish_resolve",
   // Requires a durable paired HUMAN principal, which the operator credential is not.
   "repository.publish",
   // Its payload carries the variable's VALUE, and MCP clients log tool arguments

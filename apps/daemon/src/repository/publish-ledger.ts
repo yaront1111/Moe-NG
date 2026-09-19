@@ -1,6 +1,7 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { CommandDecisionRecord, EventDraft, SqliteEventStore, StoredEvent } from "@moe/store";
+import type { CommandDecisionRecord, SqliteEventStore, StoredEvent } from "@moe/store";
 
+import { commitFactDecision, findFactDecision, type FactSlot } from "./decision-fact-slots.js";
 import {
   NODE_PUBLISHER_PRINCIPAL_ID, PUBLISH_RECEIPT_COMMAND_KIND, PUBLISH_RECEIPT_VERSION,
   REMOTE_BOUND_EVENT_TYPE, REPOSITORY_PUBLISH_COMMAND_KIND, admitRemoteUrl,
@@ -174,18 +175,18 @@ function decodeBinding(payload: Uint8Array): ProjectRemote | null {
 export function readPublishReceipt(
   store: SqliteEventStore, projectId: string, receiptId: string,
 ): PublishReceiptReadResult {
-  let decision: CommandDecisionRecord | null;
+  let slot: FactSlot;
   try {
-    decision = store.getCommandDecision({
-      commandId: receiptId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId,
-    });
+    slot = findFactDecision(store, { principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId }, receiptId,
+      PUBLISH_RECEIPT_COMMAND_KIND);
   } catch {
     return { code: "PUBLISH_RECEIPT_INVALID", ok: false };
   }
+  const decision = slot.record;
   if (decision === null) return { code: "PUBLISH_RECEIPT_NOT_FOUND", ok: false };
   if (decision.effectDisposition !== "EFFECTS_COMMITTED"
     || decision.commandKind !== PUBLISH_RECEIPT_COMMAND_KIND
-    || decision.key.commandId !== receiptId || decision.key.projectId !== projectId) {
+    || decision.key.commandId !== slot.commandId || decision.key.projectId !== projectId) {
     return { code: "PUBLISH_RECEIPT_INVALID", ok: false };
   }
   const decoded = decodePublishReceiptBytes(decision.resultBytes);
@@ -219,28 +220,26 @@ export function recordPublishReceipt(
   };
   const resultBytes = encoder.encode(JSON.stringify(receipt));
   if (!decodePublishReceiptBytes(resultBytes).ok) return { code: "PUBLISH_RECEIPT_INVALID", ok: false };
-  const aggregateId = publishAggregateId(input.goalId);
-  const event: EventDraft = {
-    eventId: `${receiptId}-PublishRecorded`,
-    eventType: receipt.outcome === "PUSHED" ? "RepositoryPublished" : "RepositoryPublishRefused",
-    payload: encoder.encode(JSON.stringify({
-      decisionId: input.decisionId, goalId: input.goalId, outcome: receipt.outcome, receiptId,
-      sha: input.sha,
-    })),
-  };
-  const response = store.commitExpectedVersionDecision({
-    commandKind: PUBLISH_RECEIPT_COMMAND_KIND,
-    committedResultBytes: resultBytes,
-    correlationId: "node-publisher-receipt",
-    decidedAt: input.decidedAt,
-    events: [event],
-    expectedVersion: store.getAggregateVersion(aggregateId),
-    key: { commandId: receiptId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId: input.projectId },
-    requestBytes: encoder.encode(JSON.stringify({
-      decisionId: input.decisionId, goalId: input.goalId, receiptId, version: PUBLISH_RECEIPT_VERSION,
-    })),
-    targetAggregateId: aggregateId,
-  });
+  const payload = encoder.encode(JSON.stringify({
+    decisionId: input.decisionId, goalId: input.goalId, outcome: receipt.outcome, receiptId,
+    sha: input.sha,
+  }));
+  const response = commitFactDecision(store, { principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId: input.projectId },
+    receiptId, PUBLISH_RECEIPT_COMMAND_KIND, (commandId) => ({
+      commandKind: PUBLISH_RECEIPT_COMMAND_KIND,
+      committedResultBytes: resultBytes,
+      correlationId: "node-publisher-receipt",
+      decidedAt: input.decidedAt,
+      events: [{
+        eventId: `${commandId}-PublishRecorded`,
+        eventType: receipt.outcome === "PUSHED" ? "RepositoryPublished" : "RepositoryPublishRefused",
+        payload,
+      }],
+      requestBytes: encoder.encode(JSON.stringify({
+        decisionId: input.decisionId, goalId: input.goalId, receiptId, version: PUBLISH_RECEIPT_VERSION,
+      })),
+      targetAggregateId: publishAggregateId(input.goalId),
+    }));
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     return { code: "EXPECTED_VERSION_CONFLICT", ok: false };
   }

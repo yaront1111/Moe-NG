@@ -99,7 +99,7 @@ export function createRepositoryExecutionPort(): RepositoryExecutionPort {
         const prior = checked.record;
         if (controllerId !== prior.state.controllerId) return repositoryExecutionFailure("REPOSITORY_EXECUTION_CONTROLLER_MISMATCH");
         const allowed = reason === "LANDED" || reason === "LANDED_NOTHING" ? prior.state.phase === "LANDING"
-          : reason === "PUBLISHED" || reason === "PUBLISH_NOT_TRANSMITTED" ? prior.state.phase === "PUBLISHING"
+          : reason === "PUBLISHED" || reason === "PUBLISH_NOT_TRANSMITTED" || reason === "PUBLISH_RESOLVED" ? prior.state.phase === "PUBLISHING"
           : reason === "CRITERIA_COMPLETED" ? prior.state.phase === "CRITERION_VERIFYING"
           : reason === "YIELDED" ? prior.state.phase === "RESERVED"
           : reason === "ABORTED_BEFORE_EXECUTION" && prior.state.phase === "RESERVED" && !prior.everExecuted;

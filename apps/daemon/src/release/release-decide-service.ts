@@ -196,7 +196,7 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
 
     // (4) PUSH THROUGH THE EXISTING PUBLISHER, then read ITS receipt. A head that was
     // never pushed has nothing for `gh` to open a PR from, so this stays inside the closed
-    // three-code set rather than minting a fourth.
+    // code set rather than minting a new code.
     const reports = await publisher.publishOnce();
     const head = pushedBranchOf(store, projectId, goalId, sha, remote.remoteUrl);
     if (head === null) {
@@ -205,6 +205,12 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
       const receipt = record("REFUSED", null, "RELEASE_PR_FAILED", markdown);
       throw domainRefusalOf(releaseRefusal("RELEASE_PR_FAILED",
         `${detail} [receipt ${receipt.receiptId}]`));
+    }
+    // Case-sensitive, as git is. A pull request cannot exist between a branch and itself —
+    // including a goal whose PUSHED receipt still names the remote's default (pre-task-04160615).
+    if (head === base) {
+      throw domainRefusalOf(releaseRefusal("RELEASE_HEAD_IS_BASE",
+        `head "${head}" equals base "${base}"; no pull request can exist between a branch and itself. Re-publish the goal, which now targets moe/release/${goalId} when the workspace is the remote's default branch.`));
     }
 
     // (5) THE BODY IS THE STORED BYTES, never a fresh render. A second rendering is how a

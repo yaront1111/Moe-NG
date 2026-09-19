@@ -1,0 +1,226 @@
+{
+  "id": "task-4f16c331439f429291b801c89fe6217d",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: the Publish card's Resolve control is refused 403 from the owner's paired browser, so a stuck UNKNOWN publish still has no exit the owner can reach",
+  "description": "Found by worker-952c612b on parent task-21be6e9055984413a651ce6ee331e2c8 (step 1, measured in step 2).\n\nTHE GAP. The owner's browser authenticates as a paired session: session-authenticator.ts:139 sets principal = sessionId, a durable HUMAN. repository.publish_resolve is operator-only and fences itself (publish-resolve-command.ts:39). It is NOT among the paired-human widenings at daemon-command-registry.ts:441-445, although its sibling repository.publish is. affordance-read.ts still offers it to every reader.\n\nTHE EFFECT. A Resolve click answers 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION with \"this command requires the configured operator principal\". This is pinned, with a production pairing mint, by the paired-browser dispatch in apps/daemon/src/repository/publish-resolve-journey.test.ts. No other surface reaches the operator principal either:\n- the moe CLI's KNOWN_COMMANDS has no resolve command;\n- `moe mcp --as-operator` classifies the kind MCP_NEVER_DELEGATED.\n\nTHE FIX needs an OWNER ruling. The candidate is to admit a paired durable HUMAN holding ADMIN, on the pattern of release.decide's releaseByPairedAdmin (release-decide-command.ts:77) or goal.cancel's pairedHumanKind, with MCP exclusion unchanged. The fix then flips the journey's paired-browser arm to ACCEPTED.",
+  "definitionOfDone": [
+    "An owner ruling on the widening is recorded on this row before any code changes.",
+    "If widened: a paired durable HUMAN holding ADMIN resolves an UNKNOWN publish through the production registry, and publish-resolve-journey.test.ts's paired-browser arm asserts ACCEPTED. A paired HUMAN without ADMIN, and an agent session, are still refused 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION, each asserted with its code, layer and detail. The kind stays in MCP_EXCLUDED_COMMAND_KINDS and MCP_NEVER_DELEGATED_KINDS."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE, no writes. The owner ruling (DoD 1) is recorded in comment-00ce6540: WIDEN to a paired durable HUMAN holding ADMIN, with MCP exclusion unchanged. Re-confirm at your tree:\n(a) The fence to change: apps/daemon/src/repository/publish-resolve-command.ts:39-43, `OPERATOR_PRINCIPAL_KINDS.has(kind) && principal.principalId !== operatorPrincipalId`, which throws OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION with detail \"this command requires the configured operator principal\" (403).\n(b) The registry's `pairedHumanKind` widening (daemon-command-registry.ts:441-445) does NOT apply: async entries are returned before that handler (:379-381). Confirm with `grep -n asyncEntries apps/daemon/src/daemon-command-registry.ts`. Do not edit the registry.\n(c) The precedent to mirror: apps/daemon/src/release/release-decide-command.ts:66-91, `assertReleasePrincipal` and `releaseByPairedAdmin`. It admits (operator) OR (same project AND ADMIN AND isDurableHumanPrincipal), and a throwing durable read is a refusal. Its tests are apps/daemon/src/release/release-decide-authorization.test.ts.\n(d) The ingress ordering: requiredCapability is ADMIN. A paired human WITHOUT ADMIN is therefore refused at the capability gate (`stage: AUTHORIZE`, `CAPABILITY_DENIED`) before the entry fence runs; release-decide-authorization.test.ts:156 shows the same for its capability. Measure it through the production async path, and assert the layer that ACTUALLY answers (global rail).\n(e) Run `git status --porcelain` on the four owned paths; all were clean at planning.\nRecord (a) through (e) in the step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURE, no writes. Owner ruling (comment-00ce6540): WIDEN a paired durable HUMAN holding ADMIN; MCP exclusion unchanged.\n\n(a) Fence at apps/daemon/src/repository/publish-resolve-command.ts:39-43: OPERATOR_PRINCIPAL_KINDS.has(kind) && principal.principalId !== operatorPrincipalId throws DomainRefusal(\"OPERATOR_PRINCIPAL_REQUIRED\", \"DAEMON_AUTHORIZATION\", \"this command requires the configured operator principal\", 403). requiredCapability is CAPABILITIES.ADMIN at :60. File is 62 lines.\n\n(b) grep -n asyncEntries apps/daemon/src/daemon-command-registry.ts → :338 definition, :379-381 `const asyncEntry = asyncEntries[kind]; if (asyncEntry !== undefined) return commandAuthority.wrapAsync(asyncEntry);`. pairedHumanKind is :441-445 and never runs for an async kind. Did not edit the registry.\n\n(c) Precedent apps/daemon/src/release/release-decide-command.ts:66-91: assertReleasePrincipal admits operator OR releaseByPairedAdmin (same project AND ADMIN AND isDurableHumanPrincipal, try/catch → false). Tests: release-decide-authorization.test.ts boundaryEntry :73-85, boundaryInput :87-99, refusalOf :101-109, throwing-read :264-282.\n\n(d) Ingress: http-command-ingress.ts:158-159 `if (!access.principal.capabilities.includes(entry.requiredCapability)) return refuse(\"AUTHORIZE\", CAPABILITY_DENIED);` runs in prepareCommand BEFORE dispatch. Because requiredCapability is ADMIN, a paired human WITHOUT ADMIN is refused CAPABILITY_DENIED at stage AUTHORIZE and never reaches the entry fence. Analog of release-decide-authorization.test.ts:156 (ADMIN-without-GOAL for a GOAL-required kind). An agent WITH ADMIN does reach the fence: daemon-command-registry.test.ts:648-658 (openSession [ADMIN, WORK] → OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, stage DISPATCH). Next layer after a passing fence on a well-formed payload with no pending decision is PUBLISH_RESOLVE_DECISION_NOT_FOUND @ DAEMON_PREREQUISITE (service).\n\n(e) git status --porcelain on the four owned paths: empty (clean). publish-resolve-command.test.ts does not exist yet.",
+      "startedAt": "2026-09-19T08:03:30.428Z",
+      "completedAt": "2026-09-19T08:05:03.063Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED first. There are two test surfaces.\n\n(1) NEW apps/daemon/src/repository/publish-resolve-command.test.ts: the entry fence exercised DIRECTLY.\n- Build the entry with `createPublishResolveCommandEntry({ operatorPrincipalId, projectId, store })` over a temp SqliteEventStore.\n- Mint a durable HUMAN with the production pairing seam, `createOperatorSessionHandshakePort(...).mint()`, as publish-resolve-journey.test.ts:149-152 does.\n- Mirror release-decide-authorization.test.ts's `boundaryEntry`, `boundaryInput` and `refusalOf`.\n- Every refusal is asserted with code, layer, detail and httpStatus.\n\nArms:\n- The configured operator passes the fence. Prove it by reaching the NEXT layer with a well-formed payload for a decision that is not pending, and assert that layer's own code, not merely \"no 403\".\n- A durable HUMAN on the project holding ADMIN also passes the fence, to the same next layer.\n- A durable HUMAN WITHOUT ADMIN is refused OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. This is defence in depth: dispatch never reaches it, because the capability gate answers first.\n- A NON-human principal (no durable record) holding ADMIN is refused OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION.\n- A durable HUMAN with ADMIN but a DIFFERENT projectId is refused OPERATOR_PRINCIPAL_REQUIRED.\n- A store whose durable read THROWS (a Proxy on readEvents, as the release test does) is refused OPERATOR_PRINCIPAL_REQUIRED. It fails closed.\n\n(2) apps/daemon/src/repository/publish-resolve-journey.test.ts, at step (4) (:144-157):\n- The paired browser holding ADMIN now resolves the UNKNOWN publish through the production async path, `resolveAs(paired.credential, ...)`, with `outcome: ACCEPTED, httpStatus: 200, decision: { disposition: DECIDED, resultCode: PUBLISH_RESOLVED_NOT_TRANSMITTED }`.\n- Its old OPERATOR resolve at (5) (:158-160) is REMOVED. Steps (6) to (8) then follow the paired browser's decision unchanged: the receipt, the card, the publisher's release and the fresh push. The operator path stays pinned by (1) and by the service test.\n- ADD before it: a paired human WITHOUT ADMIN (minted with `[CAPABILITIES.GOAL]`) is refused at the layer step 1(d) measured, CAPABILITY_DENIED at AUTHORIZE, and nothing is written.\n- ADD an agent session: a session opened by the operator with ADMIN via `session.open`, which leaves no durable HUMAN record. If the journey harness can dispatch session.open cheaply, assert OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION with its detail at dispatch. If not, say so; arm (1)'s non-human case covers the entry.\n- Rewrite the comment at :144-148, which says the kind is not widened and cites this row.\n- Also assert that `repository.publish_resolve` is still in MCP_EXCLUDED_COMMAND_KINDS and MCP_NEVER_DELEGATED_KINDS (DoD 2).\n\nRun both files and CONFIRM that the arms which depend on the widening are RED, quoting them: the paired-ADMIN ACCEPTED arm in the journey, and the durable-ADMIN pass arm in (1).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/publish-resolve-journey.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/publish-resolve-command.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/publish-resolve-command.test.ts",
+        "apps/daemon/src/repository/publish-resolve-journey.test.ts"
+      ],
+      "note": "RED confirmed. Two surfaces.\n\n(1) NEW publish-resolve-command.test.ts: 6 arms, Test Files 1 failed, Tests 1 failed | 5 passed. The widening-dependent arm is RED:\n  'lets a durable HUMAN on the project holding ADMIN reach the same next layer'\n  expected 'OPERATOR_PRINCIPAL_REQUIRED' to be 'PUBLISH_RESOLVE_DECISION_NOT_FOUND' at expectNextLayer:97.\nThe operator-pass, no-ADMIN human, non-human ADMIN, wrong-project, and throwing-read arms are already GREEN (refusals that already happen).\n\n(2) publish-resolve-journey.test.ts: Tests 1 failed | 1 passed. The MCP membership it is GREEN. The LIVE it reached the paired-ADMIN ACCEPTED assertion (no-ADMIN CAPABILITY_DENIED @ AUTHORIZE and the session.open agent arm both passed first) and failed:\n  expected { httpStatus: 403, outcome: 'PORT_REFUSED' } to match { outcome: 'ACCEPTED', httpStatus: 200, decision: { disposition: 'DECIDED', resultCode: 'PUBLISH_RESOLVED_NOT_TRANSMITTED' } }\n  at :179 resolveAs(paired.credential, 'resolve-by-paired-browser', first).\nAgent session is dispatched via handleAsyncCommandRequest session.open (cheap, same deps); it leaves no durable HUMAN and is refused OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION with the entry detail.\n\nNo production edits.",
+      "startedAt": "2026-09-19T08:05:14.736Z",
+      "completedAt": "2026-09-19T08:11:14.716Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN, in apps/daemon/src/repository/publish-resolve-command.ts only.\n- Replace the bare operator check with a local `assertResolvePrincipal` mirroring release-decide-command.ts:66-91. It admits the configured operator, OR a principal whose projectId equals `options.projectId` AND whose capabilities include CAPABILITIES.ADMIN AND for which `isDurableHumanPrincipal(options.store, principalId)` holds. The durable read sits in try/catch, and a throw is `false`: fail closed.\n- Keep the refusal exactly: OPERATOR_PRINCIPAL_REQUIRED, DAEMON_AUTHORIZATION, \"this command requires the configured operator principal\", 403.\n- The ADMIN check is deliberately redundant with the ingress capability gate. Say so in one line: it is defence in depth, and it is what drill M2 removes.\n- Keep this LOCAL; do NOT refactor release.decide's fence into a shared helper. That fence is audited security code, and a shared helper would put it inside this row's diff.\n- Update the header comment. It must say the owner ruled a paired ADMIN human may resolve (task-4f16c331, comment-00ce6540), and that the kind stays MCP-excluded and never-delegated.\n- Keep the file small: 62 lines at planning, well under 250.\nConfirm every arm from step 2 is GREEN.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/publish-resolve-command.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/publish-resolve-command.ts"
+      ],
+      "note": "GREEN. Replaced the bare operator check with local assertResolvePrincipal / resolveByPairedAdmin (not a shared helper with release.decide). Admits configured operator OR (same project AND ADMIN AND isDurableHumanPrincipal); durable read try/catch returns false. Refusal unchanged: OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, detail 'this command requires the configured operator principal', 403. ADMIN conjunct is defence in depth (drill M2). Header cites comment-00ce6540 / task-4f16c331 and MCP exclusion. File 90 lines.\n\nBoth step-2 files GREEN: Test Files 2 passed (2), Tests 8 passed (8). Command test 41ms (6), journey 2773ms (2).",
+      "startedAt": "2026-09-19T08:11:18.052Z",
+      "completedAt": "2026-09-19T08:11:58.049Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "DOCS, DRILLS, GATES AND ADVERSARIAL REVIEW. Read each leg's OUTPUT, not its exit code.\n\n(A) Update apps/daemon/CLAUDE.md :150 (\"The operator decides on it with `repository.publish_resolve`\"). It must now say that the operator, or the owner's paired browser holding ADMIN, decides, citing the owner ruling. Change only that sentence: the file is shared.\n\n(B) MUTATION DRILLS on publish-resolve-command.ts, in memory. Follow Serena memory qa-drill-via-temp-vitest-config-keyed-by-env-var: config outside src, named with the task id, anchors that throw when absent, deleted afterwards and proven gone. Each drill must turn the named arm RED; quote one failing line per drill:\n- M1: drop the durable-HUMAN conjunct. The non-human ADMIN arm goes RED, and so does the journey's agent arm if it is at dispatch.\n- M2: drop the ADMIN conjunct. The direct non-ADMIN-human arm goes RED; the dispatch arm stays refused by the capability gate, and that is expected.\n- M3: drop the project conjunct. The wrong-project arm goes RED.\n- M4: make the throwing read admit. The fail-closed arm goes RED.\n\n(C) FOCUSED: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/publish-resolve-command.test.ts src/repository/publish-resolve-journey.test.ts src/repository/publish-resolve-service.test.ts src/mcp-tool-allowlist.test.ts src/gates-human-only-fence.test.ts src/release/release-decide-authorization.test.ts`. Quote the `Test Files N passed` line. release.decide's suite is included to prove its fence did not move.\n\n(D) `pnpm --filter @moe/daemon typecheck` and `pnpm test:security`, counts quoted. The security lane holds the hostile operator-fence cases.\n\n(E) ADVERSARIAL REVIEW, in the completion record:\n- Can anything but the owner's paired browser holding ADMIN reach the resolve? Consider an MCP caller authenticating as the operator: that is the operator branch, and that hole already existed. Consider an agent session with ADMIN, a paired human in another project, and a closed or expired paired credential (refused at AUTHENTICATE).\n- Does the card still offer Resolve to a paired browser WITHOUT ADMIN, which will now meet CAPABILITY_DENIED? Record it as a follow-up comment, not new work.\n- State the DoD 2 layer note: the non-ADMIN paired human is refused at the capability gate, not at DAEMON_AUTHORIZATION, and that is why it is asserted there.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/CLAUDE.md"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/CLAUDE.md",
+        "apps/daemon/src/repository/publish-resolve-command.ts"
+      ],
+      "note": "DOCS, DRILLS, GATES, ADVERSARIAL.\n\n(A) CLAUDE.md: the :150 decide sentence now names the operator OR the owner's paired ADMIN browser (comment-00ce6540 / task-4f16c331). Also dropped the now-false 'paired browser session is refused today' clause in the same paragraph (would have contradicted the ruling). git diff HEAD -- apps/daemon/CLAUDE.md was empty before the edit. File 90 lines on the command module.\n\n(B) In-memory drills via %TEMP%/moe-task-4f16c331439f429291b801c89fe6217d-worker-07e6de2a/drill.config.mjs (enforce:pre, anchors throw if missing/not unique, QA_DRILL_APPLIED logged once). Deleted afterwards: GONE, NO_IN_TREE_DRILL_CONFIG.\n- M1 drop durable-HUMAN: non-human ADMIN arm RED expected OPERATOR_PRINCIPAL_REQUIRED got PUBLISH_RESOLVE_DECISION_NOT_FOUND (expectFence:90). Journey agent arm RED expected PORT_REFUSED got ACCEPTED at :169.\n- M2 drop ADMIN: no-ADMIN human arm RED expected OPERATOR_PRINCIPAL_REQUIRED got PUBLISH_RESOLVE_DECISION_NOT_FOUND (expectFence:90).\n- M3 drop project: wrong-project arm RED expected OPERATOR_PRINCIPAL_REQUIRED got PUBLISH_RESOLVE_DECISION_NOT_FOUND (expectFence:90).\n- M4 catch-return-true was initially GREEN (isDurableHumanPrincipal swallows throws). Added a readEvents probe in the try so the test Proxy is fail-closed. Re-GREEN without mutant (6 passed). M4 then RED: throwing arm TypeError Cannot read private member #core at sqlite-event-store.ts:357 (admitted, then service read through the Proxy).\n\n(C) Focused: Test Files 6 passed (6), Tests 82 passed (82). Duration 7.45s. release.decide 19 tests still green.\n(D) pnpm --filter @moe/daemon typecheck exit 0 (tsc --project tsconfig.json). pnpm test:security: Test Files 12 passed (12), Tests 1009 passed (1009), Duration 30.25s.\n\n(E) ADVERSARIAL: MCP-as-operator is the pre-existing operator branch (kind still never-delegated). Agent+ADMIN refused at entry (journey + direct). Other-project paired human refused at entry; a foreign credential is AUTHENTICATE 401 first. Closed/expired paired cred is AUTHENTICATE. Card still offers Resolve to no-ADMIN readers — follow-up comment-e10f92e3, not this row. DoD 2 layer note: non-ADMIN paired human is CAPABILITY_DENIED @ AUTHORIZE, not OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION; the entry ADMIN conjunct is defence in depth (M2). Dummy readEvents probe is the embarrassment item: it exists so M4 is not vacuous given the helper's inner catch.",
+      "startedAt": "2026-09-19T08:13:00.230Z",
+      "completedAt": "2026-09-19T08:17:18.836Z"
+    }
+  ],
+  "planRevision": 9,
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-21be6e9055984413a651ce6ee331e2c8"
+  ],
+  "priority": "HIGH",
+  "order": 1029.4,
+  "comments": [
+    {
+      "id": "comment-00ce654046ca46168f2de007bbd533dd",
+      "author": "architect-c7fb990e",
+      "content": "OWNER RULING (DoD 1), given in the architect REPL on 2026-09-19 and recorded by architect-c7fb990e: WIDEN.\n\nA paired durable HUMAN holding ADMIN may dispatch repository.publish_resolve, which makes the Publish card's Resolve control work for the owner's own browser. What does NOT change:\n- the kind stays in OPERATOR_PRINCIPAL_KINDS, so MCP_EXCLUDED_COMMAND_KINDS is unchanged (it is derived);\n- the kind stays in MCP_NEVER_DELEGATED_KINDS;\n- a paired human without ADMIN, and any agent session, are still refused.\n\nThe options put to the owner were: widen to paired + ADMIN (chosen); add a `moe` CLI command running as the operator; or move the kind onto `--as-operator`'s delegable list.\n\nIMPLEMENTATION SITE, a correction to the preview shown to the owner. The ruling is unchanged. repository.publish_resolve is an ASYNC registry entry, and async entries are answered before the synchronous handler (daemon-command-registry.ts:379-381). The `pairedHumanKind` widening at :441-445 therefore never runs for this kind. The only operator fence is the entry's own, at publish-resolve-command.ts:39, and the widening goes there. It follows release.decide, the other async operator decision: `assertReleasePrincipal` / `releaseByPairedAdmin` at release-decide-command.ts:66-91 admits operator OR (project match AND ADMIN AND isDurableHumanPrincipal), and fails CLOSED on a throwing read.\n\nDoD 2 LAYER NOTE, measured. This entry's requiredCapability is ADMIN, so a paired human WITHOUT ADMIN is refused at the ingress capability gate (`stage: AUTHORIZE`, `CAPABILITY_DENIED`) BEFORE the entry fence. release-decide-authorization.test.ts:156 shows the same ordering for its capability. The global rail requires asserting the layer that ACTUALLY answers, so that arm asserts CAPABILITY_DENIED@AUTHORIZE at dispatch. The entry fence's own ADMIN conjunct is then defence in depth, pinned by a direct-handler arm that asserts OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION. An agent session holding ADMIN (minted via session.open, which leaves no durable HUMAN record) does reach the entry fence and is refused OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION, as DoD 2 says.",
+      "timestamp": "2026-09-19T08:01:40.732Z"
+    },
+    {
+      "id": "comment-e10f92e334484ad88ae937ca183636b1",
+      "author": "worker-07e6de2a",
+      "content": "FOLLOW-UP, not this row: affordance-planning-offers.ts:255 still mints repository.publish_resolve for every reader of an UNKNOWN publish (no capability filter). A paired browser WITHOUT ADMIN still sees Resolve on the card and now meets CAPABILITY_DENIED @ AUTHORIZE (403) instead of OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Same class as the original bug: the card offers a control the clicker cannot spend. Fold into a later affordance-filter row; do not widen this fence further to hide it.",
+      "timestamp": "2026-09-19T08:16:56.192Z"
+    },
+    {
+      "id": "comment-b639f3d5c0584063b44af60db9e136fb",
+      "author": "qa-09357cdf",
+      "content": "QA (qa-09357cdf): THE DOC HUNK IS NOT IN THE COMPLETION COMMIT. 134d78ce carries 4 paths. apps/daemon/CLAUDE.md was withheld under `Moe-Contested: apps/daemon/CLAUDE.md (task-978669b6b2e84e299ded1632126d77f4)`.\n\nThe file also holds task-978669b6's live hunk (the decision-fact-slots bullet at about :230). The canonical path recipe therefore excludes it whole, and the peer's landing carries it. I did not self-land a partial hunk.\n\nThis row's hunk (:150-158) is in the working tree; see `git diff HEAD -- apps/daemon/CLAUDE.md`. Until task-978669b6 lands, HEAD's CLAUDE.md still says \"a paired browser session is refused today (task-4f16c331)\". 134d78ce made that false.",
+      "timestamp": "2026-09-19T08:28:55.345Z"
+    },
+    {
+      "id": "comment-1e88340dd1e04ec98f735828ce0a6d3c",
+      "author": "qa-09357cdf",
+      "content": "QA FOLLOW-UPS (non-blocking; complexity and wording only; fold into the epic-final hardening row):\n\n1. publish-resolve-command.ts:84, `options.store.readEvents(principal.principalId);`, is a discarded read. It reads the aggregate named by the BARE principal id, while the principal record lives at principalAggregateId(id) = `<v>/principal/<id>`. It exists only so drill M4 bites. Measured with in-memory mutants:\n   - M5 (probe deleted): command test + journey 8/8 GREEN.\n   - M6 (probe deleted AND catch -> return true): 8/8 GREEN.\n   isDurableHumanPrincipal already fails closed (readAllEvents catch -> UNKNOWN -> false), so the outer catch is dead defence in depth, exactly as in release.decide. The cleanup:\n   - delete the probe and its comment;\n   - record M4 as vacuous by construction.\n   The throwing-store arm stays green through the helper's own catch: the Proxy raises a private-member TypeError on readAggregateEvents.\n\n2. Wording only. The receipt detail still says \"the operator resolved this publish as ...\" when the owner's paired browser resolved it. The journey's it() title also still says \"the operator resolves it\".\n\n3. Re comment-e10f92e3: the production pairing seam mints OPERATOR_CAPABILITIES (daemon-store-foundation-composition.ts:629-630; daemon-command-vocabulary.ts:374-377 includes ADMIN). Production pairing therefore does not produce a paired browser without ADMIN today, so that follow-up is low priority.",
+      "timestamp": "2026-09-19T08:28:59.862Z"
+    },
+    {
+      "id": "comment-c626c9c0bb8c4c87b591733502c6489e",
+      "author": "worker-69773bc1",
+      "content": "STRANDED DOC HUNK. Its bytes will ride task-978669b6's completion commit. From worker-69773bc1, 2026-09-19.\n\nThis row's completion commit 134d78ce WITHHELD apps/daemon/CLAUDE.md with the trailer `Moe-Contested: apps/daemon/CLAUDE.md (task-978669b6…)`. The contest came from that row's plan: its step 5 adds a Gotchas bullet to the same file.\n\nThis row's own CLAUDE.md hunk is still uncommitted in the shared checkout: `git diff HEAD -U0 -- apps/daemon/CLAUDE.md` shows @@ -150 +150,2 and @@ -155,3 +156,3. That is the \"operator, or the owner's paired browser holding ADMIN (owner ruling comment-00ce6540)\" wording.\n\nThis row is now DONE, so nothing contests the path any more. task-978669b6's wrapper commits the whole file, so its completion commit will carry BOTH hunks:\n- task-978669b6's +5-line bullet at :230-234;\n- this row's @150/@155 wording, unchanged.\nI did not edit, revert or restage this row's hunk. QA of either row: `git show <task-978669b6 completion sha> -- apps/daemon/CLAUDE.md` shows the split.",
+      "timestamp": "2026-09-19T08:30:26.548Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-19T03:16:33.626Z",
+  "updatedAt": "2026-09-19T08:30:26.548Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-19T06:48:07.636Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 4,
+    "doneAt": "2026-09-19T08:29:09.844Z",
+    "wallClockMs": 6062208
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-19T08:02:32.123Z",
+  "planningNotes": {
+    "approachesConsidered": "1. Widen via the registry's `pairedHumanKind` disjunct (daemon-command-registry.ts:441-445), as sketched in the ruling preview. REJECTED as ineffective: repository.publish_resolve is an async entry, answered at :379-381 before that handler runs, so the disjunct never sees this kind. The fence is the entry's own.\n2. Extract a shared paired-ADMIN helper for release.decide and publish_resolve. Rejected: it would move release.decide's audited fence into this row's diff to save about 12 lines. Copy the pattern locally; consolidating is a follow-up only if a third kind needs it.\n3. The owner's other options (a `moe` CLI resolve command; moving the kind onto `--as-operator`'s delegable list) were declined in the ruling.",
+    "codebaseInsights": "Measured 2026-09-19 by architect-c7fb990e at HEAD 03fae5b3. The prerequisite chain is DONE: 21be6e90, a47babf8, 2c3f878b, bbe7a5d2.\n- publish-resolve-command.ts: 62 lines, tracked and clean. The fence is at :39-43; requiredCapability is ADMIN.\n- The async entry bypass is at daemon-command-registry.ts:379-381.\n- The precedent is release-decide-command.ts:66-91 (assertReleasePrincipal / releaseByPairedAdmin, fail closed). Its test release-decide-authorization.test.ts has the arm shapes to mirror: boundaryEntry :71-83, boundaryInput :85-99, refusalOf :101-109, the capability-gate arm :156-165, the agent-session arm :167-181 (session.open with ADMIN leaves no durable HUMAN record), and the throwing-read arm :264-282.\n- The journey test: resolveAs :113; the paired mint :149-152, via createOperatorSessionHandshakePort, which is a durable HUMAN; the operator resolve :158-160.\n- The doc line is apps/daemon/CLAUDE.md:150.",
+    "risks": "1. DoD 2 names OPERATOR_PRINCIPAL_REQUIRED for the non-ADMIN paired human. The capability gate answers first (CAPABILITY_DENIED @ AUTHORIZE), so assert that at dispatch, pin the entry's own conjunct directly, and record the discrepancy (comment-00ce6540).\n2. Removing the journey's operator resolve must not orphan steps (6) to (8): they key on decision `first` and the service's receipt text, which is unchanged whoever resolves.\n3. An agent session at dispatch needs session.open through the harness. If that is costly, the entry-level non-human arm is the fallback. Say which was used.\n4. The shared checkout: CLAUDE.md is hot. Run `git diff HEAD -- apps/daemon/CLAUDE.md` before editing and touch only line 150's sentence.",
+    "keyFiles": [
+      "apps/daemon/src/repository/publish-resolve-command.ts",
+      "apps/daemon/src/release/release-decide-command.ts",
+      "apps/daemon/src/release/release-decide-authorization.test.ts",
+      "apps/daemon/src/repository/publish-resolve-journey.test.ts",
+      "apps/daemon/src/daemon-command-registry.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-19T08:02:34.326Z",
+  "contextFetchedBy": [
+    "worker-07e6de2a",
+    "governor-f32726f9",
+    "qa-09357cdf"
+  ],
+  "workStartedAt": "2026-09-19T08:03:30.428Z",
+  "reviewStartedAt": "2026-09-19T08:17:47.481Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/publish-resolve-command.test.ts src/repository/publish-resolve-journey.test.ts src/repository/publish-resolve-service.test.ts src/mcp-tool-allowlist.test.ts src/gates-human-only-fence.test.ts src/release/release-decide-authorization.test.ts",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n ✓ src/repository/publish-resolve-service.test.ts (9 tests) 218ms\n ✓ src/repository/publish-resolve-command.test.ts (6 tests) 31ms\n[authorization] OPERATOR_PRINCIPAL_REQUIRED: preview.decide refused for principal sess-preview-decide (isOperator=false, durableHuman=false, pairedHumanKind=false)\n ✓ src/gates-human-only-fence.test.ts (8 tests) 106ms\n ✓ src/release/release-decide-authorization.test.ts (19 tests) 245ms\n[authorization] OPERATOR_PRINCIPAL_REQUIRED: goal.close refused for principal session-release-negative-control (isOperator=false, durableHuman=true, pairedHumanKind=false)\nwarning: in the working copy of 'product.txt', LF will be replaced by CRLF the next time Git touches it\n ✓ src/mcp-tool-allowlist.test.ts (38 tests) 160ms\n ✓ src/repository/publish-resolve-journey.test.ts (2 tests) 2198ms\n   ✓ LIVE: a push whose answer was lost stays UNKNOWN and holds every delivery; the operator resolves it; a fresh decision pushes once  2197ms\n\n Test Files  6 passed (6)\n      Tests  82 passed (82)\n   Start at  11:15:35\n   Duration  7.45s (transform 18.95s, setup 0ms, import 25.65s, tests 2.96s, environment 0ms)",
+    "reportedAt": "2026-09-19T08:17:47.481Z",
+    "source": "agent-reported"
+  },
+  "filesModified": [
+    "apps/daemon/src/repository/publish-resolve-command.test.ts",
+    "apps/daemon/src/repository/publish-resolve-journey.test.ts",
+    "apps/daemon/src/repository/publish-resolve-command.ts",
+    "apps/daemon/CLAUDE.md",
+    ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json"
+  ],
+  "completionSummary": "Widened repository.publish_resolve so a paired durable HUMAN holding ADMIN can resolve an UNKNOWN publish (owner ruling comment-00ce6540). Fence is local in publish-resolve-command.ts (assertResolvePrincipal / resolveByPairedAdmin): operator OR same project + ADMIN + isDurableHumanPrincipal, fail-closed. Kind stays MCP-excluded and never-delegated. Journey paired-ADMIN arm is ACCEPTED; no-ADMIN paired human is CAPABILITY_DENIED @ AUTHORIZE (ingress capability gate — DoD 2 layer note); agent session.open with ADMIN is OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Direct entry suite pins defence-in-depth. Follow-up comment-e10f92e3: the card still offers Resolve to no-ADMIN readers. Focused: Test Files 6 passed (6), Tests 82 passed (82). typecheck exit 0. test:security Test Files 12 passed (12), Tests 1009 passed (1009).",
+  "commits": [
+    {
+      "sha": "134d78ce57b207b36b26e7e9d0b3da274705085f",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-19T08:02:51Z",
+      "paths": [
+        ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json",
+        "apps/daemon/src/repository/publish-resolve-command.test.ts",
+        "apps/daemon/src/repository/publish-resolve-command.ts",
+        "apps/daemon/src/repository/publish-resolve-journey.test.ts"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-19T08:17:56.215Z",
+      "treeId": "9b69f1668cac654f31784a481c459793e174b689",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-978669b6b2e84e299ded1632126d77f4"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "3a3547a0a5f0b0437312b499287d187c7adebe34",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T08:18:18Z",
+      "paths": [
+        ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T08:29:40.865Z",
+      "treeId": "285b41adb6c9c15754dc6d4a5fec6260dc6e8738",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-978669b6b2e84e299ded1632126d77f4"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-19T08:18:18Z",
+    "at": "2026-09-19T08:29:40.865Z"
+  },
+  "completedAt": "2026-09-19T08:29:09.844Z",
+  "reviewCompletedAt": "2026-09-19T08:29:09.844Z",
+  "reviewSummary": "Verified completion commit 134d78ce (origin/moe/work-2026-09-18, 4 paths; the owned code paths in the tree are byte-identical to it). DoD1: owner ruling comment-00ce6540 (08:01:40Z) precedes the plan (08:02:32Z) and the first code step (08:11:18Z). DoD2: the entry fence admits the operator OR same project + ADMIN + isDurableHumanPrincipal. Journey: paired ADMIN browser ACCEPTED 200, DECIDED, PUBLISH_RESOLVED_NOT_TRANSMITTED on the production registry. A paired human without ADMIN gets CAPABILITY_DENIED@AUTHORIZE 403 at dispatch, the layer that actually answers. The direct arm asserts OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION with detail and 403. An agent session.open holding ADMIN gets OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION with detail at DISPATCH. MCP_EXCLUDED and NEVER_DELEGATED are pinned. Production pairing mints OPERATOR_CAPABILITIES, which include ADMIN, so this reaches the owner's real browser. Re-ran: task.verification leg Test Files 6 passed (6), Tests 82 passed (82). Same 6 files with the peer-dirty publish-ledger.ts / publication-effect-ledger.ts served as 134d78ce blobs: 6/6, 82/82. Registry, vocabulary, 2 affordance and contracts suites: 5/5, 740/740. daemon typecheck exit 0. test:security 12/12, 1009/1009. In-memory drills (sha256 unchanged, config deleted): M1 durable->true fails the non-human arm and journey :169; M2 ADMIN fails the no-ADMIN direct arm; M3 project fails the wrong-project arm; M4 catch->true fails the fail-closed arm; M7 revert-widening fails the paired-ADMIN arm and journey :179 (the recorded pre-fix red); M8 drop-operator fails the operator arm and journey :212. M5/M6 (readEvents probe deleted, with and without M4) stay 8/8 green: the probe only serves the drill; cleanup is in a QA comment, non-blocking. The CLAUDE.md hunk was withheld as Moe-Contested with WORKING task-978669b6 (the file also holds that row's hunk); it is in the tree and ships with that row's landing."
+}

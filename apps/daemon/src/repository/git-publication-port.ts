@@ -11,13 +11,14 @@ import { resolveRepositoryExecutionIdentity } from "./repository-execution-ident
 import { publicationCredentialArguments } from "./git-publication-credentials.js";
 
 /** No repository/global URL rewrites, hooks, or named-remote push configuration enter this process. */
+export const PUBLICATION_GIT_TIMEOUT_MS = 60_000;
 export const publicationGitRunner: GitRunner = (cwd, args) => new Promise((done) => {
   const env = landingEnvironment();
   env["GIT_CONFIG_NOSYSTEM"] = "1";
   env["GIT_CONFIG_SYSTEM"] = process.platform === "win32" ? "NUL" : "/dev/null";
   env["GIT_CONFIG_GLOBAL"] = env["GIT_CONFIG_SYSTEM"];
   execFile("git", [...args], { cwd, env, encoding: "utf8", shell: false, windowsHide: true,
-    timeout: 60_000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => done({
+    timeout: PUBLICATION_GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => done({
       code: error === null ? 0 : typeof error.code === "number" ? error.code : null, stdout, stderr,
     }));
 });

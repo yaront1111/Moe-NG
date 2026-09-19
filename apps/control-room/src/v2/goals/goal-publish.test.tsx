@@ -10,7 +10,7 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import type { RunGoalView } from "../../live/live-runs.js";
 import type { OfferWire } from "../approvals/offer-wire.js";
-import { GoalPublish, boundRemoteUrl, landedCommits, publishLine, publishOffer } from "./goal-publish.js";
+import { GoalPublish, boundRemoteUrl, landedCommits, observationLine, publishLine, publishOffer, resolveOffer } from "./goal-publish.js";
 import { createPublishPort as createRealPublishPort } from "./publish-port.js";
 const preparedApproval = { branch: "approved-branch", sha: "b".repeat(40), repositoryId: "c".repeat(64), remoteUrl: "https://github.com/owner/unai.git" };
 const createPublishPort = (wire: OfferWire) => createRealPublishPort(wire, async (goalId, remoteUrl) => ({ ok: true,
@@ -57,14 +57,16 @@ const unlanded = (): RunGoalView => {
   return { ...base, nodes: base.nodes.map((node) => ({ ...node, landing: null })) };
 };
 
-/** A wire that records the payload `publish-port.ts` builds, so the arms can read the bytes. */
+/** A wire that records the payload `publish-port.ts` builds, and the kind it built, so the arms can read the bytes. */
 function wireWith(answer: unknown): { readonly built: Record<string, unknown>[]; readonly wire: OfferWire } {
   const built: Record<string, unknown>[] = [];
+  const builder = (kind: string) => (affordance: unknown, input: Record<string, unknown>) => {
+    built.push({ affordance, kind, ...input });
+    return { envelope: { commandId: OFFER.commandId, payload: input["payload"] }, ok: true };
+  };
   const wire = {
-    client: { commands: { "repository.publish": (affordance: unknown, input: Record<string, unknown>) => {
-      built.push({ affordance, ...input });
-      return { envelope: { commandId: OFFER.commandId, payload: input["payload"] }, ok: true };
-    } } },
+    client: { commands: { "repository.publish": builder("repository.publish"),
+      "repository.publish_resolve": builder("repository.publish_resolve") } },
     sessionCredential: "cred-1",
     transport: { sendCommand: vi.fn(async () => ({ delivered: true as const, response: answer, status: 200 })) },
   } as unknown as OfferWire;
@@ -191,7 +193,7 @@ describe("GoalPublish with no remote bound", () => {
 
   it("reports the daemon's refusal at its own code and layer", async () => {
     const submit = vi.fn(async () => ({ code: "PUBLISH_REMOTE_UNBOUND", layer: "DAEMON_PREREQUISITE", ok: false as const }));
-    render(<GoalPublish frame={FRAME} goal={goal()} goalId="goal-1" port={{ submit,
+    render(<GoalPublish frame={FRAME} goal={goal()} goalId="goal-1" port={{ submit, resolve: vi.fn(),
       prepare: async () => ({ ok: true, goalId: "goal-1", approval: preparedApproval }) }} remote={UNBOUND} />);
     await userEvent.type(screen.getByTestId("cr.publish.remote"), "git@github.com:o/r.git");
     await userEvent.click(screen.getByTestId("cr.publish.button"));
@@ -233,5 +235,141 @@ describe("the card keeps NO remote of its own", () => {
     expect(source).not.toContain(retiredKey);
     expect(source).not.toContain("localStorage");
     expect(source).not.toContain("sessionStorage");
+  });
+});
+
+describe("the last observation of an unresolved publish", () => {
+  const EXPECTED = "9ca01b31".padEnd(40, "0"); const TIP = "2ce84e5a".padEnd(40, "0");
+  const SEEN = Object.freeze({ expectedSha: EXPECTED, observedAt: "2026-09-19T08:00:00.000Z", observedSha: TIP, reason: "REJECTED" });
+  const STUCK = Object.freeze({ branch: "main", code: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED", decisionId: "d", observation: SEEN,
+    outcome: "UNKNOWN" as const, remoteUrl: "https://github.com/o/r.git", requestedAt: "t", sha: EXPECTED, url: null });
+
+  it("says on the card where the remote is, where it should be, and why", () => {
+    render(<GoalPublish frame={NO_OFFER} goal={goal({ publish: STUCK })} goalId="goal-1" port={null} remote={BOUND} />);
+    expect(screen.getByTestId("cr.publish.observed").textContent).toBe("On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · git refused the push");
+    expect(screen.getByTestId("cr.publish.state").textContent).toContain("Publication outcome unknown");
+  });
+
+  it("says the branch is absent on the remote, and words every recorded reason, a PENDING publish's too", () => {
+    expect(observationLine({ ...STUCK, observation: { ...SEEN, observedSha: null } }))
+      .toBe("On the remote, main does not exist; expected 9ca01b3100 · git refused the push");
+    const words: [string, string][] = [["ACCEPTED", "git accepted the push"], ["INDETERMINATE", "git's answer to the push was lost"],
+      ["UNRECORDED", "no record of how the push ended"], ["SOMETHING_NEW", "SOMETHING_NEW"]];
+    for (const [reason, said] of words) {
+      expect(observationLine({ ...STUCK, observation: { ...SEEN, reason } })).toBe(`On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · ${said}`);
+    }
+    expect(words).toHaveLength(4);
+    expect(observationLine({ ...STUCK, outcome: "PENDING", code: null })).toBe("On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · git refused the push");
+  });
+
+  it("renders without the line when there is no observation, or once the publish resolved", () => {
+    const { observation: _absent, ...older } = STUCK;
+    for (const publish of [{ ...STUCK, observation: null }, older]) {
+      render(<GoalPublish frame={NO_OFFER} goal={goal({ publish })} goalId="goal-1" port={null} remote={BOUND} />);
+      expect(screen.getByTestId("cr.publish.state").textContent).toContain("Publication outcome unknown");
+      expect(screen.queryByTestId("cr.publish.observed")).toBeNull();
+      cleanup();
+    }
+    expect(observationLine(null)).toBeNull();
+    expect(observationLine({ ...STUCK, outcome: "PUSHED", code: null })).toBeNull();
+    expect(observationLine({ ...STUCK, outcome: "REFUSED", code: "PUBLISH_NOT_LANDED" })).toBeNull();
+  });
+});
+
+/**
+ * THE OPERATOR'S WAY OUT OF AN UNKNOWN PUBLISH (task-bbe7a5d2). The daemon offers
+ * repository.publish_resolve at `publish-resolve:<decisionId>` (affordance-planning-offers.ts, the
+ * publish rung), keyed on the decision the card shows. The card spends that offer verbatim with
+ * exactly the two payload keys the command admits.
+ */
+describe("resolving an UNKNOWN publish", () => {
+  const SEEN = Object.freeze({ expectedSha: "9ca01b31".padEnd(40, "0"), observedAt: "2026-09-19T08:00:00.000Z",
+    observedSha: null, reason: "INDETERMINATE" });
+  const STUCK = Object.freeze({ branch: "main", code: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED", decisionId: "d-unknown",
+    observation: SEEN, outcome: "UNKNOWN" as const, remoteUrl: "https://github.com/o/r.git", requestedAt: "t",
+    sha: SEEN.expectedSha, url: null });
+  const RESOLVE = Object.freeze({
+    commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-resolve", commandKind: "repository.publish_resolve",
+    expectedVersion: 0, inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: "publish-resolve:d-unknown",
+  });
+  const frameOf = (...offers: readonly Record<string, unknown>[]): SurfaceFrame =>
+    ({ connection: "LIVE", offers, outcome: "SURFACE", steps: [] }) as unknown as SurfaceFrame;
+  const RESOLVABLE = frameOf(OFFER, RESOLVE);
+
+  it("finds the offer keyed on the card's own decision, and no other", () => {
+    expect(resolveOffer(RESOLVABLE, "d-unknown")).toBe(RESOLVE);
+    expect(resolveOffer(RESOLVABLE, "d-other")).toBeNull();
+    expect(resolveOffer(FRAME, "d-unknown")).toBeNull();
+    expect(resolveOffer(null, "d-unknown")).toBeNull();
+    // The publish offer is not a resolve offer, even when a target happens to line up.
+    expect(resolveOffer(frameOf({ ...RESOLVE, commandKind: "repository.publish" }), "d-unknown")).toBeNull();
+  });
+
+  it("puts both choices beside the observation, only while the publish is UNKNOWN and offered", () => {
+    render(<GoalPublish frame={RESOLVABLE} goal={goal({ publish: STUCK })} goalId="goal-1" port={createPublishPort(wireWith({ ok: true }).wire)} remote={BOUND} />);
+    expect(screen.getByTestId("cr.publish.observed").nextElementSibling?.getAttribute("data-testid")).toBe("cr.publish.resolve");
+    expect([...screen.getByTestId("cr.publish.resolve").querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+      "The remote does not have this commit; allow a new publish", "Give up on this publish"]);
+    cleanup();
+    // No offer, or an offer for another decision: no control, and the card still says UNKNOWN.
+    for (const frame of [FRAME, frameOf(OFFER, { ...RESOLVE, targetAggregateId: "publish-resolve:d-other" })]) {
+      render(<GoalPublish frame={frame} goal={goal({ publish: STUCK })} goalId="goal-1" port={createPublishPort(wireWith({ ok: true }).wire)} remote={BOUND} />);
+      expect(screen.getByTestId("cr.publish.state").textContent).toContain("Publication outcome unknown");
+      expect(screen.queryByTestId("cr.publish.resolve")).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("renders no control for a PENDING, PUSHED or REFUSED publish, even beside a resolve offer", () => {
+    const settled = [{ ...STUCK, code: null, outcome: "PENDING" as const }, { ...STUCK, code: null, outcome: "PUSHED" as const },
+      { ...STUCK, code: "PUBLISH_NOT_LANDED", outcome: "REFUSED" as const }];
+    for (const publish of settled) {
+      render(<GoalPublish frame={RESOLVABLE} goal={goal({ publish })} goalId="goal-1" port={createPublishPort(wireWith({ ok: true }).wire)} remote={BOUND} />);
+      expect(screen.getByTestId("cr.publish.root")).not.toBeNull();
+      expect(screen.queryByTestId("cr.publish.resolve")).toBeNull();
+      cleanup();
+    }
+    expect(settled.map((publish) => publish.outcome)).toEqual(["PENDING", "PUSHED", "REFUSED"]);
+  });
+
+  it("submits EXACTLY {decisionId, resolution} through the offer for each choice", async () => {
+    for (const [testId, resolution] of [["cr.publish.resolve.NOT_TRANSMITTED", "NOT_TRANSMITTED"], ["cr.publish.resolve.ABANDON", "ABANDON"]]) {
+      const { built, wire } = wireWith({ ok: true });
+      render(<GoalPublish frame={RESOLVABLE} goal={goal({ publish: STUCK })} goalId="goal-1" port={createPublishPort(wire)} remote={BOUND} />);
+      await userEvent.click(screen.getByTestId(testId as string));
+      await waitFor(() => { expect(screen.getByTestId("cr.publish.resolve.answer").textContent)
+        .toBe("Recorded. The publisher lets go of the repository on its next pass; this card then says how it ended."); });
+      // Recorded is final: a second choice would only be refused as no longer UNKNOWN.
+      expect([...screen.getByTestId("cr.publish.resolve").querySelectorAll("button")].map((button) => button.disabled))
+        .toEqual([true, true]);
+      expect(built).toHaveLength(1);
+      expect(built[0]?.["kind"]).toBe("repository.publish_resolve");
+      expect(built[0]?.["affordance"]).toBe(RESOLVE);
+      expect(JSON.parse(payloadOf(built))).toStrictEqual({ decisionId: "d-unknown", resolution });
+      cleanup();
+    }
+  });
+
+  it("renders the daemon's refusal at its own code and layer, with its detail", async () => {
+    const { wire } = wireWith({ ok: false, refusal: { code: "PUBLISH_RESOLVE_REMOTE_HOLDS_SHA", layer: "DAEMON_PREREQUISITE",
+      detail: "the latest observation shows the remote at the approved commit: the push landed" } });
+    render(<GoalPublish frame={RESOLVABLE} goal={goal({ publish: STUCK })} goalId="goal-1" port={createPublishPort(wire)} remote={BOUND} />);
+    await userEvent.click(screen.getByTestId("cr.publish.resolve.NOT_TRANSMITTED"));
+    await waitFor(() => { expect(screen.getByTestId("cr.publish.resolve.answer").textContent).toContain("That didn't go through."); });
+    expect(screen.getByTestId("cr.publish.resolve.answer").querySelector("code")?.textContent)
+      .toBe("PUBLISH_RESOLVE_REMOTE_HOLDS_SHA @ DAEMON_PREREQUISITE");
+    expect(screen.getByTestId("cr.publish.resolve.detail").textContent)
+      .toBe("the latest observation shows the remote at the approved commit: the push landed");
+  });
+
+  it("names its own code when the dispatch itself fails", async () => {
+    const resolve = vi.fn(async () => { throw new Error("socket closed"); });
+    render(<GoalPublish frame={RESOLVABLE} goal={goal({ publish: STUCK })} goalId="goal-1"
+      port={{ prepare: vi.fn(), resolve, submit: vi.fn() }} remote={BOUND} />);
+    await userEvent.click(screen.getByTestId("cr.publish.resolve.ABANDON"));
+    await waitFor(() => { expect(screen.getByTestId("cr.publish.resolve.answer").querySelector("code")?.textContent)
+      .toBe("PUBLISH_RESOLVE_DISPATCH_FAILED @ CONTROL_ROOM_PUBLISH"); });
+    expect(resolve).toHaveBeenCalledWith(RESOLVE, "d-unknown", "ABANDON");
+    expect(screen.queryByTestId("cr.publish.resolve.detail")).toBeNull();
   });
 });

@@ -16,10 +16,16 @@ import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-comman
 import type { DaemonCommandPortOptions } from "./daemon-command-registry.js";
 import { decisionOf } from "./daemon-command-dispatch.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
-import { MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds }
-  from "./mcp-tool-allowlist.js";
+import {
+  MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, operatorDelegateMcpToolKinds, wiredMcpToolKinds,
+} from "./mcp-tool-allowlist.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
+import { PUBLISH_RESOLVE_COMMAND_KIND } from "./repository/publish-resolve-contracts.js";
+import { publicationRepositoryId } from "./repository/publication-approval-contracts.js";
+import { recordPublicationIntent } from "./repository/publication-effect-ledger.js";
+import { readPublishLedger } from "./repository/publish-ledger.js";
+import { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId } from "./repository/publish-receipt-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
@@ -368,6 +374,12 @@ const ROWS: readonly Row[] = [
   { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_INPUT_INVALID", kind: "repository.recover", asyncOnly: true,
     nonOperatorRefusal: { code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", layer: "REPOSITORY_RECOVERY" },
     layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason", "expectedReviewVersion", "expectedReviewDigest"] },
+  // task-2c3f878b, served since task-a47babf8: the operator gets past the entry's own fence and the
+  // resolve service refuses a decision id that names no publish under row 2's vocabulary. ADMIN
+  // fences reach; OPERATOR_ONLY fences the act.
+  { agent: null, asyncOnly: true, capability: ADMIN, code: "PUBLISH_RESOLVE_DECISION_NOT_FOUND",
+    kind: "repository.publish_resolve", layer: PREREQ_LAYER, payloadKeys: ["decisionId", "resolution"],
+    payload: { decisionId: "decision-unknown-publish", resolution: "ABANDON" } },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
@@ -382,103 +394,14 @@ const ROWS: readonly Row[] = [
 ];
 
 /**
- * The order the registry is BUILT in, transcribed by hand from the `PAYLOAD_KEYS`
- * literal rather than sorted: `buildCommandRegistry` fills a Map, so `keys()` is
- * that literal's key order. `ROWS` above is alphabetical, so a move that reordered
- * the table would agree with it. This one does not.
+ * The kinds the registry gates behind the configured operator principal: PRODUCTION's set, not
+ * a transcription. Its members are pinned once, by hand, as `OPERATOR_ONLY` in
+ * `daemon-command-vocabulary.test.ts`. What this file proves is that the SERVED registry
+ * enforces the set BOTH ways over every wired kind (the gate sweep below): a gated kind answers
+ * the non-operator 403 at DAEMON_AUTHORIZATION, and an open one reaches its own layer. An async
+ * entry that forgets to fence itself reds there by name.
  */
-const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
-  "criterion_check.approve", "criterion_check.verify", "repository.recover",
-  "approval.decide", "approval.decide_intent",
-  "planning.submit_decomposition", "product_contract.answer_clarification",
-  "product_contract.ask_clarification", "product_contract.propose_revision",
-  "events.resume", "work.resume", "effect.activate", "recovery.complete",
-  "product_contract.approve_gate_1", "journal.append",
-  "foundation.dispatch", "foundation.verification", "resource.reconcile",
-  "resource.confirm_released",
-  "step.start", "step.finish", "step.checkpoint", "cutover.activate",
-  "environment.set_variable", "environment.unset_variable",
-  "design.submit",
-  "escalation.decide", "goal.close", "goal.cancel", "goal.create", "goal.create_with_source",
-  "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
-  "graph.request_expansion", "graph.supersede",
-  "integration.accept_output",
-  "plan.propose", "policy.install", "policy.validate", "preview.decide", "preview.start",
-  "project.activate",
-  "project.bind_repository", "project.register", "project.set_agent_provider",
-  "provider.probe", "repository.publish",
-  "release.decide", "product_contract.sync_env_example",
-  "deployment.set_target", "deployment.deploy", "deployment.rollback", "deployment.migrate_down",
-  "repository.bootstrap",
-  "qualification.replan",
-  "review.submit", "session.close", "session.open", "session.renew",
-  "work.claim", "work.release", "work.renew",
-  // APPENDED, and appended for a reason this list already documents: the order here is
-  // `PAYLOAD_KEYS`' key order, and the probe-interval entry was appended THERE rather than filed
-  // beside the deployment kinds it reads like, so that neither this transcription nor the
-  // vocabulary's ROWS had to be rewritten mid-table.
-  "monitoring.set_probe_interval",
-  // task-509f0437, appended after it for exactly the same reason.
-  "monitoring.retire_environment",
-];
-
-/**
- * The kinds the registry gates behind the configured operator principal, transcribed
- * by hand. The sweep below asserts this set BOTH ways over every wired kind: a kind
- * added here reddens on the twenty that must reach their own family, and a kind
- * dropped reddens on the four that must not.
- */
-const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
-  "project.set_agent_provider",
-  "criterion_check.approve", "criterion_check.verify", "repository.recover",
-  // BOTH approval wires. The intent seam derives the activation witness and the record the
-  // caller-shaped wire used to accept, so gating one and not the other would leave the derived
-  // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
-  "approval.decide", "approval.decide_intent", "escalation.decide", "goal.close",
-  // Abandoning a product is the owner's call, same seat as close.
-  "goal.cancel",
-  // Publishing pushes the operator's repository to the remote the operator named.
-  "repository.publish",
-  "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
-  // Reverting a production schema destroys the data the forward migration created.
-  "deployment.migrate_down",
-  // Writing into and committing in the operator's own product repository is their act.
-  "product_contract.sync_env_example",
-  // The operator ANSWERS a material product question; an agent transport presenting
-  // that answer would be quiet invention with a human label (see the vocabulary set).
-  "product_contract.answer_clarification",
-  // The two graph kinds that MOVE authority: one makes a graph the running one, the other
-  // replaces the running one. Both are the human approve action on their own edge.
-  "graph.approve", "graph.supersede",
-  "integration.accept_output",
-  "resource.confirm_released", "session.open",
-  // The one-way GA activation: ADMIN fences reach, this set fences the human act itself.
-  "cutover.activate",
-  // Deciding a rendered product preview is the operator's own verdict, and its REVIEW
-  // capability is a reach fence an agent can hold -- this set is what makes it human-only.
-  // ASKING for one is the same act on the same terms: it runs the product on the daemon's
-  // host. `preview.start` is served from an ASYNC entry, so this membership keeps it off the
-  // MCP roster while the handler's own entry check is what refuses the dispatch.
-  "preview.decide", "preview.start",
-  // Writing an environment variable hands a production secret to the deploy; ADMIN fences
-  // reach, this set fences the act. Landed by task-a2409cba; transcribed here because the
-  // roster is an exact set and its own row had not backfilled the census yet.
-  "environment.set_variable", "environment.unset_variable",
-  // Creating a product repository at an operator-supplied path, and optionally pushing it to
-  // a GitHub account the operator's own `gh` login owns. ADMIN fences reach; this set is what
-  // makes it the operator's act.
-  "repository.bootstrap",
-  // task-eb37494e. Re-timing the production health probe is the operator's act: too fast and the
-  // probe is the load it was meant to watch for, too slow and an outage ends before the signal
-  // arrives. ADMIN fences reach; this set fences the act, and the MCP exclusion derived from it
-  // is what keeps the kind off a surface the operator bootstrap credential authenticates.
-  "monitoring.set_probe_interval",
-  // task-509f0437. Retiring an environment is the operator's act in a stronger sense still: it
-  // does not re-time the probe, it ENDS it, so the signal an outage would have produced stops
-  // existing. ADMIN fences reach; this set fences the act, and the derived MCP exclusion keeps
-  // the kind off a surface the operator bootstrap credential authenticates.
-  "monitoring.retire_environment",
-];
+const OPERATOR_ONLY: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
 
 const CREDENTIAL = "registry-operator-credential";
 const PROJECT = "proj-command-registry";
@@ -694,6 +617,123 @@ describe("release.decide operator-only async wiring", () => {
     expect(snapshot()).toEqual(before);
   });
 });
+
+/**
+ * task-2c3f878b. `repository.publish_resolve` is wired and fenced to the operator; since task-a47babf8
+ * the resolve service answers behind the fence. Three layers can refuse this dispatch, the entry's
+ * operator fence, the command seam's payload check and then the service, so every arm pins code AND
+ * layer: an outcome-only arm would stay green if the fence fell away and a later layer answered first.
+ */
+describe("repository.publish_resolve operator-only async wiring", () => {
+  const payload = { decisionId: "decision-unknown-publish", resolution: "NOT_TRANSMITTED" };
+  const snapshot = () => {
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      return { decisions: decisionCount(reader), eventHorizon: reader.readEventHorizon() };
+    } finally {
+      reader.close();
+    }
+  };
+
+  it("serves an asynchronous ADMIN entry that REPOSITORY_RECOVERY_FAMILY classifies", () => {
+    const entry = deps.registry.get(PUBLISH_RESOLVE_COMMAND_KIND);
+    expect(entry).toMatchObject({ kind: "repository.publish_resolve", requiredCapability: ADMIN,
+      payloadKeys: ["decisionId", "resolution"] });
+    expect(entry?.asyncHandler).toBeTypeOf("function");
+    // No membership flag of its own: the family table answers, exactly as for repository.recover.
+    expect(commandFamilyFacts(PUBLISH_RESOLVE_COMMAND_KIND).requiredCapability).toBe(ADMIN);
+    expect(agentCapabilitiesFor(PUBLISH_RESOLVE_COMMAND_KIND)).toBeNull();
+  });
+
+  it("DoD 1: refuses an authenticated capable non-operator at the entry's operator fence", async () => {
+    const credential = openSession("cmd-publish-resolve-open-agent", "sess-publish-resolve-agent",
+      "publish-resolve-agent-secret", [ADMIN, WORK]);
+    const before = snapshot();
+    expect(await sendAsync("cmd-publish-resolve-agent", PUBLISH_RESOLVE_COMMAND_KIND, payload,
+      credential, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("DoD 2: is off every MCP roster through the derivation from OPERATOR_PRINCIPAL_KINDS", () => {
+    expect(deps.registry.has(PUBLISH_RESOLVE_COMMAND_KIND)).toBe(true);
+    // FIRST, so a kind dropped from the operator set reds HERE: the absence is derived, not typed.
+    expect(wiredMcpToolKinds()).not.toContain(PUBLISH_RESOLVE_COMMAND_KIND);
+    expect(OPERATOR_PRINCIPAL_KINDS.has(PUBLISH_RESOLVE_COMMAND_KIND)).toBe(true);
+    // The seats' exclusion IS the derivation, so no hand-typed entry can sit in it.
+    expect(MCP_EXCLUDED_COMMAND_KINDS)
+      .toEqual([...OPERATOR_PRINCIPAL_KINDS].filter((kind) => kind !== "session.open").sort());
+    // And the owner's --as-operator roster does not carry it: it is classified never-delegated.
+    expect(operatorDelegateMcpToolKinds()).not.toContain(PUBLISH_RESOLVE_COMMAND_KIND);
+  });
+
+  // task-a47babf8 RE-AIMED this arm: it pinned the stub's refusal, which the resolve service replaced.
+  it("DoD 3: resolves the operator's UNKNOWN publish with ONE REFUSED receipt, then refuses it as no longer UNKNOWN without writes", async () => {
+    const decisionId = seedUnknownPublish();
+    expect(await sendAsync("cmd-publish-resolve-operator", PUBLISH_RESOLVE_COMMAND_KIND,
+      { decisionId, resolution: "ABANDON" }, CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      outcome: "ACCEPTED", httpStatus: 200,
+      decision: { commandId: "cmd-publish-resolve-operator", disposition: "DECIDED", resultCode: "PUBLISH_RESOLVED_ABANDON" },
+    });
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const state = readPublishLedger(reader, PROJECT).get(PUBLISH_GOAL);
+      expect(state?.receipts.size).toBe(1);
+      expect(state?.receipts.get(decisionId)).toMatchObject({ outcome: "REFUSED", decisionId, refusal: {
+        code: "PUBLISH_RESOLVED_ABANDON",
+        detail: "the operator resolved this publish as ABANDON; no observation of the remote was recorded" } });
+    } finally { reader.close(); }
+    const before = snapshot();
+    expect(await sendAsync("cmd-publish-resolve-again", PUBLISH_RESOLVE_COMMAND_KIND,
+      { decisionId, resolution: "NOT_TRANSMITTED" }, CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+      refusal: { code: "PUBLISH_RESOLVE_NOT_UNKNOWN", layer: "DAEMON_PREREQUISITE",
+        detail: "the publish already has a REFUSED receipt" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses the operator's malformed payload at the command seam before the service reads anything", async () => {
+    const cases = [{}, { decisionId: "", resolution: "ABANDON" }, { decisionId: "decision-x", resolution: "PUSHED" }];
+    for (const [index, malformed] of cases.entries()) {
+      const before = snapshot();
+      expect(await sendAsync(`cmd-publish-resolve-malformed-${String(index)}`, PUBLISH_RESOLVE_COMMAND_KIND, malformed,
+        CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+        outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+        refusal: { code: "INPUT_INVALID", layer: "DAEMON_COMMAND_SEAM",
+          detail: "repository.publish_resolve takes exactly {decisionId, resolution: NOT_TRANSMITTED | ABANDON}" },
+      });
+      expect(snapshot()).toEqual(before);
+    }
+    expect(cases).toHaveLength(3);
+  });
+});
+
+const PUBLISH_GOAL = "goal-publish-resolve-registry";
+/** An UNKNOWN publish in the served store: approved, its intent journaled, no receipt. */
+function seedUnknownPublish(): string {
+  const encoder = new TextEncoder();
+  const writer = SqliteEventStore.openForProject(storePath, PROJECT);
+  try {
+    const identity = { root: "D:/ws", gitDirectory: "D:/ws/.git" };
+    const candidate = { identity, approval: { branch: "approved-branch", sha: "a".repeat(40),
+      remoteUrl: "https://github.com/o/r.git", repositoryId: publicationRepositoryId(identity) } };
+    const aggregateId = publishAggregateId(PUBLISH_GOAL);
+    const decisionId = writer.commitExpectedVersionDecision({ commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
+      committedResultBytes: encoder.encode(JSON.stringify({ candidate, goalId: PUBLISH_GOAL, remoteUrl: candidate.approval.remoteUrl })),
+      correlationId: "corr-publish-resolve", decidedAt: DECIDED_AT,
+      events: [{ eventId: "publish-resolve-requested", eventType: "RepositoryPublishRequested", payload: encoder.encode("{}") }],
+      expectedVersion: writer.getAggregateVersion(aggregateId),
+      key: { commandId: "cmd-publish-resolve-publish", principalId: "operator-local", projectId: PROJECT },
+      requestBytes: encoder.encode("{}"), targetAggregateId: aggregateId }).decision.decisionId;
+    recordPublicationIntent(writer, { version: "moe-publication-intent/1", candidate, decisionId, goalId: PUBLISH_GOAL,
+      projectId: PROJECT, ownerDigest: "d".repeat(64), reservationRevision: 1, controllerId: "wrapper-controller",
+      intendedAt: DECIDED_AT });
+    return decisionId;
+  } finally { writer.close(); }
+}
 
 function transportRequest(
   commandId: string,
@@ -1126,10 +1166,9 @@ describe("production command transport stamps", () => {
 
 describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
-    // Pins the swept case count: an it.each over an empty or shortened table
-    // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(65);
-    expect(deps.registry.size).toBe(65);
+    // Exact both ways, so it pins the swept case count too; the guard keeps the it.each sweeps
+    // from passing over an empty table.
+    expect(ROWS.length).toBeGreaterThan(0);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1216,10 +1255,11 @@ describe("registered command table", () => {
   });
 
   it("keeps the registration order the payload table declares", () => {
-    // The sorted-set assertion above cannot see a reordered table, and a move that
-    // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(65);
-    expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
+    // The sorted-set assertion above cannot see a reordered registry: `buildCommandRegistry`
+    // fills a Map, so `keys()` must be the `PAYLOAD_KEYS` literal's own key order. That order
+    // is transcribed by hand ONCE, as ROWS in daemon-command-vocabulary.test.ts, so a reshuffled
+    // literal reds there; this pins the registry to it.
+    expect([...deps.registry.keys()]).toEqual(Object.keys(PAYLOAD_KEYS));
   });
 
   it.each(ROWS)("$kind keeps its capability and ordered payload allow-list", (row) => {
@@ -1388,13 +1428,14 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(30);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(30);
+    it("sweeps every operator-gated kind", () => {
+      // Every gated kind is a characterized row, so the sweep below reaches all of them.
+      expect(OPERATOR_ONLY.size).toBeGreaterThan(0);
+      expect([...OPERATOR_ONLY].filter((kind) => !ROWS.some((row) => row.kind === kind))).toEqual([]);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
-      const gated = OPERATOR_ONLY.includes(row.kind);
+      const gated = OPERATOR_ONLY.has(row.kind);
       const answered = row.asyncOnly === true
         ? await sendAsync(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential)
         : send(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential);
@@ -2100,7 +2141,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(65);
+    expect([...ports.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -2122,7 +2163,6 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(65);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -2154,7 +2194,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(65);
+    expect([...snapshotPorts.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

@@ -32,6 +32,10 @@ describe("release.decide refusal vocabulary", () => {
     const pr = releaseRefusal("RELEASE_PR_FAILED");
     expect(pr.code).toBe("RELEASE_PR_FAILED");
     expect(pr.layer).toBe("RUNNER_WORKSPACE");
+
+    const headIsBase = releaseRefusal("RELEASE_HEAD_IS_BASE");
+    expect(headIsBase.code).toBe("RELEASE_HEAD_IS_BASE");
+    expect(headIsBase.layer).toBe("DAEMON_PREREQUISITE");
   });
 
   /**
@@ -43,6 +47,7 @@ describe("release.decide refusal vocabulary", () => {
   it("reuses the values of already-rostered layer constants, not bare literals", () => {
     expect(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_REMOTE_MISSING).toBe(PROJECT_REDUCER_LAYER);
     expect(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_EVIDENCE_INCOMPLETE).toBe(GOAL_PREREQUISITE_LAYER);
+    expect(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_HEAD_IS_BASE).toBe(GOAL_PREREQUISITE_LAYER);
     expect(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_PR_FAILED).toBe(RUNNER_WORKSPACE_LAYER);
   });
 
@@ -54,13 +59,14 @@ describe("release.decide refusal vocabulary", () => {
   it("keeps the map closed and the roster derived, enumerated from both ends", () => {
     expect(RELEASE_DECIDE_CODES).toEqual([
       "RELEASE_EVIDENCE_INCOMPLETE",
+      "RELEASE_HEAD_IS_BASE",
       "RELEASE_PR_FAILED",
       "RELEASE_REMOTE_MISSING",
     ]);
     expect(new Set(Object.keys(RELEASE_DECIDE_CODE_LAYER_MAP))).toEqual(
       new Set(RELEASE_DECIDE_CODES),
     );
-    expect(RELEASE_DECIDE_CODES).toHaveLength(3);
+    expect(RELEASE_DECIDE_CODES).toHaveLength(4);
   });
 
   /** Every code the roster names resolves to a layer the map authorizes — no undefined pair. */
@@ -73,7 +79,7 @@ describe("release.decide refusal vocabulary", () => {
       checked += 1;
     }
     // A sweep that silently yields zero cases would otherwise pass vacuously.
-    expect(checked).toBe(3);
+    expect(checked).toBe(4);
   });
 
   /**

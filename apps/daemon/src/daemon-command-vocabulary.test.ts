@@ -21,6 +21,12 @@ import {
  * `daemon-command-registry.test.ts` asserts the same mapping from the far side, through
  * the registry the HTTP seam actually serves. This file asserts it at the source, which
  * is where the next command kind will be registered.
+ *
+ * THE ONE HAND-WRITTEN CENSUS of two facts for the whole daemon suite: `ROWS` (every wired
+ * kind, in `PAYLOAD_KEYS` order) and `OPERATOR_ONLY` (the human-only set). Every other test
+ * reads both from production, so a new kind moves this file plus its per-kind attribute row in
+ * `daemon-command-registry.test.ts`, and no roster copy. No arm here pins a count: exact set
+ * equality already pins the size, and names the kind.
  */
 type Family =
   | "CRITERION" | "ENV_EXAMPLE_SYNC" | "REPOSITORY_RECOVERY"
@@ -284,6 +290,11 @@ const ROWS: readonly VocabularyRow[] = [
   // generation; and no `projectId`, which comes from the authenticated principal.
   { agent: null, capability: ADMIN, family: "MONITORING", kind: "monitoring.retire_environment",
     payloadKeys: ["environment"] },
+  // task-2c3f878b, appended because PAYLOAD_KEYS appends it. Family REPOSITORY_RECOVERY at ADMIN,
+  // like `repository.recover`: ADMIN fences REACH only, and `agent` is null because resolving an
+  // UNKNOWN publish is the operator's assertion about their own remote. OPERATOR_ONLY is the fence.
+  { agent: null, capability: ADMIN, family: "REPOSITORY_RECOVERY",
+    kind: "repository.publish_resolve", payloadKeys: ["decisionId", "resolution"] },
 ];
 
 /** Views over the production maps, so a value here is always the shipped value. */
@@ -351,14 +362,16 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // can only re-time the probe, this one STOPS it. An agent that could retire an environment
   // could silence the monitoring that would otherwise have paged a human about an outage in it.
   "monitoring.retire_environment",
+  // task-2c3f878b. Only the operator can say the remote does not hold a sha; an agent saying so
+  // could free a publish hold for a push that actually landed.
+  "repository.publish_resolve",
 ];
 
 describe("command vocabulary", () => {
   it("carries exactly the transcribed wired kinds in their registration order", () => {
-    // Pins the swept case count: an it.each over a shortened table would otherwise
-    // pass while asserting nothing.
-    expect(ROWS).toHaveLength(65);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(65);
+    // Exact and ordered, so it also pins the swept case count; the guard keeps the it.each
+    // sweeps below from passing over an empty table.
+    expect(ROWS.length).toBeGreaterThan(0);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -401,28 +414,13 @@ describe("command vocabulary", () => {
     // them: its kinds would pass the STANDALONE arm above while sitting in a real family map.
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
+    // THEN each family's exact member set, read off ROWS: equality pins every family's size.
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(54);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
       );
     }
-    expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
-    expect(FAMILY_MAPS.CRITERION.size).toBe(2);
-    expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(1);
-    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(18);
-    expect(FAMILY_MAPS.COMPILER.size).toBe(4);
-    expect(FAMILY_MAPS.DESIGN.size).toBe(1);
-    expect(FAMILY_MAPS.ENVIRONMENT.size).toBe(2);
-    expect(FAMILY_MAPS.GRAPH.size).toBe(5);
-    expect(FAMILY_MAPS.PREVIEW.size).toBe(2);
-    expect(FAMILY_MAPS.RELEASE.size).toBe(1);
-    expect(FAMILY_MAPS.REVIEW.size).toBe(4);
-    expect(FAMILY_MAPS.SESSION.size).toBe(3);
-    expect(FAMILY_MAPS.SETTINGS.size).toBe(1);
-    expect(FAMILY_MAPS.STEP.size).toBe(3);
-    expect(FAMILY_MAPS.WORK.size).toBe(3);
   });
 
   it("keeps every shared table frozen", () => {
@@ -461,8 +459,9 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(30);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(30);
+    // THE operator census: set equality both ways, so a kind dropped from production or added
+    // to it (wired or not) reds here and the diff names it.
+    expect([...OPERATOR_PRINCIPAL_KINDS].sort()).toEqual([...OPERATOR_ONLY].sort());
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

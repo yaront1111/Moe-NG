@@ -27,6 +27,7 @@ import { resolveLaneScratch, startWrapper, WRAPPER_INTERVAL_MS, wrapperEnv }
 import type { DaemonLane, DaemonLaneOptions, LaneOperatorSeat, LaneScratch }
   from "./daemon-ports.js";
 import { createLaneContractGoal } from "./lane-contract-goal.js";
+import { readPublicationApproval } from "./publication-approval-read.js";
 import { readReleaseApprovalTarget } from "./release-approval-target.js";
 
 /**
@@ -130,10 +131,10 @@ async function readRelease(lane: DaemonLane, goalId: string): Promise<Record<str
  * lane-contract-goal.ts:162, deliberately BEFORE it adds the contract graph. A second landing
  * afterwards adds a commit and invalidates the exact-SHA criterion evidence this card renders.
  *
- * The publish below is unchanged and is dispatched on a MINTED operator seat, because a lane
- * credential is not a HUMAN principal. Nothing is seeded and no gate is relaxed.
+ * The publish that follows is dispatched on a MINTED operator seat, because a lane credential is
+ * not a HUMAN principal. Nothing is seeded and no gate is relaxed.
  */
-async function preparePublication(lane: DaemonLane, remoteUrl: string) {
+async function preparePublication(lane: DaemonLane) {
   // RESOLVED BEFORE the helper runs, and that ordering is load-bearing: `resolveLaneScratch`
   // keys on `node-specs/node.json`, and `landLaneNode` retires that spec on its way through
   // (lane-contract-goal.ts:159), so afterwards it answers null for a lane that plainly exists.
@@ -148,22 +149,37 @@ async function preparePublication(lane: DaemonLane, remoteUrl: string) {
     .toMatch(/^[0-9a-f]{40}$/u);
   expect(contract.landedSha, "the head must have moved off the lane baseline")
     .not.toBe(lane.workspaceSha);
-  // The helper reads its sha from `laneWorkspaceIdentity(scratch.root)`, which is
+  return { goalId: contract.goalRef, laneScratch, sha: contract.landedSha, workspace: contract.scratch.workspace };
+}
+
+/**
+ * A HAND-BUILT approval, for the local-remote REFUSAL arm ONLY. The daemon's preview cannot supply
+ * it: `admitRemoteUrl` refuses a local path, so /repository/remote/read answers
+ * PUBLISH_REMOTE_URL_INVALID. None is needed either: ingress refuses PUBLISH_APPROVAL_REQUIRED @
+ * DAEMON_INGRESS while decoding it, before any approval is judged against the candidate. Never
+ * dispatch it for a positive publish; that approval comes from `readPublicationApproval`.
+ */
+function refusalOnlyLocalApproval(lane: DaemonLane, remoteUrl: string, sha: string) {
+  // The contract helper reads its sha from `laneWorkspaceIdentity(scratch.root)`, which is
   // `join(root, "workspace")` — the very directory `lane.workspace` names (daemon-ports.ts:156,
   // :217-222, :651). Same tree, so this identity matches that sha.
   const identity = resolveRepositoryExecutionIdentity(lane.workspace);
   expect(identity.ok, JSON.stringify(identity)).toBe(true);
   if (!identity.ok) throw new Error("unreachable: the assertion above fails first");
-  const goalId = contract.goalRef;
   const branch = execFileSync("git", ["symbolic-ref", "--short", "HEAD"],
     { cwd: lane.workspace, encoding: "utf8", windowsHide: true }).trim();
-  const approval = { branch, remoteUrl,
-    repositoryId: publicationRepositoryId(identity.identity), sha: contract.landedSha };
-  return { approval, goalId, laneScratch, remoteUrl, sha: contract.landedSha, workspace: contract.scratch.workspace };
+  return { branch, remoteUrl, repositoryId: publicationRepositoryId(identity.identity), sha };
 }
 
-async function landAndPublish(lane: DaemonLane, remoteUrl: string): Promise<{ goalId: string; remoteUrl: string; sha: string }> {
-  const { approval, goalId, laneScratch, sha, workspace } = await preparePublication(lane, remoteUrl);
+async function landAndPublish(
+  lane: DaemonLane, remoteUrl: string,
+): Promise<{ branch: string; goalId: string; remoteUrl: string; sha: string }> {
+  const { goalId, laneScratch, sha, workspace } = await preparePublication(lane);
+  // THE DAEMON NAMES THE PUSHED BRANCH, so the approval is its own preview, taken exactly as the
+  // Publish card takes it. Every pushed-branch check below reads `approval.branch`.
+  const approval = await readPublicationApproval(lane, goalId, remoteUrl);
+  expect(approval, "the daemon's preview names the commit this drive just landed")
+    .toMatchObject({ remoteUrl, sha });
   const published = await command(lane, "repository.publish", publishAggregateId(goalId),
     { approval, goalId, remoteUrl }, mintLaneOperatorSeat(lane));
   expect(published, `PUBLISH: ${JSON.stringify(published)}`).toMatchObject({ outcome: "ACCEPTED" });
@@ -173,9 +189,9 @@ async function landAndPublish(lane: DaemonLane, remoteUrl: string): Promise<{ go
   // "the card is missing a sha", a true sentence about the wrong subject. Assert the receipt,
   // and quote the publisher's OWN refusal when it is not PUSHED.
   wrapperPids.push(await tickPublisher(lane, laneScratch, workspace));
-  expect(await awaitPublishOutcome(lane, goalId), "the publisher must have pushed the goal's branch")
+  expect(await awaitPublishOutcome(lane, goalId), `the publisher must have pushed ${approval.branch}`)
     .toBe("PUSHED");
-  return { goalId, remoteUrl, sha };
+  return { branch: approval.branch, goalId, remoteUrl, sha };
 }
 
 /**
@@ -305,9 +321,10 @@ test("real daemon: a local publish remote is refused without publication or a re
       started = lane;
       const root = dirname(lane.catalogPath);
       const remoteUrl = createLaneRemote(root);
-      const prepared = await preparePublication(lane, remoteUrl);
+      const prepared = await preparePublication(lane);
+      const approval = refusalOnlyLocalApproval(lane, remoteUrl, prepared.sha);
       const response = await command(lane, "repository.publish", publishAggregateId(prepared.goalId),
-        { approval: prepared.approval, goalId: prepared.goalId, remoteUrl }, mintLaneOperatorSeat(lane));
+        { approval, goalId: prepared.goalId, remoteUrl }, mintLaneOperatorSeat(lane));
       expect(response).toMatchObject({ ok: false, outcome: "PORT_REFUSED", stage: "DISPATCH",
         refusal: { code: "PUBLISH_APPROVAL_REQUIRED", layer: "DAEMON_INGRESS" } });
       wrapperPids.push(await tickPublisher(lane, prepared.laneScratch, prepared.workspace));
@@ -349,9 +366,11 @@ test("real admitted remote (opt-in): the operator reads evidence, approves relea
         started = lane;
         const root = dirname(lane.catalogPath);
         expect(existsSync(join(root, "release-pr-calls.jsonl")), "lane provider selected").toBe(true);
-        const branch = `moe-release-browser-${lane.projectId}`;
-        execFileSync("git", ["switch", "-c", branch], { cwd: lane.workspace, windowsHide: true });
-        const { goalId, remoteUrl, sha } = await landAndPublish(lane, target.remoteUrl);
+        // OFF THE REMOTE'S DEFAULT, but never assumed to be what is pushed: the daemon's approval
+        // names the pushed branch, and after task-04160615 that can be `moe/release/<goalId>`.
+        const checkout = `moe-release-browser-${lane.projectId}`;
+        execFileSync("git", ["switch", "-c", checkout], { cwd: lane.workspace, windowsHide: true });
+        const { branch, goalId, remoteUrl, sha } = await landAndPublish(lane, target.remoteUrl);
 
         // THE EVIDENCE READ IS LIVE. `/release/read` answers through the real listener before a
         // single browser assertion is made, so everything below is about a real daemon.
@@ -407,6 +426,7 @@ test("real admitted remote (opt-in): the operator reads evidence, approves relea
         expect(calls, "the injected pr port must have been reached").not.toBe("");
         const call = JSON.parse(calls.split("\n")[0] ?? "{}") as Record<string, unknown>;
         expect(call["sha"]).toBe(sha);
+        expect(call["head"], "the pull request opens from the branch the approval pushed").toBe(branch);
         expect(call["base"]).toBe("main");
         expect(call["argv"]).toEqual(expect.arrayContaining(["pr", "create", "--repo", remoteUrl]));
       });

@@ -75,7 +75,8 @@ function previewLine(evidence: ReleaseEvidenceView | null): string {
 }
 
 export function GoalRelease({ evidence, frame, goalId, port }: GoalReleaseProps): JSX.Element | null {
-  const [base, setBase] = useState("main");
+  const [touched, setTouched] = useState(false);
+  const [typed, setTyped] = useState("");
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<OfferOutcome | null>(null);
@@ -87,6 +88,8 @@ export function GoalRelease({ evidence, frame, goalId, port }: GoalReleaseProps)
   const summary = evidenceSummary(criteria);
   const gaps = criteria.flatMap((row) => row.gaps);
   const sha = evidence?.sha ?? null;
+  const measuredDefault = evidence?.remoteDefaultBranch;
+  const base = touched ? typed : (measuredDefault ?? "");
   const trimmed = base.trim();
   const canApprove = offer !== null && port !== null && !busy && sha !== null && trimmed !== "";
   const decide = (): void => {
@@ -172,9 +175,18 @@ export function GoalRelease({ evidence, frame, goalId, port }: GoalReleaseProps)
             data-testid="cr.release.base"
             disabled={busy}
             id={`cr-release-base-${goalId}`}
-            onChange={(event): void => { setBase(event.target.value); setArmed(false); }}
+            onChange={(event): void => {
+              setTouched(true);
+              setTyped(event.target.value);
+              setArmed(false);
+            }}
             value={base}
           />
+          {typeof measuredDefault === "string" ? null : (
+            <p className="cr2-needs-detail" data-testid="cr.release.base-unmeasured">
+              The remote&apos;s default branch is not known yet, so type the branch to release into.
+            </p>
+          )}
           <ActionButton
             ariaLabel="Approve this release and open its pull request"
             disabled={!canApprove}

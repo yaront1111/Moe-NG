@@ -28,16 +28,13 @@ import { SqliteEventStore } from "@moe/store";
 import { readCurrentDeployReceipt } from "../../../apps/daemon/src/deployment/deploy-ledger.js";
 import { DEPLOYMENT_HEALTH_PATH }
   from "../../../apps/daemon/src/repository/deployment/deployment-infrastructure-templates.js";
-import { publicationRepositoryId }
-  from "../../../apps/daemon/src/repository/publication-approval-contracts.js";
 import { publishAggregateId } from "../../../apps/daemon/src/repository/publish-receipt-contracts.js";
-import { resolveRepositoryExecutionIdentity }
-  from "../../../apps/daemon/src/repository/repository-execution-identity.js";
 import { mintLaneOperatorSeat } from "./daemon-ports.js";
 import type { DaemonLane, LaneOperatorSeat } from "./daemon-ports.js";
 import { landLaneNode } from "./lane-landing.js";
 import { lanePost } from "./lane-preview.js";
 import { seededGoalId } from "./lane-preview-arms.js";
+import { readPublicationApproval } from "./publication-approval-read.js";
 
 /** Admitted by `admitRemoteUrl`; the lane never reaches a network with it. */
 const REMOTE_URL = "https://github.com/moe-lane/deploy-rollback-incident.git";
@@ -175,13 +172,9 @@ export async function landAndPublish(lane: DaemonLane, pids: number[]): Promise<
   expect(landed.sha, "the landing moves the workspace head off its baseline")
     .not.toBe(lane.workspaceSha);
   const goalId = await seededGoalId(lane);
-  const identity = resolveRepositoryExecutionIdentity(lane.workspace);
-  expect(identity.ok, JSON.stringify(identity)).toBe(true);
-  if (!identity.ok) throw new Error("unreachable: the assertion above fails first");
-  const approval = {
-    branch: "main", remoteUrl: REMOTE_URL,
-    repositoryId: publicationRepositoryId(identity.identity), sha: landed.sha,
-  };
+  const approval = await readPublicationApproval(lane, goalId, REMOTE_URL);
+  expect(approval, "the daemon's preview names the commit this drive just landed")
+    .toMatchObject({ remoteUrl: REMOTE_URL, sha: landed.sha });
   const answer = await laneCommand(lane, "repository.publish", publishAggregateId(goalId),
     { approval, goalId, remoteUrl: REMOTE_URL }, mintLaneOperatorSeat(lane));
   expect(answer, `PUBLISH: ${JSON.stringify(answer)}`).toMatchObject({ outcome: "ACCEPTED" });

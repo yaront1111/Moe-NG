@@ -268,7 +268,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
             facts.continuation !== undefined, review.stalledRounds.length > 0),
         });
       })),
-      publish: readRunGoalPublication(store, projectId, publishes.get(goal.goalId)),
+      publish: readRunGoalPublication(store, projectId, publishes.get(goal.goalId), Date.parse(now)),
       run: run === null || run.outcome !== "RUN" ? null : Object.freeze({
         approval: run.approval, lifecycle: run.lifecycle, reviewable: run.reviewable, runId: run.runId,
       }),

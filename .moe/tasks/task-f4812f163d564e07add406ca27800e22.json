@@ -1,0 +1,188 @@
+{
+  "id": "task-f4812f163d564e07add406ca27800e22",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: every fresh publish reads UNKNOWN, and is offered the operator's Resolve, while its one push is still in flight",
+  "description": "Found by worker-952c612b during task-21be6e9055984413a651ce6ee331e2c8's adversarial review. Evidence is code only: no probe was run.\n\nWHY THE WINDOW EXISTS. node-publisher.ts:186-189 journals the intent BEFORE its one push (:202). run-goal-publication.ts:13 calls any intent with no receipt UNKNOWN. affordance-read answers `unknownPublishDecision` from that same read, so affordance-planning-offers.ts:255 mints repository.publish_resolve. Result: for the seconds between the intent commit and the post-push receipt, the Publish card shows UNKNOWN and the Resolve buttons.\n\nWHAT A CLICK IN THAT WINDOW DOES.\n1. The operator's NOT_TRANSMITTED or ABANDON records the REFUSED receipt first. recordPublishReceipt keeps the first writer: publish-ledger.ts:203-204.\n2. If the push lands, the publisher's PUSHED write gets that REFUSED receipt back. It reports UNKNOWN \"remote holds the sha but the recorded receipt does not match the candidate\" (:217-219).\n3. On the next pass it gives the hold back as PUBLISH_RESOLVED.\n4. The card then says REFUSED while the remote holds the commit.\nThe cost is bounded: a later decision's push of the same sha is a git no-op, and a remote that has moved on is refused PUBLISH_REMOTE_DIVERGED by the pre-flight. So the effect is not transmitted twice, but the record is wrong.\n\nHINT FOR THE FIX, left to the architect. A live controller does NOT tell in-flight from stuck: a stuck publish's hold is also owned by the live wrapper. The fix must also keep a publish that was stuck before task-78dea88b resolvable; such a publish has no transmission record. publish-resolve-journey.test.ts's step (4) pins the card at UNKNOWN for a stuck publish.",
+  "definitionOfDone": [
+    "While a fresh publish's single push is in flight (intent journaled, no receipt), the card does not say UNKNOWN and the affordance read offers no repository.publish_resolve. A test pins this against the production read and the production offer mint.",
+    "A stuck UNKNOWN publish is still offered the resolve. This includes one stuck before task-78dea88b, which has no transmission record. publish-resolve-journey.test.ts stays green."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE, no writes. Re-confirm every item at your tree and record it in the step note.\n\n(a) THE WINDOW. In apps/daemon/src/orchestrator/node-publisher.ts, a fresh pass runs in this order:\n- recordPublicationIntent (:186-189);\n- `transmit` (:85-95), which is an `observe` for the pre-push tip (:87), then the `push` (:91), then recordPublicationTransmission;\n- `observe` (:203);\n- on a mismatch, `notLanded` (:137-139), which is another `observe` plus a `contains`;\n- then EITHER the PUSHED receipt OR notePublicationObservation.\nCount the git calls on the LONGEST path from the intent commit to the receipt or observation write; it was 5 at planning. Every call runs through publicationGitRunner with `timeout: 60_000` (apps/daemon/src/repository/git-publication-port.ts:20).\n\n(b) THE READ. apps/daemon/src/http/run-goal-publication.ts:11-16 marks ANY intent without a receipt as UNKNOWN. affordance-read.ts:405-407 offers the resolve exactly when that read says UNKNOWN. affordance-planning-offers.ts:254-255 then mints `repository.publish_resolve`.\n\n(c) THE CALLERS of readRunGoalPublication: 14 sites.\n- production: runs-read.ts:271 (the Publish card), affordance-read.ts:406 (the offer), goal-deployment-read.ts:44, release-evidence-read.ts:225, release-auto-decide.ts:173;\n- a gates fixture;\n- 8 test sites.\nONLY runs-read and affordance-read will pass a clock. Every other caller keeps today's semantics, and that is deliberate: their answer is the same for PENDING and UNKNOWN (not PUSHED).\n\n(d) THE UNKNOWN ASSERTERS and their clocks, all FIXED timestamps and none passing `now`, so none should move:\n- node-publisher.test.ts NOW 2026-09-18T12:00Z;\n- publish-resolve-journey.test.ts NOW 2026-09-19T12:00Z, whose step 4 carries an observation;\n- publish-resolve-service.test.ts NOW 2026-09-19T08:00Z;\n- affordance-read-planning.test.ts AT 2026-09-19T08:00Z at :1531, which drives the SHIPPED composition root and so WILL see the new rule.\n\n(e) Run `git status --porcelain` on the 5 owned paths; all were clean at planning.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "(a) WINDOW, re-measured at this tree (no writes). After recordPublicationIntent (node-publisher.ts:186-189) the FRESH path is: transmit (observe :87, push :91, recordPublicationTransmission :95-96, then measureRemoteDefaultBranch :97 which calls git.measureDefaultBranch), then git.observe :203, then either PUSHED receipt or, on mismatch, notLanded :112-124 (store only) then notePublicationObservation :208-209. Port-level git calls intent→receipt/observation: 4 (observe, push, measureDefaultBranch, observe). Planning counted 5: it treated :137-139 as notLanded observe+contains, but those lines are PREFLIGHT (before any intent). Current notLanded does no git. Bound follows this count: 4×PUBLICATION_GIT_TIMEOUT_MS + 1×margin. Each port method still runs through publicationGitRunner timeout: 60_000 (git-publication-port.ts:20). Inner execFile (init/rev-parse/cat-file/ls-remote) also carry that timeout; derivation uses the port methods, as planning did.\n\n(b) READ. run-goal-publication.ts:11-16: any intent without a receipt sets unknown=true (intent throw also). Outcome UNKNOWN + code PUBLISH_EFFECT_RECONCILIATION_REQUIRED. affordance-read.ts:405-407 offers resolve iff that read says UNKNOWN; clock at :355 (config.clock ?? wall). affordance-planning-offers.ts:254-255 mints repository.publish_resolve at publish-resolve:<decisionId>. readPublicationObservation (:19) swallows store throws (publication-effect-ledger.ts:163-164 → null).\n\n(c) CALLERS of readRunGoalPublication (def + 12): production runs-read.ts:271 (card; clock :211/:299, now string NOT passed through), affordance-read.ts:406 (offer), goal-deployment-read.ts:44, release-evidence-read.ts:225, release-auto-decide.ts:173; fixture gates-unattended-fixtures.ts:275; tests affordance-read-planning.test.ts:1556, node-publisher.test.ts:138, node-publisher-approved.test.ts:107/132/152, publish-resolve-journey.test.ts:112, publish-resolve-service.test.ts:74, release-auto-decide.test.ts:882, release-auto-decide-store-fault.test.ts:78. ONLY runs-read + affordance-read will pass a clock. Others keep today's UNKNOWN-without-now. Step-4 extra files: goal-deployment-read.test.ts, release-read.test.ts (release-evidence-read).\n\n(d) UNKNOWN asserters, FIXED timestamps, none pass now: node-publisher.test.ts NOW 2026-09-18T12:00:00.000Z; publish-resolve-journey.test.ts NOW 2026-09-19T12:00:00.000Z, step 4 has observation; publish-resolve-service.test.ts NOW 2026-09-19T08:00:00.000Z; affordance-read-planning.test.ts AT 2026-09-19T08:00:00.000Z at :1530, surface() :1398 has NO clock (wall), card() :1555 has no now. Existing UNKNOWN arms in that describe (intent-only: :1563, :1614, unknownWorld :1629) must inject now>=AT+B or an observation. PENDING/PUSHED/REFUSED arms stay as-is.\n\n(e) git status --porcelain on the 5 owned paths (run-goal-publication.ts, affordance-read.ts, runs-read.ts, git-publication-port.ts, affordance-read-planning.test.ts) + node-publisher.ts: empty/clean. Peer dirt left untouched: publication-effect-ledger.ts/.test.ts, publish-ledger.ts/.test.ts, decision-fact-slots.*, apps/daemon/CLAUDE.md, .moe/*.\n\nB for later steps: PUBLISH_IN_FLIGHT_BOUND_MS = 4 * 60_000 + 60_000 = 300_000 (5 min).",
+      "startedAt": "2026-09-19T08:21:55.562Z",
+      "completedAt": "2026-09-19T08:25:43.614Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED, in apps/daemon/src/http/affordance-read-planning.test.ts, the describe \"and the publish resolve card on the same landed goal\" (:1529 onward). It already drives the production offer mint through the shipped composition root and reads the card with the production read.\n\nEVERY ARM INJECTS ITS CLOCK. That means the affordance read's config.clock, plus the same instant passed to `card(store, now)`, since the card helper must mirror runs-read. Nothing may depend on the wall clock. The fixture's AT is 2026-09-19T08:00Z, so an arm that read the wall clock would change its answer at about 08:0x UTC: a date-dependent flake.\n\nThe arms. B is the bound named in step 3.\n- IN FLIGHT: an intent at AT, no receipt, no observation, now = AT + 1 s. The card reads `outcome: \"PENDING\", code: null`, and the offers carry NO `repository.publish_resolve` (DoD 1).\n- STUCK BY AGE: the same records, now = AT + B. The card reads UNKNOWN / PUBLISH_EFFECT_RECONCILIATION_REQUIRED, and the resolve is offered on `publish-resolve:<decisionId>`.\n- JUST INSIDE: now = AT + B - 1 ms is still in flight. This pins which side of the boundary the bound sits on.\n- STUCK BY OBSERVATION: intent plus `notePublicationObservation(...)`, now = AT + 1 s. UNKNOWN plus the offer, IMMEDIATELY: the pass finished and could not settle it.\n- LEGACY STUCK (DoD 2): an intent from before task-78dea88b, with no transmission record and no observation, now = AT + B. UNKNOWN plus the offer.\n\nThe existing arms in this describe that expect UNKNOWN from an intent alone must now inject now >= AT + B, or add an observation. Re-pin them by the rule; never widen a matcher.\n\nRun the file and CONFIRM the in-flight and just-inside arms are RED, quoting them.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ],
+      "note": "RED confirmed. Clock injected on every arm in the nested describe (surface clock ISO + card(store, epochMs)). Existing UNKNOWN-from-intent arms re-pinned at now=AT+B (stuckAt/stuckMs), matchers not widened. New arms: IN FLIGHT (AT+1s), STUCK BY AGE (AT+B), JUST INSIDE (AT+B-1ms), STUCK BY OBSERVATION (notePublicationObservation, AT+1s), LEGACY STUCK (no transmission record, AT+B). B=4*60_000+60_000=300_000 from step-1. Peer dirt untouched.\n\nCommand: pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-read-planning.test.ts -t \"publish resolve card\"\nTest Files 1 failed (1); Tests 2 failed | 10 passed | 38 skipped (50).\n\nIN FLIGHT RED at :1577: expected outcome PENDING code null, received UNKNOWN / PUBLISH_EFFECT_RECONCILIATION_REQUIRED.\nJUST INSIDE RED at :1596: same expected PENDING/null, received UNKNOWN / PUBLISH_EFFECT_RECONCILIATION_REQUIRED.\nStuck/legacy/observation arms and re-pinned existing arms GREEN (today's intent-without-receipt=UNKNOWN).",
+      "startedAt": "2026-09-19T08:26:30.339Z",
+      "completedAt": "2026-09-19T08:29:05.385Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN.\n\n(1) apps/daemon/src/repository/git-publication-port.ts: export `PUBLICATION_GIT_TIMEOUT_MS = 60_000` and use it at :20 in place of the literal. No behaviour change.\n\n(2) apps/daemon/src/http/run-goal-publication.ts:\n- Add an optional fourth parameter `now?: number` (epoch ms).\n- Export `PUBLISH_IN_FLIGHT_BOUND_MS`, derived as (git calls on the longest path, from step 1(a)) × PUBLICATION_GIT_TIMEOUT_MS + one PUBLICATION_GIT_TIMEOUT_MS of margin. Put the derivation in a comment citing the node-publisher.ts sites. At planning that is 6 minutes.\n- In the pending loop, a request whose intent exists without a receipt is IN FLIGHT iff ALL of these hold: `now` was passed; readPublicationObservation(...) is null; `Date.parse(intent.intendedAt)` is finite; and `now - intendedAt < PUBLISH_IN_FLIGHT_BOUND_MS`.\n- An in-flight request is selected as the request, but it is NOT unknown. It reads PENDING with code null, and the card keeps its exact key set.\n- Everything else keeps today's UNKNOWN. That includes: an observation read that throws; an intent read that throws (already UNKNOWN); an unparseable intendedAt; and every caller that passes no `now`. Each of these fails TOWARD the operator's exit, because a stuck publish must never be hidden.\n- Keep the file small: 27 lines at planning.\n\n(3) apps/daemon/src/http/runs-read.ts goalView (:271): pass `Date.parse(now)`, using the runs read's own injectable clock (:211, :299). This is the Publish card's production read.\n\n(4) apps/daemon/src/http/affordance-read.ts :405-407: pass `Date.parse(now)` from the same read's clock (:355), so the offer and the card judge the SAME instant. Update the comment above it: the resolve is offered while the card says UNKNOWN, which is never during the publish's own in-flight window.\n\nConfirm every arm from step 2 is GREEN.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/git-publication-port.ts",
+        "apps/daemon/src/http/run-goal-publication.ts",
+        "apps/daemon/src/http/runs-read.ts",
+        "apps/daemon/src/http/affordance-read.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/git-publication-port.ts",
+        "apps/daemon/src/http/run-goal-publication.ts",
+        "apps/daemon/src/http/runs-read.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ],
+      "note": "GREEN. PUBLICATION_GIT_TIMEOUT_MS=60_000 exported and used in publicationGitRunner. PUBLISH_IN_FLIGHT_BOUND_MS=4*timeout+timeout=300_000 (step-1 count: observe :87, push :91, measureRemoteDefaultBranch :97, observe :203 — not planning's 5; bound follows measurement). readRunGoalPublication(store, projectId, state, now?: number): in-flight iff now passed+finite, observation null (throw → UNKNOWN), intendedAt finite, now-intendedAt < bound; selected as request but PENDING/code null. No now, unparseable intendedAt, observation present, age>=bound keep UNKNOWN. runs-read goalView and affordance-read unknownPublishDecision both pass Date.parse(now) from their injectable clocks. Test B now imports PUBLISH_IN_FLIGHT_BOUND_MS. run-goal-publication.ts 45 lines.\n\nCommand: pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-read-planning.test.ts -t \"publish resolve card\"\nTest Files 1 passed (1); Tests 12 passed | 38 skipped (50). Every step-2 arm GREEN. Peer dirt untouched.",
+      "startedAt": "2026-09-19T08:30:11.938Z",
+      "completedAt": "2026-09-19T08:31:22.816Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "DRILLS, GATES AND ADVERSARIAL REVIEW. Read each leg's OUTPUT, not its exit code.\n\n(A) MUTATION DRILLS on run-goal-publication.ts, in memory. Follow Serena memory qa-drill-via-temp-vitest-config-keyed-by-env-var: the config lives outside src, is named with the task id, throws on an absent anchor, and is deleted afterwards, with proof that it is gone. Quote one failing line per drill.\n- M1: drop the in-flight clause. The IN FLIGHT arm goes RED.\n- M2: drop the observation short-circuit. The STUCK BY OBSERVATION arm goes RED.\n- M3: change `<` to `<=`. The boundary arms go RED.\n\n(B) FOCUSED, covering every caller of the changed read and the publisher:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-read-planning.test.ts src/http/runs-read.test.ts src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/repository/publish-resolve-journey.test.ts src/repository/publish-resolve-service.test.ts src/release/release-auto-decide.test.ts src/release/release-auto-decide-store-fault.test.ts src/http/affordance-planning-offers.test.ts`\nAlso run any test file of goal-deployment-read or release-evidence-read that step 1 finds. Quote `Test Files N passed`.\n\n(C) `pnpm --filter @moe/daemon typecheck`.\n\n(D) ADVERSARIAL REVIEW, in the completion record:\n- Can a stuck publish be hidden forever? Consider the age bound, a throwing read, an unparseable timestamp, and a caller without a clock.\n- Can an in-flight publish still be offered? Only a publisher stalled OUTSIDE git (for example a hung store write) outlives the bound. Name that ceiling.\n- Is there clock skew between the reads' clocks and the publisher's? Both run on the same `moe start` host.\n- Follow-ups, as comments, not rows:\n  - the resolve SERVICE could refuse an in-flight resolve, as defence in depth, for a crafted dispatch;\n  - goal-deployment-read and release-evidence-read still say UNKNOWN during the flight seconds.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "(A) In-memory drills via %TEMP%/moe-task-f4812f163d564e07add406ca27800e22-worker-07e6de2a.config.mjs (enforce:pre, throw on missing anchor, QA_DRILL_APPLIED logged once). Deleted afterwards: Test-Path exists=False; no apps/daemon/qa-drill-*; git diff of run-goal-publication.ts is the intended production edit only.\nM1 drop in-flight clause: IN FLIGHT RED :1576 expected PENDING/code null, received UNKNOWN/PUBLISH_EFFECT_RECONCILIATION_REQUIRED. QA_DRILL_APPLIED:M1.\nM2 drop observation short-circuit: STUCK BY OBSERVATION RED :1607 expected UNKNOWN/PUBLISH_EFFECT_RECONCILIATION_REQUIRED, received PENDING/code null. QA_DRILL_APPLIED:M2.\nM3 >= to > (in-flight < to <=): STUCK BY AGE RED :1584 expected UNKNOWN, received PENDING; JUST INSIDE stayed GREEN (still inside). QA_DRILL_APPLIED:M3.\n\n(B) Focused (incl. goal-deployment-read.test.ts + release-read.test.ts): Test Files 11 passed (11); Tests 258 passed (258); Duration 15.90s. Exit 0. Count line present.\n(C) pnpm --filter @moe/daemon typecheck → tsc --project tsconfig.json exit 0.\n\n(D) Adversarial: stuck cannot hide forever — age bound 300_000ms, intent throw UNKNOWN, unparseable intendedAt UNKNOWN, no-now UNKNOWN, observation throw UNKNOWN (inner catch; production readPublicationObservation currently swallows → looks like no observation until bound). In-flight offered only via crafted dispatch (UI withholds); a publisher stalled OUTSIDE git (hung store write) outlives the bound, then UNKNOWN at 5 min ceiling. Clocks: card (runs-read :211/:299) and offer (affordance-read :355) both Date.parse the same host's injectable ISO clock as the publisher's intendedAt. Follow-ups as comment-80a5e9b5, not rows. Peer dirt untouched (publication-effect-ledger, publish-ledger, decision-fact-slots, CLAUDE.md, .moe/*).",
+      "startedAt": "2026-09-19T08:32:17.145Z",
+      "completedAt": "2026-09-19T08:34:59.303Z"
+    }
+  ],
+  "planRevision": 9,
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-21be6e9055984413a651ce6ee331e2c8"
+  ],
+  "priority": "MEDIUM",
+  "order": 1030.4,
+  "comments": [
+    {
+      "id": "comment-80a5e9b5cd1341cc8ddab6d84e401af9",
+      "author": "worker-07e6de2a",
+      "content": "Follow-ups, not rows (plan step 4D):\n1. Defence in depth: the resolve SERVICE still accepts a crafted repository.publish_resolve during the in-flight window. The card and affordance mint no longer offer it; a direct dispatch can still write a REFUSED receipt before the publisher's PUSHED write. Same first-writer rule as the original bug, just no longer reachable from the UI.\n2. goal-deployment-read.ts:44 and release-evidence-read.ts:225 still call readRunGoalPublication without now, so they still read UNKNOWN during the flight seconds. Deliberate: both treat PENDING and UNKNOWN the same (not PUSHED). Deployable sha stays null either way.",
+      "timestamp": "2026-09-19T08:34:23.167Z"
+    },
+    {
+      "id": "comment-76085255998240be921f7d2b63b78dee",
+      "author": "qa-6e60f228",
+      "content": "QA follow-ups (qa-6e60f228, reviewed 779f540b). These are not rows, per DELIVERY BIAS. None blocks: the delivered bytes behave correctly.\n\n1. The runs-read wiring is UNPINNED. runs-read.ts:271 passes Date.parse(now), and that is the Publish card's served read. I ran an in-memory mutant (out-of-tree vitest transform, enforce:pre, anchor-throw, QA_DRILL_APPLIED=1) that dropped that argument. affordance-read-planning.test.ts plus runs-read.test.ts stayed 76/76 GREEN. The card() helper calls readRunGoalPublication directly with its own now, so it cannot see this wiring. The afford mutant (drop Date.parse(now) at affordance-read.ts:407) and the pre-fix mutant (intent => UNKNOWN) both go RED on IN FLIGHT and JUST INSIDE, so the offer half is pinned. To pin the card half, readRuns needs a goal it can serve. The seed world here does not work: readRuns({goalRef: SEED_GOAL}) refuses RUNS_READ_GOAL_UNKNOWN because the goal is not catalog-bound. Use the bound-goal world from control-room live-runs.test.ts DAEMON_RUNS_SOURCE instead (bootstrap-test-fixtures driveThrough goal.create, then goal.create_with_source). My probe on that world (cwd apps/daemon, node --experimental-strip-types) wrote an intent at 08:00Z with no observation and read createRunsReadPort({clock}).readRuns({goalRef}) at several clocks:\n- +1s: PENDING/null\n- B-1ms: PENDING/null\n- B: UNKNOWN/PUBLISH_EFFECT_RECONCILIATION_REQUIRED\n- 'not-a-time': UNKNOWN\n- the wall clock (45 min later): UNKNOWN\n\n2. A NEGATIVE AGE reads PENDING. If the read clock is behind intendedAt, for example after a backward step of the host clock, then now - intendedAt < B holds. The same probe with the read clock 1 h before intendedAt gave PENDING/null. A stuck publish is then hidden for the skew plus 5 min. Treating every negative age as UNKNOWN is wrong, because of the ms race between the read's clock() and a concurrent intent commit. A clamp such as `age < -B => UNKNOWN` would bound it.\n\n3. The bound VALUE is not pinned. Every arm is relative to the exported B, so changing the multiplier from 4 to 40 stays green; only a non-finite B would red it. The bound counts 4 network port calls (observe, push, ls-remote --symref, observe). The roughly 9 local execFile calls on that path (init --bare x4, rev-parse, cat-file, config --get-urlmatch x3) share the 1x margin. Each of those also has a 60 s timeout, so this is realistic but not the execFile-level worst case.\n\n4. affordance-read.ts was 669 lines at the parent and is 670 here (+1 comment line). It was already over the 400 cap, so this is NOT charged to this row. Whoever owns splitting affordance-read.ts should take it.\n\n5. The worker's comment-80a5e9b5 follow-ups stand: the resolve service still accepts a crafted in-flight dispatch, and goal-deployment-read and release-evidence-read call without now.",
+      "timestamp": "2026-09-19T08:46:56.135Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-19T03:26:53.454Z",
+  "updatedAt": "2026-09-19T08:47:12.866Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-19T08:17:04.263Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 4,
+    "doneAt": "2026-09-19T08:47:12.866Z",
+    "wallClockMs": 1808603
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-19T08:21:22.214Z",
+  "planningNotes": {
+    "approachesConsidered": "1. UNKNOWN only once an observation exists, with no clock. Rejected: several post-intent UNKNOWN exits write NO observation, for example a remote that stays unreadable (node-publisher.ts:204), a refused transition, or an intent that approves a different candidate. Such a stuck publish would read PENDING forever and never get its resolve, which violates DoD 2.\n2. Use the transmission record as the push-done signal. Rejected: a publish that got stuck before task-78dea88b has none (the row's own warning), and the window extends past the push anyway, through observe and the receipt.\n3. Use liveness of the reservation holder. Rejected: the row's hint notes that a stuck publish's hold is also owned by the live wrapper.\n4. CHOSEN: an age bound DERIVED from the git timeouts on the longest in-flight path, plus an observation short-circuit. It needs no new record and no wire change. PENDING already exists in the card's vocabulary, and the fix is scoped to the two reads the card and the offer use.",
+    "codebaseInsights": "Measured 2026-09-19 by architect-c7fb990e at HEAD 03fae5b3.\n- run-goal-publication.ts is 27 lines: an intent without a receipt is UNKNOWN (:11-16), and otherwise the outcome is the receipt's or PENDING (:24).\n- affordance-read.ts:405-407 offers the resolve iff the card read says UNKNOWN. Its clock is at :355, from config.clock or the wall clock.\n- runs-read.ts:271 is the card's publish read, and its injectable clock is at :211/:299 (goalView receives `now`).\n- node-publisher.ts writes, in order: the intent (:186); in transmit, observe (:87), push (:91) and the transmission record (:95); then observe (:203); then notLanded's observe and contains (:137-139); then the receipt or the observation. That is at most 5 git calls, each with a 60 s timeout (git-publication-port.ts:20).\n- The observation record carries decisionId, expectedSha, observedAt, observedSha and reason (publication-effect-ledger.ts:120), and is written only on the not-landed path.\n- runs-read.test.ts has no publish arm. The production-path arms live in affordance-read-planning.test.ts :1523 onward.",
+    "risks": "1. DATE FLAKES: fixtures use fixed timestamps such as AT 2026-09-19T08:00Z. Any arm that lets the read use the wall clock flips at a real date. Every arm injects its clock, and callers without `now` keep today's semantics.\n2. A stuck publish that nothing observed reads PENDING for up to the bound (about 6 min) before its resolve appears. That is the accepted cost; an observed stuck publish is immediate.\n3. The bound is only as good as its derivation. If step 1 counts a different number of git calls, the constant follows the measurement and not the planning number.\n4. The service does not re-check in-flight, so a crafted dispatch can still resolve in the window. That is a follow-up for defence in depth; the UI can no longer offer it.",
+    "keyFiles": [
+      "apps/daemon/src/http/run-goal-publication.ts",
+      "apps/daemon/src/orchestrator/node-publisher.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/daemon/src/http/runs-read.ts",
+      "apps/daemon/src/repository/git-publication-port.ts",
+      "apps/daemon/src/http/affordance-read-planning.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-19T08:21:24.392Z",
+  "contextFetchedBy": [
+    "worker-07e6de2a",
+    "qa-6e60f228"
+  ],
+  "workStartedAt": "2026-09-19T08:21:55.562Z",
+  "declaredFiles": [
+    "apps/daemon/src/http/run-goal-publication.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/repository/git-publication-port.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts"
+  ],
+  "reviewStartedAt": "2026-09-19T08:36:29.872Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-read-planning.test.ts src/http/runs-read.test.ts src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/repository/publish-resolve-journey.test.ts src/repository/publish-resolve-service.test.ts src/release/release-auto-decide.test.ts src/release/release-auto-decide-store-fault.test.ts src/http/affordance-planning-offers.test.ts",
+    "exitCode": 0,
+    "outputTail": " ✓ src/release/release-auto-decide.test.ts (59 tests) 10844ms\n\n Test Files  9 passed (9)\n      Tests  240 passed (240)\n   Start at  11:35:54\n   Duration  17.40s (transform 31.69s, setup 0ms, import 43.69s, tests 20.57s, environment 1ms)",
+    "reportedAt": "2026-09-19T08:36:29.872Z",
+    "source": "agent-reported"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/repository/git-publication-port.ts",
+    "apps/daemon/src/http/run-goal-publication.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json"
+  ],
+  "completionSummary": "Fresh publish in-flight (intent, no receipt, no observation, now < PUBLISH_IN_FLIGHT_BOUND_MS) reads PENDING/code null; affordance mint offers no repository.publish_resolve. Bound=4*60s+60s=300_000 (observe, push, measureDefaultBranch, observe after intent). Stuck-by-age, observation, and legacy-no-transmission still UNKNOWN+Resolve. Clock only from runs-read and affordance-read. DoD pinned on production read+offer; journey test green. Plan suite: Test Files 9 passed, 240 passed. Also goal-deployment-read+release-read 11/258. typecheck exit 0. Drills M1/M2/M3 red :1576/:1607/:1584. Follow-ups comment-80a5e9b5.",
+  "commits": [
+    {
+      "sha": "779f540b8fab4d2005fa57c61fbf7e943179aa44",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-19T08:21:31Z",
+      "paths": [
+        ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/http/run-goal-publication.ts",
+        "apps/daemon/src/http/runs-read.ts",
+        "apps/daemon/src/repository/git-publication-port.ts"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-19T08:36:39.869Z",
+      "treeId": "06103c68e8158198bc23429ab49cc1ec3e1e91db",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-07e6de2a@2026-09-19T08:21:31Z",
+    "at": "2026-09-19T08:36:39.869Z"
+  },
+  "completedAt": "2026-09-19T08:47:12.866Z",
+  "reviewCompletedAt": "2026-09-19T08:47:12.866Z",
+  "reviewSummary": "APPROVED 779f540b (moe/work-2026-09-18, pushed). Owned paths are clean, with no diff between the completion sha and HEAD. Re-runs:\n- recorded leg + goal-deployment-read + release-read: Test Files 11 passed, 258 passed, exit 0\n- daemon typecheck: exit 0\n- control-room live-runs.test.ts: 1 file, 71 passed\n- 12 adjacent publish/affordance suites: 208 passed\nIn-memory drills (out-of-tree config, anchor-throw, each applied once; production SHA256 unchanged afterwards, temp dir deleted):\n- the pre-fix mutant (intent => UNKNOWN) turns IN FLIGHT and JUST INSIDE RED, matching the recorded step-2 RED\n- dropping Date.parse(now) at affordance-read.ts:407 turns both RED\nDoD1 holds: the offer mint is pinned through the shipped port. A probe of production runs-read on a bound goal read PENDING/null in flight and at B-1ms, and UNKNOWN/PUBLISH_EFFECT_RECONCILIATION_REQUIRED at B, with a garbage clock and on the wall clock.\nDoD2 holds: STUCK BY AGE, LEGACY STUCK (no transmission) and STUCK BY OBSERVATION are green, and publish-resolve-journey is green. The intent is journaled once (replay keeps intendedAt), so a stuck publish cannot hide forever.\nCallers without now keep UNKNOWN, and there are no wall-clock port reads in the publish tests.\nThe bound of 4 network calls x 60 s + 60 s matches the corrected measurement (:137-139 is the pre-flight).\nFollow-ups in comment-76085255, not blocking:\n- runs-read.ts:271 wiring is unpinned (drop-arg mutant stays 76/76 green)\n- a negative age reads PENDING\n- the bound value is unpinned\n- affordance-read.ts was already over the cap before this row (669 to 670 lines, +1 comment), so it is not charged here"
+}

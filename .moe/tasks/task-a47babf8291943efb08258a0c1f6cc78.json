@@ -15,57 +15,98 @@
     {
       "stepId": "step-1",
       "description": "CONFIRM THE PREREQUISITES AND THE OWNERSHIP FACT, then stop. (a) Confirm task-2c3f878b, task-78dea88b and task-52682237 are DONE; record row 2's refusal constructor and codes from apps/daemon/src/repository/publish-resolve-contracts.ts, task-52682237's latest-observation reader, and row 3's stub registration in apps/daemon/src/daemon-command-async-entries.ts. (b) RE-VERIFY THE FINDING THAT RESHAPED THIS ROW: `sed -n` the `release(...)` method of apps/daemon/src/repository/repository-execution-port.ts and confirm it still refuses REPOSITORY_EXECUTION_CONTROLLER_MISMATCH when the caller's controllerId differs from the reservation's. If it no longer does, stop and report — the design below depends on it. (c) Confirm `recordPublishReceipt` is the receipt writer node-publisher uses, and that run-goal-publication.ts still skips a decision with a receipt before consulting its intent.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURED at HEAD 4e48dc8f (moe/work-2026-09-18). No files edited.\n\n(a) PREREQUISITES. All four are DONE (.moe/tasks/*.json status) and landed on the branch:\n- task-2c3f878b: wip f1eb9b8f [status=DONE].\n- task-78dea88b: feat 46123b30.\n- task-52682237: feat dc15621b.\n- task-adeabf1f (row 2): feat 7986045b.\nRow 2's constructor is `publishResolveRefusal(code, detail = null)`, in publish-resolve-contracts.ts:149, with no layer argument. Its three codes are PUBLISH_RESOLVE_DECISION_NOT_FOUND, PUBLISH_RESOLVE_NOT_UNKNOWN and PUBLISH_RESOLVE_REMOTE_HOLDS_SHA, all at DAEMON_PREREQUISITE.\nThe observation reader is `readPublicationObservation(store, projectId, goalId, decisionId)` at publication-effect-ledger.ts:167. It returns the latest observation, or null.\nThe stub is registered at async-entries.ts:366 as `[PUBLISH_RESOLVE_COMMAND_KIND]: createPublishResolveCommandEntry({ operatorPrincipalId })`. The stub itself is at repository/publish-resolve-command.ts:36.\n\n(b) OWNERSHIP FACT HOLDS. repository-execution-port.ts:100 reads `if (controllerId !== prior.state.controllerId) return repositoryExecutionFailure(\"REPOSITORY_EXECUTION_CONTROLLER_MISMATCH\")`. The wrapper's publisher is composed at repository-delivery-runtime.ts:195 with a random controllerId per process. So the daemon cannot release the wrapper's hold, and the design stands.\n\n(c) HOLDS. `recordPublishReceipt` (publish-ledger.ts:199) is the writer node-publisher uses, at :119, :150, :181 and :212. run-goal-publication.ts:60 runs `if (state.receipts.has(pending.decisionId)) continue;` before it reads the intent.\n\nCORRECTIONS AND CONSTRAINTS FOUND:\n- M1, planningNotes (3) is false. The claim was \"every dispatched command is a recorded decision\". But daemon-command-decision-port.ts:75 `decideAsync` only awaits the handler's commit and writes nothing. The assertion is still attributable: only the configured operator passes the entry fence, and only this service mints the PUBLISH_RESOLVED_* receipt codes.\n- M2, step 5's swap point. The stub lives in repository/publish-resolve-command.ts, which step 5 does not name (comment-fc392957). I will make one production path of scope growth there, and give the reason in step 5.\n- M3, step 4's \"reports UNKNOWN for that pass\" is stale. A publish that meets another owner's hold now reports WAITING: node-publisher-reservation.ts:33-34 answers `refused(true, ...)`, and node-publisher.ts:162 reports it as WAITING. The window arm will assert WAITING.\n- M4, node-publisher.ts is at 249 lines. Step 4 must not add a net line.\n- M5, pre-existing. recordPublishReceipt reads expectedVersion outside the store lock (publish-ledger.ts:237). On a cross-process race, decision-ledger-transaction.ts decideUnderLock stores a REJECTED decision under the deterministic receipt key, and every later read of that key answers PUBLISH_RECEIPT_INVALID. This is a lead, to be addressed in step 6.\n\nPeer dirt (not mine, untouched): control-room live-release*, goal-release*, release-decide-*, release-receipt-ledger.test.ts, release-evidence-read.ts, release-read.test.ts, daemon CLAUDE.md, .moe/*.",
+      "startedAt": "2026-09-19T01:25:56.128Z",
+      "completedAt": "2026-09-19T01:34:14.126Z"
     },
     {
       "stepId": "step-2",
       "description": "RED then GREEN — the command, which records a fact and never touches the reservation. In a NEW apps/daemon/src/repository/publish-resolve-service.test.ts first add arms asserting each refusal BY exact code WITH its layer from row 2's map, each also asserting that NO receipt was written: an unknown decision id; a decision that already has a receipt (PUSHED or REFUSED); a decision with no intent (nothing was ever attempted); and, for NOT_TRANSMITTED, a latest observation showing the remote DOES hold the approved sha — the double-transmission guard. Then the success arms: NOT_TRANSMITTED and ABANDON each write exactly ONE REFUSED receipt for that decisionId whose code names the resolution and whose detail carries the latest observation. Add an arm that the command makes ZERO calls to the reservation port, proving it never races the owning controller. Confirm RED. Then create apps/daemon/src/repository/publish-resolve-service.ts implementing exactly that with row 2's constructor (no layer argument at any call site), and its one-line bridge apps/daemon/src/repository/publish-resolve-service.js as `export * from \"./publish-resolve-service.ts\";`. Confirm GREEN.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/repository/publish-resolve-service.ts",
         "apps/daemon/src/repository/publish-resolve-service.js",
         "apps/daemon/src/repository/publish-resolve-service.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/publish-resolve-service.ts",
+        "apps/daemon/src/repository/publish-resolve-service.js",
+        "apps/daemon/src/repository/publish-resolve-service.test.ts"
+      ],
+      "note": "RED, then GREEN.\n\nRED: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/publish-resolve-service.test.ts` failed with \"Error: Cannot find module './publish-resolve-service.js'\" (Test Files 1 failed, exit 1). The module was missing; it was not a typo.\n\nGREEN: the same command gives \"Test Files 1 passed (1)\", \"Tests 8 passed (8)\", exit 0. `pnpm --filter @moe/daemon typecheck` exits 0. A plain-node `import()` of the .js bridge loads PUBLISH_RESOLVED_CODES, isPublishResolvedCode and resolvePublish.\n\nNEW publish-resolve-service.ts (~75 lines). It imports only store, the ledgers and row 2's contracts. It has NO repository-execution import and takes no port.\n`resolvePublish(store, {projectId, decisionId, resolution, decidedAt})`:\n- It finds the request by walking readPublishLedger.\n- It refuses with row 2's constructor only; no call site passes a layer:\n  - PUBLISH_RESOLVE_DECISION_NOT_FOUND when the decision is unknown;\n  - PUBLISH_RESOLVE_NOT_UNKNOWN when the decision already has a receipt, or has no intent. An intent that cannot be read counts as UNKNOWN, as it does on the card;\n  - PUBLISH_RESOLVE_REMOTE_HOLDS_SHA for NOT_TRANSMITTED when the LATEST observation's observedSha equals the approved sha.\n- Otherwise it writes ONE REFUSED receipt through recordPublishReceipt. The code is PUBLISH_RESOLVED_{NOT_TRANSMITTED|ABANDON}. The detail is \"the operator resolved this publish as <R>; last observation <at>: remote tip <sha|absent>, expected <sha>, push <reason>\", or \"...; no observation of the remote was recorded\".\n- If another writer's receipt lands first, it answers NOT_UNKNOWN.\n- If the write itself fails, it throws DurableStoreError (EXPECTED_VERSION_CONFLICT, or STORE_CORRUPT), which the decision port maps to 503 at DURABLE_STORE.\n- It exports PUBLISH_RESOLVED_CODES and isPublishResolvedCode for step 4. The PublishResolution type is derived from those codes.\n\nTESTS, 8 arms. Every refusal is asserted with toStrictEqual on {ok, code, layer \"DAEMON_PREREQUISITE\", detail}, plus \"no receipt written\" and \"hold untouched\":\n- unknown id;\n- PUSHED and REFUSED receipts (sweep count 2; the receipt is left as it was);\n- no intent;\n- NOT_TRANSMITTED against a latest observation at the approved sha.\nThe success arms:\n- NOT_TRANSMITTED: exactly one receipt and one RepositoryPublishRefused event, with the exact detail taken from the LATEST of two observations. The card goes from UNKNOWN to REFUSED with its code, and `observation: null`. That pins task-52682237's unpinned `receipt === undefined` guard, as its follow-up asked.\n- ABANDON with an observation at the approved sha, and with none (sweep count 2).\n- The code roster, and isPublishResolvedCode false on 5 foreign codes.\n- A Proxy store that fails the commit throws DurableStoreError EXPECTED_VERSION_CONFLICT with the exact message, and records no receipt.\n\nZERO RESERVATION CALLS: the hold is a REAL PUBLISHING reservation on a temp git repo, owned by \"wrapper-controller\". Every arm asserts `port.inspect(root)` equals the fixture's reservation exactly (phase, revision, controller). This is a persisted-state proof: any release, claim or transition by any path would change it.",
+      "startedAt": "2026-09-19T01:34:16.821Z",
+      "completedAt": "2026-09-19T01:39:08.286Z"
     },
     {
       "stepId": "step-3",
       "description": "The new release reason, legal only from PUBLISHING. In apps/daemon/src/repository/repository-execution-port.test.ts first add arms: `release(..., \"PUBLISH_RESOLVED\", ...)` by the OWNING controller succeeds from PUBLISHING; from every other phase it is refused REPOSITORY_EXECUTION_TRANSITION_INVALID; and by a NON-owning controller it is refused REPOSITORY_EXECUTION_CONTROLLER_MISMATCH — that last arm pins the very ownership rule this row is built around. Sweep phases from the port's own phase list and assert the sweep visited more than one. Confirm RED. Then add `\"PUBLISH_RESOLVED\"` to `RepositoryExecutionReleaseReason` in apps/daemon/src/repository/repository-execution-contracts.ts, and add it to the branch in repository-execution-port.ts that already admits `\"PUBLISHED\" || \"PUBLISH_NOT_TRANSMITTED\"` from PUBLISHING. Keep the chain's final fall-through to false so an unlisted reason still fails closed. Confirm GREEN.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/repository-execution-contracts.ts",
         "apps/daemon/src/repository/repository-execution-port.ts",
         "apps/daemon/src/repository/repository-execution-port.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-execution-contracts.ts",
+        "apps/daemon/src/repository/repository-execution-port.ts",
+        "apps/daemon/src/repository/repository-execution-port.test.ts"
+      ],
+      "note": "RED, then GREEN.\n\nTEST. The existing PUBLISHING sweep arm is now `it.each([\"PUBLISH_NOT_TRANSMITTED\", \"PUBLISH_RESOLVED\"])`. No arm was deleted. The NOT_TRANSMITTED case keeps every assertion it had, and both cases gain:\n- the PUBLISHING branch first releases with a NON-owning controller (\"daemon-controller\"). It must answer exactly {ok:false, code/detail REPOSITORY_EXECUTION_CONTROLLER_MISMATCH}, and the reservation must still be PUBLISHING at the same revision;\n- then the OWNING controller's release succeeds, and inspect shows null;\n- every other phase refuses with exactly REPOSITORY_EXECUTION_TRANSITION_INVALID and leaves the reservation unchanged;\n- the \"NOT_A_REASON\" fail-closed probe stays in, on every phase;\n- the sweep comes from REPOSITORY_EXECUTION_PHASES: `visited` equals its length, and is more than 1.\nThe helper parameter was renamed reason -> why, so it does not shadow the case parameter.\n\nRED: the PUBLISH_RESOLVED case failed with \"AssertionError: expected { ok: false, …(2) } to deeply equal { ok: true, released: true }\" when the owner released from PUBLISHING. The CONTROLLER_MISMATCH assertion before it already passed, because that check precedes the reason chain. Result: 1 failed, 17 passed.\n\nGREEN:\n- repository-execution-contracts.ts: \"PUBLISH_RESOLVED\" is added to RepositoryExecutionReleaseReason, with a doc line: operator-asserted, as opposed to daemon-proven.\n- repository-execution-port.ts:102: PUBLISH_RESOLVED joins the PUBLISHING branch (`PUBLISHED || PUBLISH_NOT_TRANSMITTED || PUBLISH_RESOLVED`). The chain still ends in its fall-through to false.\n- Run: `vitest run ... src/repository/repository-execution-port.test.ts`, \"Test Files 1 passed (1)\", \"Tests 18 passed (18)\". Both cases pass (verbose).\n\nSHAPE CENSUS: `git grep RepositoryExecutionReleaseReason|PUBLISH_NOT_TRANSMITTED` found no exhaustive Record or switch over the reason union. There are only reason arrays in 4 tests, plus the port, so no other consumer moves.",
+      "startedAt": "2026-09-19T01:39:10.814Z",
+      "completedAt": "2026-09-19T01:40:14.863Z"
     },
     {
       "stepId": "step-4",
       "description": "The owning controller acts on the fact. In apps/daemon/src/orchestrator/node-publisher.ts, when the publisher holds a PUBLISHING reservation for a decision that now carries an operator-resolve receipt (one of the resolve codes step 2 writes), release that reservation with PUBLISH_RESOLVED and report it. It must NOT push, and must NOT write a second receipt. A decision with a PUSHED receipt, or with a REFUSED receipt that is not an operator resolve, is left exactly as today. In apps/daemon/src/orchestrator/node-publisher.test.ts add arms by value: after an operator-resolve receipt, the next pass releases the owned hold with PUBLISH_RESOLVED and makes ZERO push calls; a node delivery refused REPOSITORY_EXECUTION_BUSY before that pass is ADMITTED after it; THE WINDOW — a fresh publish approved before the release pass reports UNKNOWN for that pass and proceeds on the next, pushing exactly once. node-publisher-approved.test.ts must pass UNCHANGED. Keep node-publisher.ts under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/node-publisher.ts",
         "apps/daemon/src/orchestrator/node-publisher.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts"
+      ],
+      "note": "RED, then GREEN. node-publisher.ts stays at 249 lines (<250), and its longest line is 174, the same as the existing maximum.\n\nPRODUCTION, node-publisher.ts:\n- `settled` is now the receipt's REFUSAL, where it used to be a detail string. It is non-null ONLY when the receipt code is PUBLISH_NOT_LANDED or `isPublishResolvedCode(code)`, which comes from the step-2 service.\n- `giveBack(goalId, ws, handle, settled)` picks the release reason: PUBLISH_NOT_LANDED gives PUBLISH_NOT_TRANSMITTED, and the operator codes give PUBLISH_RESOLVED. It reports `REFUSED \"<code>: <detail>\"`. A refused release gives `UNKNOWN \"<code> receipted, but the reservation release was refused: <code>\"`.\n- The settled path still returns BEFORE `transmit` and before any observe. So a resolved decision is never pushed, never read on the remote, and never receipted again.\n- PUSHED receipts, and REFUSED receipts that are neither code, take exactly today's path.\n- The line budget is kept by merging two type-only imports into their value imports.\n\nTESTS, a new describe in node-publisher.test.ts. Two helpers are extended; existing call sites are unchanged:\n- decide(..., goalId = GOAL);\n- evidenceWorld(..., earlier), which writes before D1.\nThe arms:\n1. it.each NOT_TRANSMITTED and ABANDON (2 cases): a publish stuck UNKNOWN (1 push) is resolved through the real resolvePublish, and the command leaves the hold PUBLISHING. A node delivery then gets acquire -> REPOSITORY_EXECUTION_BUSY. The next pass reports exactly `[{REFUSED, \"<code>: <receipt detail>\"}]` with releases [\"PUBLISH_RESOLVED\"], and then:\n   - pushes stay at 1 and observes are unchanged;\n   - the receipt equals the resolve's own receipt, with 1 RepositoryPublishRefused event;\n   - the card shows REFUSED/<code> with a null observation;\n   - the same node delivery is now ADMITTED (acquire ok);\n   - the next pass is [].\n2. Never mistaken: four foreign REFUSED codes (PUBLISH_REMOTE_DIVERGED, PUBLISH_APPROVAL_REQUIRED, PUBLISH_RESOLVE_NOT_UNKNOWN, and the prefix lookalike PUBLISH_RESOLVED; the sweep count is asserted). Each leaves the pass at [], the hold PUBLISHING, releases [] and 1 push.\n3. THE WINDOW, same goal: D2 is approved before the release pass. The single pass reports [REFUSED D1, PUSHED D2], with 2 pushes and releases [PUBLISH_RESOLVED, PUBLISHED]. The next pass is [] and pushes stay at 2.\n4. THE WINDOW, another goal first-seen earlier (it has an old PUSHED receipt). Pass 1 reports [WAITING \"repository held by publish:<D1> (PUBLISHING)\", REFUSED D1] with 1 push. Pass 2 reports [PUSHED OTHER] with 2 pushes. Pass 3 is [] and pushes stay at 2.\n\nDEVIATION (M3): the step text says the fresh publish \"reports UNKNOWN for that pass\". The code answers WAITING, which is the landed contract for a hold owned by another owner (node-publisher-reservation.ts:33-34 answers refused(true), and node-publisher.ts:161 reports it as WAITING). The arm asserts WAITING by value, and the intent is preserved: no push while the hold stands, and exactly one push after.\n\nRED: arms 1, 3 and 4 failed with \"expected [] to deeply equal [ Array(1) ]\" and \"expected [ { …(3) } ] to deeply equal [ { …(3) }, { …(3) } ]\", because the pass ignored the resolve receipt. Arm 2 was green, as a regression guard should be.\n\nGREEN: `vitest run ... src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts` gives \"Test Files 2 passed (2)\", \"Tests 39 passed (39)\". node-publisher-approved.test.ts is UNCHANGED (`git diff --stat` is empty). `pnpm --filter @moe/daemon typecheck` exits 0.",
+      "startedAt": "2026-09-19T01:40:17.164Z",
+      "completedAt": "2026-09-19T01:44:00.795Z"
     },
     {
       "stepId": "step-5",
       "description": "Replace row 3's stub with the service, and re-aim the arm that pinned it. In apps/daemon/src/daemon-command-async-entries.ts swap the refusing stub task-2c3f878b registered for a handler that calls step 2's service; the operator fence and the derived MCP exclusion are unchanged and must stay exactly as row 3 left them. In apps/daemon/src/daemon-command-registry.test.ts, the arm row 3 wrote — an OPERATOR dispatch is refused by the stub — is now wrong BY DESIGN: RE-AIM it, never delete it, so that an operator dispatch against an UNKNOWN publish records the REFUSED receipt, and one against a decision that is not UNKNOWN is refused with row 2's exact code and layer. Keep row 3's NON-operator arm exactly as it is: a non-operator is still refused by the fence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-async-entries.ts",
         "apps/daemon/src/daemon-command-registry.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/publish-resolve-command.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "RED, then GREEN.\n\nSCOPE GROWTH, +1 production path: apps/daemon/src/repository/publish-resolve-command.ts.\n- Why: the stub this step replaces does not live in daemon-command-async-entries.ts. Row 3 put it in createPublishResolveCommandEntry, in that module, because async-entries was at the 400-line line. Row 3 flagged this in comment-fc392957.\n- The alternatives were worse: registering a second entry in async-entries would leave the factory dead, and deleting the factory is also an unnamed path.\n- No unnamed consumer: the only caller is async-entries (git grep), and no test constructs the factory.\n- publish-resolve-command.ts is now 60 lines. async-entries.ts stays at 396: one line changed, adding `projectId, store` to the factory call.\n\nPRODUCTION, publish-resolve-command.ts:\n- The fence is byte-identical: `OPERATOR_PRINCIPAL_KINDS.has(kind) && principal !== operator`, which gives 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION.\n- Next, the payload check runs before any read. The decisionId must pass `ref` and the resolution must be an own key of PUBLISH_RESOLVED_CODES; otherwise it refuses 422 INPUT_INVALID@DAEMON_COMMAND_SEAM, with the layer taken from the imported constant.\n- Then resolvePublish(store, {projectId, decisionId, resolution, decidedAt: now}). A refusal becomes `throw domainRefusalOf(refusal)`, carrying row 2's code and layer. On success it returns {commandId, disposition DECIDED (REPLAYED on a raced identical write), effectId: receiptId, resultCode: PUBLISH_RESOLVED_<R>}.\n- The derived MCP exclusion is untouched: vocabulary and allowlist are unchanged.\n\nTESTS, daemon-command-registry.test.ts:\n- DoD 3 is RE-AIMED, not deleted. A seeded UNKNOWN publish (a request plus its intent, in the served store), dispatched by the operator with ABANDON, now answers ACCEPTED/200 with decision {commandId, DECIDED, resultCode PUBLISH_RESOLVED_ABANDON}. The reopened store shows exactly 1 receipt: REFUSED, with the exact detail. A second dispatch with NOT_TRANSMITTED is refused 422 PUBLISH_RESOLVE_NOT_UNKNOWN@DAEMON_PREREQUISITE (\"the publish already has a REFUSED receipt\"), and the decision and event snapshot is unchanged.\n- NEW arm: 3 malformed payloads ({}, an empty decisionId, resolution \"PUSHED\"; the count is asserted). Each is refused 422 INPUT_INVALID@DAEMON_COMMAND_SEAM with the exact detail, and writes nothing.\n- The ROWS entry keeps DECISION_NOT_FOUND@PREREQ_LAYER. It now carries a `payload` naming an unknown decision, so the swept \"reaches its own family handler\" arm hits the service's real refusal; `{}` alone would stop at the seam.\n- Row 3's NON-operator DoD 1 arm, DoD 2, and the gate sweep (which sends `{}` from a non-operator and gets the 403 fence, because the fence runs first) are all UNCHANGED.\n- The describe doc was updated: there are now three refusing layers.\n\nRED: both new or re-aimed arms failed with \"expected { httpStatus: 422, ... } to match object { outcome: 'ACCEPTED' ... }\" and \"...{ outcome: 'PORT_REFUSED' ... }\": the stub answered DECISION_NOT_FOUND to everything.\n\nGREEN:\n- The full file: \"Test Files 1 passed (1)\", \"Tests 433 passed (433)\".\n- Neighbours, 7 files (gates-human-only-fence, mcp-tool-allowlist, async-entries, gates-roster-coherence, v2 registry, vocabulary, store-dependencies): \"Test Files 7 passed (7)\", \"Tests 315 passed (315)\".\n- `pnpm --filter @moe/daemon typecheck` exits 0.",
+      "startedAt": "2026-09-19T01:44:03.274Z",
+      "completedAt": "2026-09-19T01:47:03.519Z"
     },
     {
       "stepId": "step-6",
       "description": "GATES AND ADVERSARIAL REVIEW. (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/daemon-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/gates-human-only-fence.test.ts`, count quoted — read the OUTPUT, not the exit code. (B) The full `pnpm --filter @moe/daemon test` and `pnpm typecheck`, both quoted; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (C) ADVERSARIAL REVIEW, in the completion record: Can the command, or anything it calls, ever reach the reservation port? Is there ANY sequence in which a publish transmits twice — walk the window, a wrapper restart between the command and the release pass, and NOT_TRANSMITTED against a push that did land? What if the wrapper is DOWN when the operator resolves — does the hold release once it restarts, and is anything stranded meanwhile? Can a REFUSED receipt that is NOT an operator resolve ever be mistaken for one and release a hold? (D) State in the completion record the correction to this row's description: the command cannot release a hold owned by the live wrapper's controller (REPOSITORY_EXECUTION_CONTROLLER_MISMATCH), so it records the receipt as a fact and the owning publisher releases — the pattern repository.recover already uses.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/node-publisher.test.ts",
+        "apps/daemon/src/repository/publish-resolve-service.test.ts"
+      ],
+      "note": "GATES, all run after the final edit, at HEAD 31cd7f01 plus this row's diff.\n\n(A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/daemon-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/gates-human-only-fence.test.ts`: \"Test Files 62 passed (62)\", \"Tests 1143 passed | 15 skipped (1158)\", exit 0.\n\n(B) `pnpm --filter @moe/daemon test`, run under the full-suite-gate lease (since released), 04:53:05 to 04:58:29: \"Test Files 766 passed (766)\", \"Tests 12650 passed | 22 skipped (12672)\", exit 0. The new service test file is the +1 over row 3's 765.\n\nAlso:\n- `pnpm typecheck`: \"Scope: 19 of 20 workspace projects\", 19x \"typecheck: Done\", exit 0.\n- `pnpm test:security`: \"Test Files 12 passed (12)\", \"Tests 1009 passed (1009)\", so the layer census did not move.\n- Root lane only (apps/** is not covered there): package-loadability passes. pack-artifact-sweep.test.ts:76 has 1 FOREIGN red. It received the tracked `apps/daemon/src/node-spec-loader.{js,ts}`, which are not this row's files and none of my paths. It is the same red task-2c3f878b recorded, already fixed on origin/main.\n\nSTEP-6 TEST ADDITIONS, all from the review:\n- node-publisher.test.ts: a RESTART arm. The operator resolves while the wrapper is down. A restarted publisher (controller-2, processAlive false, a git port that THROWS on any call) claims the dead controller once, releases PUBLISH_RESOLVED, and reports REFUSED with the exact detail. Pushes stay at 1, and the next pass is [].\n- publish-resolve-service.test.ts:\n  - a RACE arm: the publisher's PUSHED receipt is hidden from the ledger walk by a Proxy. The service then answers NOT_UNKNOWN (\"already has a PUSHED receipt\"), and the PUSHED receipt is left as it was;\n  - the receipt sweep now also covers a legacy REFUSED receipt with no intent (count 3). This pins mutant S1, which had survived.\n\nDRILLS: 13 mutants plus the NONE control, all in memory. Every mutant went RED after the S1 pin, and each logged at least 1 hit. The restore is proven by the live-file SHA256 check. Full list: comment-5d12ed2f.\n\nADVERSARIAL REVIEW and the description correction: comment-87c8360f.\n\nBUG FILED: task-978669b6. A version race poisons a decision's receipt key: every later write answers PUBLISH_RECEIPT_INVALID. The probe source is in its comment-6e17af43. It is pre-existing and not fixed here.",
+      "startedAt": "2026-09-19T01:47:06.254Z",
+      "completedAt": "2026-09-19T02:00:43.494Z"
     }
   ],
-  "planRevision": 1,
-  "status": "WORKING",
+  "planRevision": 13,
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -75,10 +116,29 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1021.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-fc392957774c4e5fbe13af94e605eb73",
+      "author": "worker-952c612b",
+      "content": "HANDOFF from task-2c3f878b (row 3, worker-952c612b). This is where the stub your step 5 replaces actually lives. Re-measure before you plan.\n\n1. THE ENTRY IS NOT INLINE IN async-entries.ts. daemon-command-async-entries.ts was at 389 lines, and an inline stub would have crossed the 400 split line. So the entry is a factory, `createPublishResolveCommandEntry({ operatorPrincipalId })` in NEW apps/daemon/src/repository/publish-resolve-command.ts (plus its .js bridge). It mirrors the sibling `createRepositoryRecoveryCommandEntry`. async-entries.ts only registers it: `[PUBLISH_RESOLVE_COMMAND_KIND]: createPublishResolveCommandEntry({...})`. The natural swap point is that module, which your step 5 does not name. Get it amended in before you touch it (unnamed-path rail). The alternative is to register your own entry in async-entries.ts and delete the factory, but that deletion is also an unnamed path.\n\n2. THE FENCE (keep it exactly): `if (OPERATOR_PRINCIPAL_KINDS.has(PUBLISH_RESOLVE_COMMAND_KIND) && principal.principalId !== options.operatorPrincipalId) throw new DomainRefusal(\"OPERATOR_PRINCIPAL_REQUIRED\", \"DAEMON_AUTHORIZATION\", ..., 403)`. It is keyed on membership on purpose: that is the registry's own check and release.decide's stub idiom, and the DoD 1 drill relies on it.\n\n3. THE STUB: `domainRefusalOf(publishResolveRefusal(\"PUBLISH_RESOLVE_DECISION_NOT_FOUND\", \"no publish-resolve service is composed for this daemon: nothing was recorded\"))`. Arms that pin it and that you must RE-AIM, never delete:\n- daemon-command-registry.test.ts, describe \"repository.publish_resolve operator-only async wiring\", arm \"DoD 3: refuses the operator with the stub's stable code and no durable writes\". It pins the code, the layer DAEMON_PREREQUISITE and the exact detail.\n- daemon-command-registry.test.ts ROWS entry for repository.publish_resolve (code PUBLISH_RESOLVE_DECISION_NOT_FOUND @ PREREQ_LAYER). The swept arm \"$kind reaches its own family handler and refuses with its code\" sends an OPERATOR `{}` payload over MCP_STDIO origin. Update the row to whatever your service answers for `{}`.\nEverything else holds unchanged if you keep the fence: DoD 1 and DoD 2 in that describe, the gate-membership sweep, and gates-human-only-fence.test.ts \"repository.publish_resolve is a human gate named outside the band\".\n\n4. GAPS THE STUB DID NOT NEED, BUT YOUR REAL HANDLER DOES (repository-recovery-command.ts has all three):\n(a) a project check, `principal.projectId !== projectId`;\n(b) a transport-origin refusal for MCP_HTTP, MCP_STDIO, AGENT_WRAPPER and NODE_VERIFIER. Today the kind is off every MCP roster: the seats' roster by derivation, and the owner's --as-operator roster because it is in MCP_NEVER_DELEGATED_KINDS (governor ruling msg-c532f7aa). Row 2's closed vocabulary has no transport or project code, so you would need to extend it;\n(c) the paired-browser question. See the comment on task-21be6e90.",
+      "timestamp": "2026-09-18T22:09:49.344Z"
+    },
+    {
+      "id": "comment-5d12ed2ff647430f9b06a74fa09aec47",
+      "author": "worker-952c612b",
+      "content": "DRILLS, task-a47babf8 (worker-952c612b, 2026-09-19). All run in memory; nothing on disk was mutated.\n\nHOW: the config is %TEMP%/moe-drill-task-a47babf8-worker-952c612b.config.mjs, a plain object with no imports.\n- It uses one vite plugin, `enforce: \"pre\"`, keyed by env QA_DRILL. `id` is normalised from backslashes and matched on the path suffix.\n- `code.includes(anchor)` THROWS when the anchor is absent. Every hit is appended to a hits log, which proves the mutant was generated.\n- Run as: `QA_DRILL=<id> QA_DRILL_HITS=<log> pnpm exec vitest run --root . --config <cfg> <files>`, from apps/daemon.\n\nMutants (anchor -> replacement: result, hits):\n- NONE control: service + node-publisher, 32 passed. Service alone after the pin: 9 passed.\n- S1 `if (receipt !== undefined) return ...` -> `if (false)`. It SURVIVED at first: with an intent present, the post-write race guard gives the identical refusal. PINNED by adding a legacy receipt with no intent (PUBLISH_APPROVAL_REQUIRED) to the receipt arm. Now RED: \"expected {…(4)} to strictly equal {ok:false,…}\". Hits: 2, before and after the pin.\n- S2 `if (!intended)` -> `if (false)`: RED, the no-intent arm. 1 hit.\n- S3 the NOT_TRANSMITTED guard -> `if (false)`: RED, the REMOTE_HOLDS_SHA arm. 1 hit.\n- S4 the guard applied to ABANDON too: RED, the \"ABANDON is allowed even against an observation\" arm. 1 hit.\n- S5 the race check `written.receipt.refusal?.code !== code` -> `false`: RED, the \"publisher's receipt lands between its read and its write\" arm. 1 hit.\n- S6 `isPublishResolvedCode` made `code.startsWith(\"PUBLISH_RESOLVE\")`: RED in 2 arms: node-publisher \"never mistakes another REFUSED receipt\" and the service code-roster arm. 1 hit.\n- S7 the store-code mapping forced to STORE_CORRUPT: RED, the store-failure arm. 1 hit.\n- C1 the fence made `&& false`: RED in 3 arms: registry DoD 1, the registry gate sweep for publish_resolve, and gates-human-only-fence's agent arm. 1 hit.\n- C2 the payload check made `if (false)`: RED, the malformed-payload arm. 1 hit.\n- N1 `|| isPublishResolvedCode(...)` dropped from `settled`: RED in 5 arms: both resolve cases, restart, and both windows. 1 hit.\n- N2 the release reason forced to PUBLISH_NOT_TRANSMITTED: RED in the same 5. 1 hit.\n- P1 `|| reason === \"PUBLISH_RESOLVED\"` dropped from the port: RED, the port's PUBLISH_RESOLVED case. 1 hit.\n- P2 the port's controller check deleted: RED in 4 arms, including both PUBLISHING cases at the `foreign` assertion. 1 hit.\n\nRESTORE PROOF, taken in a separate call against the LIVE files: `sha256sum -c %TEMP%/moe-drill-task-a47babf8-worker-952c612b.pre.sha` printed OK for all 4:\n- publish-resolve-service.ts c8b8dacc…57b5 (taken before the S1 pin, which edited only the TEST file);\n- publish-resolve-command.ts e018bbb2…2d08;\n- node-publisher.ts 6574e2c2…5f55;\n- repository-execution-port.ts ba7097c8…9a13.\n`ls apps/daemon/qa-drill-*` reports \"No such file\". No drill artifact is in the tree.\n\nLEAD PROBE, pre-existing (not this row's code). A version race on recordPublishReceipt poisons that decision's receipt key: every later write answers PUBLISH_RECEIPT_INVALID. Filed as bug task-978669b6b2e84e299ded1632126d77f4; its full probe source is in comment-6e17af43.",
+      "timestamp": "2026-09-19T01:59:57.799Z"
+    },
+    {
+      "id": "comment-87c8360f2b73471086aac3a84786191f",
+      "author": "worker-952c612b",
+      "content": "ADVERSARIAL REVIEW (step 6C) AND CORRECTIONS (6D). task-a47babf8, worker-952c612b.\n\n(D) CORRECTION TO THE DESCRIPTION. The command CANNOT release the hold. repository-execution-port.ts:100 refuses any controller but the reservation's own with REPOSITORY_EXECUTION_CONTROLLER_MISMATCH, and the new port arm pins that from PUBLISHING. During a stuck publish, the owner is the live wrapper's publisher controller, a random id per process (repository-delivery-runtime.ts:195). So the service records the operator's resolution as ONE REFUSED receipt (PUBLISH_RESOLVED_NOT_TRANSMITTED|ABANDON), and the OWNING publisher releases the hold on its next pass as PUBLISH_RESOLVED. repository.recover uses the same pattern: record a fact, and the owner acts on it.\nAlso corrected: planningNotes (3). The decision port writes nothing (daemon-command-decision-port.ts:75). Attribution rests on two things: only the configured operator passes the entry fence, and only this service writes PUBLISH_RESOLVED_* codes.\n\n(C1) CAN THE COMMAND REACH THE RESERVATION PORT? No.\n- Neither the service nor the command imports a repository-execution module (`grep -n repository-execution` on both is empty), and the service takes no port and no workspace.\n- Every service arm asserts that a REAL persisted PUBLISHING reservation (a temp git repo) is unchanged: same phase, revision and controller. That catches a release, claim or transition made by any path.\n\n(C2) TRANSMITS TWICE?\n- A resolved decision never reaches `transmit`: the settled branch returns before any push or observe.\n- The window arms, for both ledger orders, show the fresh decision pushing EXACTLY once. The restart arm uses a git port that throws on any call.\n- HONEST LIMIT, NOT_TRANSMITTED against a push that DID land. The guard refuses only when the LATEST recorded observation is at the approved sha. node-publisher never records that (node-publisher.ts:205-210: it observes only when the tip differs, and equality writes PUSHED), so against today's producer the guard is dormant.\n- There is a residual window: a push landed but was never receipted, because the wrapper died between push and receipt, or because the resolve's receipt beat the publisher's PUSHED in a cross-process race. In that window NOT_TRANSMITTED is accepted and D1's audit line is false.\n- The next decision's preflight then reads tip == approved sha, and `contains` is true, so its push of the SAME sha is a git no-op. That is a second transmission ATTEMPT but no second effect.\n- Follow-up for the epic-final row: refuse NOT_TRANSMITTED when the transmission record says ACCEPTED. That needs a code, and row 2's vocabulary is closed.\n\n(C3) WRAPPER DOWN AT RESOLVE TIME.\n- The receipt is durable, and the card reads REFUSED at once.\n- Meanwhile the hold stays PUBLISHING: deliveries are REPOSITORY_EXECUTION_BUSY, and a fresh publish WAITs. Nothing is lost.\n- On restart, the new controller claims the dead one (processAlive false) and releases PUBLISH_RESOLVED on its first pass. The restart arm proves this with exactly 1 claim and zero remote calls.\n- A live foreign controller is never taken over (publicationReservation).\n\n(C4) MISTAKEN FOR A RESOLVE? `settled` requires PUBLISH_NOT_LANDED or EXACT membership in PUBLISH_RESOLVED_CODES. Four foreign codes, including the lookalikes PUBLISH_RESOLVED and PUBLISH_RESOLVE_NOT_UNKNOWN, leave the hold alone (arm 2), and drill S6 reds it. Both writers use the node-publisher principal, so the code is the only discriminator. The service header says no other writer may mint these codes.\n\nOTHER RESIDUALS (none of them block):\n- A retry of the same command after success answers NOT_UNKNOWN. That is truthful and writes no second receipt, but the answer is not REPLAYED, because there is no admission journal.\n- An unreadable intent counts as UNKNOWN, as on the card, so it is resolvable. But the publisher's release pass reads the intent first, and a corrupt intent keeps the hold (pre-existing).\n- There is no project or transport check. The kind is off every MCP roster, the fence requires the configured operator, and the ledger read is scoped to the daemon's project. Row 2's vocabulary has no code for either check.\n- A paired-browser human is still refused 403 (comment-ca397fbb on task-21be6e90).\n- Receipt-key poisoning under a version race: filed as bug task-978669b6.\n- Docs: apps/daemon/CLAUDE.md has no bullet yet on publish_resolve and PUBLISH_RESOLVED. That is left to the epic's docs sweep.",
+      "timestamp": "2026-09-19T02:00:15.761Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:14:31.019Z",
-  "updatedAt": "2026-09-18T19:39:57.881Z",
+  "updatedAt": "2026-09-19T02:16:15.825Z",
   "dependsOn": [
     "task-2c3f878ba94940428d34f204dc74de95",
     "task-78dea88bfd1f491b9a0b0c3f9c0519fe",
@@ -87,16 +147,126 @@
   "metrics": {
     "firstClaimAt": "2026-09-18T19:37:18.631Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 6,
+    "doneAt": "2026-09-19T02:15:50.125Z",
+    "wallClockMs": 23911494
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T19:39:55.318Z",
   "planningNotes": {
     "codebaseInsights": "Filed by me today as a CHILD of task-21be6e90. dependsOn [task-2c3f878b (row 3's registered stub and fence), task-78dea88b (the transmission evidence and the port's first new release reason), task-52682237 (the observation this service checks and carries)]. That third dependency was MISSING when the chain was first wired and was added while planning this row: without the observation reader, an operator could assert NOT_TRANSMITTED on a push that actually landed, and the next publish would transmit a second time. Measured at HEAD 2026-09-18.\n\n(1) THE DESCRIPTION'S CORE MECHANISM IS UNIMPLEMENTABLE AS WRITTEN — measured. It says the service 'releases the reservation from PUBLISHING with a NEW reason PUBLISH_RESOLVED'. apps/daemon/src/repository/repository-execution-port.ts `release(workspace, owner, expectedRevision, reason, controllerId)` begins `if (controllerId !== prior.state.controllerId) return repositoryExecutionFailure(\"REPOSITORY_EXECUTION_CONTROLLER_MISMATCH\")`. The PUBLISHING reservation is owned by the WRAPPER's publisher controller: apps/daemon/src/orchestrator/node-publisher-reservation.ts takes a handle only when `handle.reservation.controllerId === config.controller.controllerId`, and returns null while another controller's process is ALIVE (it may `claimController` only a dead one). During a stuck publish that wrapper is alive, passing UNKNOWN every tick. A command handler runs in the DAEMON under a different controller, so it can never release that hold.\n\n(2) THE PRECEDENT FOR THIS EXACT SITUATION. `repository.recover`, an operator-only command in REPOSITORY_RECOVERY_FAMILY, manipulates reservations it does not own by RECORDING A FACT that the owning controller then acts on (apps/daemon/src/repository/repository-recovery-facts.ts; read back at repository-landing-attempt.ts via `readRecoveryFact`). Controller ownership is the invariant that stops two processes racing on one reservation; the resolve respects it the same way.\n\n(3) THE RECEIPT IS THE FACT — no new ledger event. The command writes a REFUSED publish receipt for the decision through the existing `recordPublishReceipt` (the call node-publisher already uses), with a resolve code naming the resolution and a detail carrying the last observation. Who asserted it is already durable: every dispatched command is a recorded decision carrying its principal. That keeps publication-effect-ledger.ts untouched and the row at exactly ten files, where a separate 'resolve requested' event would have forced another split.\n\n(4) WHY THE CARD FLIPS IMMEDIATELY. apps/daemon/src/http/run-goal-publication.ts skips any decision that already has a receipt before consulting its intent (`if (state.receipts.has(pending.decisionId)) continue;`), so the card reports REFUSED as soon as the command writes the receipt.\n\n(5) WHY node-publisher MUST ACT, OR THE HOLD IS STRANDED. With a receipt on the decision, the publisher no longer treats it as pending; unless taught otherwise it never releases the PUBLISHING hold it owns, and every later delivery stays REPOSITORY_EXECUTION_BUSY. So node-publisher, on its next pass, must release a PUBLISHING hold it owns whose decision now carries an operator-resolve receipt, with the new reason PUBLISH_RESOLVED.\n\n(6) THE PORT HAS ALREADY MOVED. repository-execution-port.ts's release guard now reads `reason === \"PUBLISHED\" || reason === \"PUBLISH_NOT_TRANSMITTED\" ? prior.state.phase === \"PUBLISHING\"` — task-78dea88b's reason has landed there. PUBLISH_RESOLVED joins that same branch.\n\n(7) ROW 3'S STUB ARM FLIPS. task-2c3f878b pins, in apps/daemon/src/daemon-command-registry.test.ts, that an OPERATOR dispatch of `repository.publish_resolve` is refused by its stub. Replacing the stub makes that arm wrong by design; it must be re-aimed to the real behaviour, not deleted."
   },
-  "planApprovedAt": "2026-09-18T19:39:57.880Z"
+  "planApprovedAt": "2026-09-18T19:39:57.880Z",
+  "contextFetchedBy": [
+    "worker-952c612b",
+    "qa-09357cdf"
+  ],
+  "workStartedAt": "2026-09-19T01:25:56.128Z",
+  "reviewStartedAt": "2026-09-19T02:02:09.889Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts src/daemon-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/gates-human-only-fence.test.ts",
+    "exitCode": 0,
+    "outputTail": "Fresh run at 05:00:51, HEAD 31cd7f01 plus this row's diff. The owned production files were SHA256-identical to the tree the full suite ran on.\n Test Files  62 passed (62)\n      Tests  1143 passed | 15 skipped (1158)\n   Duration  23.11s\nEXIT=0\n\nThe other legs, all run after the final edit:\n- `pnpm --filter @moe/daemon test`, under the full-suite-gate lease, 04:53:05 to 04:58:29:\n   Test Files  766 passed (766)\n   Tests  12650 passed | 22 skipped (12672), exit 0\n- `pnpm typecheck`: Scope 19 of 20 workspace projects, 19x typecheck: Done, exit 0\n- `pnpm test:security`: Test Files 12 passed (12), Tests 1009 passed (1009), exit 0\n- Root lane (apps/** not covered): package-loadability passes. pack-artifact-sweep.test.ts:76 has 1 FOREIGN red on the tracked apps/daemon/src/node-spec-loader.{js,ts}. No path of this row is involved; the same red was recorded by task-2c3f878b, and it is fixed on origin/main.",
+    "reportedAt": "2026-09-19T02:02:09.889Z",
+    "source": "agent-reported"
+  },
+  "filesModified": [
+    "apps/daemon/src/repository/publish-resolve-service.ts",
+    "apps/daemon/src/repository/publish-resolve-service.js",
+    "apps/daemon/src/repository/publish-resolve-service.test.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-port.test.ts",
+    "apps/daemon/src/orchestrator/node-publisher.ts",
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/src/repository/publish-resolve-command.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+    ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json",
+    ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+    ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json"
+  ],
+  "completionSummary": "repository.publish_resolve is now served. CORRECTION (6D): the command cannot release the wrapper-owned hold (port.ts:100 CONTROLLER_MISMATCH, now pinned). So the command records ONE REFUSED receipt as a fact, and the OWNING publisher releases the hold as PUBLISH_RESOLVED, the repository.recover pattern.\n\nPRODUCTION\n- NEW publish-resolve-service.ts (+ .js bridge). It writes PUBLISH_RESOLVED_{NOT_TRANSMITTED|ABANDON}, whose detail carries the LATEST observation. It refuses with row 2's codes: DECISION_NOT_FOUND; NOT_UNKNOWN (a receipt already exists, there is no intent, or a concurrent receipt won); REMOTE_HOLDS_SHA. A failed write throws DurableStoreError.\n- publish-resolve-command.ts swaps the stub (+1 path, see step 5): fence unchanged, then 422 INPUT_INVALID@DAEMON_COMMAND_SEAM, then the service.\n- PUBLISH_RESOLVED is added to the port, legal only from PUBLISHING.\n- node-publisher.ts, still 249 lines, releases a resolved hold with no push, no observe and no second receipt.\n\nTESTS\nArms for DoD 1-4, each asserting the code and the layer:\n- a real persisted hold stays untouched on every service arm;\n- the port sweep visits the phase list (visited > 1);\n- release after resolve, and a delivery BUSY before it, ADMITTED after;\n- restart (claim a dead controller);\n- both window orders, each pushing exactly once. The deviation: WAITING, not UNKNOWN (M3);\n- 4 foreign codes never release;\n- DoD 3 in the registry is re-aimed, and a malformed-payload arm is added.\nnode-publisher-approved.test.ts is UNCHANGED.\n\nGATES\n- Scoped suite: 62/62 files, 1143 passed.\n- Full daemon suite: 766/766 files, 12650 passed | 22 skipped.\n- typecheck 19/19, test:security 12/12 (1009).\n- One FOREIGN root-lane red: pack-artifact-sweep, node-spec-loader. It is already fixed on main.\n- 13 in-memory mutants, all red (comment-5d12ed2f).\n\nREVIEW: comment-87c8360f. The NOT_TRANSMITTED guard is dormant against today's publisher, but a landed push re-pushed is a git no-op. A wrapper that is down releases ",
+  "commits": [
+    {
+      "sha": "2e62bb544dd14b611864a2003755a8cd11efaf2c",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-19T01:25:42Z",
+      "paths": [
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+        ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json",
+        ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts",
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/repository/publish-resolve-command.ts",
+        "apps/daemon/src/repository/publish-resolve-service.js",
+        "apps/daemon/src/repository/publish-resolve-service.test.ts",
+        "apps/daemon/src/repository/publish-resolve-service.ts",
+        "apps/daemon/src/repository/repository-execution-contracts.ts",
+        "apps/daemon/src/repository/repository-execution-port.test.ts",
+        "apps/daemon/src/repository/repository-execution-port.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-19T02:02:29.179Z",
+      "treeId": "2f231116386bb9792949fd3185ffd9c006c3212e",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "d15064c6ce0168410578b1da5b48fcc1150cc361",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T02:02:40Z",
+      "paths": [
+        ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+        ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T02:16:15.825Z",
+      "treeId": "1b5e2a732516e60fc3e38ff98ac56d87ae1514b7",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/repository/publish-resolve-service.js",
+    "apps/daemon/src/repository/publish-resolve-command.ts",
+    "apps/daemon/src/repository/publish-resolve-service.ts",
+    "apps/daemon/src/orchestrator/node-publisher.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/src/repository/publish-resolve-service.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/repository/repository-execution-port.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-19T02:02:40Z",
+    "at": "2026-09-19T02:16:15.825Z"
+  },
+  "completedAt": "2026-09-19T02:15:50.125Z",
+  "reviewCompletedAt": "2026-09-19T02:15:50.125Z",
+  "reviewSummary": "APPROVED. Reviewed completion commit 2e62bb54, pushed; product tree clean.\n\nGATES, re-run by me:\n- (A) scoped vitest: 62/62 files, 1143 passed | 15 skipped.\n- Full `pnpm --filter @moe/daemon test`, under lease: 766/766 files, 12650 passed | 22 skipped.\n- `pnpm typecheck`: 19 Done, 0 errors.\n- test:security: 12/12 files, 1009 tests.\n- Plain node loads the new bridges.\n\nDoD:\n1. The receipt is asserted by value, with the latest observation, and the card goes REFUSED. The publisher arms assert phase null and releases == [PUBLISH_RESOLVED].\n2. Every refusal has toStrictEqual on code and layer, and each asserts a real PUBLISHING reservation is unchanged.\n3. The port sweep asserts visited > 1 and TRANSITION_INVALID from every other phase; a foreign controller gets CONTROLLER_MISMATCH.\n4. The service has no git port, and the publisher's push count does not move. node-publisher-approved.test.ts diff: 0 lines.\n5. Gates quoted above.\n\nDRILLS: my own 6 in-memory mutants, 1 hit each, all red at the intended assertion; control 491 green.\n- N1, settled widening dropped: 5 red.\n- P1, port reason dropped: red.\n- P2, reason admitted from any phase: red.\n- S3, guard deleted: red.\n- S4, observation dropped from the detail: red.\n- C1, fence moved after the payload check: red (403 became 422).\nsha256sum -c OK.\n\nnode-publisher.ts is 249 lines. The design correction matches planningNotes. The dormant guard and the docs are deferred to epic-final (comment-87c8360f). The race is filed as task-978669b6."
 }

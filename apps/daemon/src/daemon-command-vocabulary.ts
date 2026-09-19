@@ -30,6 +30,7 @@ import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
   from "./preview/preview-contracts.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import { ENV_EXAMPLE_SYNC_COMMAND_KIND } from "./repository/env-example-sync-contracts.js";
+import { PUBLISH_RESOLVE_COMMAND_KIND } from "./repository/publish-resolve-contracts.js";
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
 } from "./product-contract/product-contract-gate-1-contract.js";
@@ -178,7 +179,8 @@ export const PREVIEW_FAMILY: Readonly<Record<
 export const RELEASE_FAMILY: Readonly<Record<typeof RELEASE_DECIDE_COMMAND_KIND, string>> =
   Object.freeze({ [RELEASE_DECIDE_COMMAND_KIND]: CAPABILITIES.GOAL });
 export const CRITERION_FAMILY = Object.freeze({ [CRITERION_APPROVE]: CAPABILITIES.ADMIN, [CRITERION_VERIFY]: CAPABILITIES.ADMIN });
-export const REPOSITORY_RECOVERY_FAMILY = Object.freeze({ "repository.recover": CAPABILITIES.ADMIN });
+export const REPOSITORY_RECOVERY_FAMILY = Object.freeze({ "repository.recover": CAPABILITIES.ADMIN,
+  [PUBLISH_RESOLVE_COMMAND_KIND]: CAPABILITIES.ADMIN });
 /** GOAL like `release.decide`: acts on the product a goal produced. REACH only -- OPERATOR_PRINCIPAL_KINDS below is the human gate. NOT a bootstrap kind. */
 export const ENV_EXAMPLE_SYNC_FAMILY = Object.freeze({ [ENV_EXAMPLE_SYNC_COMMAND_KIND]: CAPABILITIES.GOAL });
 
@@ -244,7 +246,7 @@ export type WiredCommandKind =
   | "deployment.rollback"
   | typeof RELEASE_DECIDE_COMMAND_KIND | typeof ENV_EXAMPLE_SYNC_COMMAND_KIND
   | "design.submit"
-  | "repository.recover"
+  | "repository.recover" | typeof PUBLISH_RESOLVE_COMMAND_KIND
   | typeof CRITERION_APPROVE | typeof CRITERION_VERIFY
   | BootstrapCommandKind | GraphMutationCommandKind
   | typeof APPROVAL_DECIDE_INTENT_COMMAND_KIND
@@ -290,7 +292,8 @@ export function familyCapabilityOf(kind: string): string | null {
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === AGENT_PROVIDER_COMMAND_KIND) return null;
   if (kind === "deployment.rollback" || kind === "deployment.migrate_down" || kind === ENV_EXAMPLE_SYNC_COMMAND_KIND) return null;
-  if (kind === CRITERION_APPROVE || kind === CRITERION_VERIFY || kind === "repository.recover") return null;
+  if (kind === CRITERION_APPROVE || kind === CRITERION_VERIFY || kind === "repository.recover"
+    || kind === PUBLISH_RESOLVE_COMMAND_KIND) return null;
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
   if (kind === PREVIEW_DECIDE_COMMAND_KIND || kind === PREVIEW_START_COMMAND_KIND) return null;
@@ -380,7 +383,8 @@ export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
 export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   AGENT_PROVIDER_COMMAND_KIND,
   CRITERION_APPROVE, CRITERION_VERIFY,
-  "repository.recover",
+  // Both assert what the operator's own repository or remote holds; each ASYNC entry fences itself.
+  "repository.recover", PUBLISH_RESOLVE_COMMAND_KIND,
   "approval.decide",
   // Funding another review attempt or choosing a replan is the human's decision.
   "escalation.decide",

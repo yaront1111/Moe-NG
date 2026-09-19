@@ -11,12 +11,13 @@ import { publicationRepositoryId } from "../repository/publication-approval-cont
 import type { PublicationCandidate, PublicationRefusal } from "../repository/publication-approval-contracts.js";
 import { createPublicationCandidateReader } from "../repository/publication-candidate.js";
 import type { PublicationGitPort } from "../repository/publication-effect-contracts.js";
-import { publicationOwnerDigest, readPublicationTransmission, recordPublicationIntent } from "../repository/publication-effect-ledger.js";
+import { publicationOwnerDigest, readPublicationObservation, readPublicationTransmission, recordPublicationIntent } from "../repository/publication-effect-ledger.js";
 import type { PublicationTransmission } from "../repository/publication-effect-ledger.js";
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import type { RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
-import { readPublishLedger } from "../repository/publish-ledger.js";
+import { readPublishLedger, recordPublishReceipt } from "../repository/publish-ledger.js";
 import { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId, remoteAggregateId } from "../repository/publish-receipt-contracts.js";
+import { PUBLISH_RESOLVED_CODES, resolvePublish, type PublishResolution } from "../repository/publish-resolve-service.js";
 import { readRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import { PROJECT_ID, closeStores, openStore } from "../review/review-test-fixtures.js";
 import { createNodePublisher } from "./node-publisher.js";
@@ -74,10 +75,10 @@ const NOT_LANDED = (sha: string, branch: string, before: string, after: string) 
 const sent = (decisionId: string, tipBefore: string | null, outcome: PublicationTransmission["outcome"]): PublicationTransmission =>
   ({ projectId: PROJECT_ID, goalId: GOAL, decisionId, tipBefore, outcome, transmittedAt: NOW });
 
-function decide(store: SqliteEventStore, commandId: string, bound: PublicationCandidate = candidate): string {
-  const aggregateId = publishAggregateId(GOAL);
+function decide(store: SqliteEventStore, commandId: string, bound: PublicationCandidate = candidate, goalId = GOAL): string {
+  const aggregateId = publishAggregateId(goalId);
   return store.commitExpectedVersionDecision({ commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
-    committedResultBytes: encoder.encode(JSON.stringify({ candidate: bound, goalId: GOAL, remoteUrl: bound.approval.remoteUrl })),
+    committedResultBytes: encoder.encode(JSON.stringify({ candidate: bound, goalId, remoteUrl: bound.approval.remoteUrl })),
     correlationId: "test-publish", decidedAt: NOW,
     events: [{ eventId: `${commandId}-requested`, eventType: "RepositoryPublishRequested", payload: encoder.encode("{}") }],
     expectedVersion: store.getAggregateVersion(aggregateId), key: { commandId, principalId: "operator-local", projectId: PROJECT_ID },
@@ -108,12 +109,14 @@ function fence() {
   return { port, releases, phase: () => held?.reservation.phase ?? null, refuseNextRelease: () => { refuse = true; } };
 }
 type Measurement = Readonly<{ ok: true; defaultBranch: string | null }> | PublicationRefusal;
-type Remote = { tip: string | null; pushes: number; observes: number; measures: number; unreadableFirst: boolean;
+type Remote = { tip: string | null; pushes: number; observes: number; measures: number; unreadableFirst: boolean; blind: boolean;
   onPush: (remote: Remote) => Readonly<{ ok: true }> | PublicationRefusal; onMeasure: ((remote: Remote) => Measurement) | null };
-/** One approved decision against a scripted remote whose branch starts at BEFORE. A null `onMeasure` is a port that cannot measure at all. */
-function evidenceWorld(onPush: Remote["onPush"], onMeasure: Remote["onMeasure"] = null) {
-  const store = openStore(); const decisionId = decide(store, "publish-1"); const repository = fence();
-  const remote: Remote = { tip: BEFORE, pushes: 0, observes: 0, measures: 0, unreadableFirst: false, onPush, onMeasure };
+/** One approved decision against a scripted remote whose branch starts at BEFORE. A null `onMeasure` is a port that cannot measure at all;
+ *  `faulted` wraps the store the publisher writes through (every read helper below reads the real one); `earlier` writes first. */
+function evidenceWorld(onPush: Remote["onPush"], onMeasure: Remote["onMeasure"] = null,
+  faulted: (store: SqliteEventStore) => SqliteEventStore = (store) => store, earlier: (store: SqliteEventStore) => void = () => undefined) {
+  const store = openStore(); earlier(store); const decisionId = decide(store, "publish-1"); const repository = fence();
+  const remote: Remote = { tip: BEFORE, pushes: 0, observes: 0, measures: 0, unreadableFirst: false, blind: false, onPush, onMeasure };
   const git: PublicationGitPort = {
     ...(onMeasure === null ? {} : { async measureDefaultBranch(given: PublicationCandidate): Promise<Measurement> {
       expect(given).toEqual(candidate); remote.measures += 1;
@@ -124,17 +127,19 @@ function evidenceWorld(onPush: Remote["onPush"], onMeasure: Remote["onMeasure"] 
     async contains(given) { expect(given).toEqual(candidate); return { ok: true, contains: true, known: true }; },
     async observe(given) {
       expect(given).toEqual(candidate); remote.observes += 1;
-      // Read #1 is the pre-flight before any intent; #2 is the pre-push tip the transmission journals.
-      return remote.observes === 2 && remote.unreadableFirst ? { ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "PUBLISH_REMOTE_UNREADABLE" }
+      // Read #1 is the pre-flight before any intent; #2 is the pre-push tip the transmission journals. A blind remote fails every read.
+      return (remote.observes === 2 && remote.unreadableFirst) || remote.blind ? { ok: false, code: "PUBLISH_REMOTE_UNREADABLE", detail: "PUBLISH_REMOTE_UNREADABLE" }
         : { ok: true, sha: remote.tip };
     },
   };
-  const publisher = createNodePublisher({ git, projectId: PROJECT_ID, store, workspace: identity.root, repository: repository.port,
+  const publisher = createNodePublisher({ git, projectId: PROJECT_ID, store: faulted(store), workspace: identity.root, repository: repository.port,
     storeId: "D:/store.db", controller: CONTROLLER, processAlive: () => false, clock: () => NOW });
   return { store, decisionId, repository, remote, publisher,
     card: () => readRunGoalPublication(store, PROJECT_ID, readPublishLedger(store, PROJECT_ID).get(GOAL)),
     receipt: () => readPublishLedger(store, PROJECT_ID).get(GOAL)?.receipts.get(decisionId),
-    evidence: () => readPublicationTransmission(store, PROJECT_ID, GOAL, decisionId) };
+    evidence: () => readPublicationTransmission(store, PROJECT_ID, GOAL, decisionId),
+    observed: () => readPublicationObservation(store, PROJECT_ID, GOAL, decisionId),
+    observations: () => store.readEvents(publishAggregateId(GOAL)).filter((event) => event.eventType === "RepositoryPublicationObserved").length };
 }
 /** Stays UNKNOWN on the push pass AND on a replay, each naming its check, with the hold still PUBLISHING, no receipt, no release and no second push. */
 async function expectStuck(w: ReturnType<typeof evidenceWorld>, evidence: PublicationTransmission | null, pushes: number, firstPass: string) {
@@ -143,6 +148,12 @@ async function expectStuck(w: ReturnType<typeof evidenceWorld>, evidence: Public
     expect(w.receipt()).toBeUndefined(); expect(w.repository.phase()).toBe("PUBLISHING"); expect(w.repository.releases).toEqual([]);
     expect(w.card()).toMatchObject({ outcome: "UNKNOWN", code: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED", decisionId: w.decisionId });
     expect(w.evidence()).toEqual(evidence); expect(w.remote.pushes).toBe(pushes);
+    // Recorded once, on the first pass; the replay sees the same tip and writes nothing.
+    expect(w.observations()).toBe(1);
+    expect(w.observed()).toEqual({ projectId: PROJECT_ID, goalId: GOAL, decisionId: w.decisionId, observedSha: w.remote.tip,
+      expectedSha: approval.sha, reason: evidence?.outcome ?? "UNRECORDED", observedAt: NOW });
+    // And the runs read carries it to the card, exactly these four facts.
+    expect(w.card()?.observation).toEqual({ observedSha: w.remote.tip, expectedSha: approval.sha, reason: evidence?.outcome ?? "UNRECORDED", observedAt: NOW });
   }
 }
 
@@ -207,6 +218,133 @@ describe("a publish whose push provably did not land (both conditions, never one
     expect(w.repository.phase()).toBeNull(); expect(w.repository.releases).toEqual(["PUBLISH_NOT_TRANSMITTED"]);
     expect(w.remote.pushes).toBe(1); expect(w.remote.observes).toBe(observes);
     expect(await w.publisher.publishOnce()).toEqual([]);
+  });
+});
+
+describe("an operator-resolved publish: the owning publisher gives its own hold back, and never pushes for it", () => {
+  const STUCK_PUSH: Remote["onPush"] = (remote) => { remote.tip = FOREIGN; return REJECTED; };
+  const LANDS: Remote["onPush"] = (remote) => { remote.tip = approval.sha; return { ok: true }; };
+  const PUSHED_REPORT = (goalId: string) => ({ goalId, outcome: "PUSHED", detail: `${approval.sha.slice(0, 10)} ${approval.branch} -> ${approval.remoteUrl}` });
+  const refusedEvents = (w: ReturnType<typeof evidenceWorld>) =>
+    w.store.readEvents(publishAggregateId(GOAL)).filter((event) => event.eventType === "RepositoryPublishRefused").length;
+  /** A publish stuck UNKNOWN (hold PUBLISHING, one push), then the operator's resolve: its receipt, the hold untouched by the command. */
+  async function resolved(w: ReturnType<typeof evidenceWorld>, resolution: PublishResolution) {
+    expect(await w.publisher.publishOnce()).toEqual(STUCK(FOREIGN, PUSH_REJECTED));
+    const answer = resolvePublish(w.store, { projectId: PROJECT_ID, decisionId: w.decisionId, resolution, decidedAt: NOW });
+    if (!answer.ok) throw new Error(answer.code);
+    expect(w.repository.phase()).toBe("PUBLISHING"); expect(w.repository.releases).toEqual([]);
+    return answer.receipt;
+  }
+
+  it.each(["NOT_TRANSMITTED", "ABANDON"] as const)(
+    "after a %s resolve the next pass releases the owned hold as PUBLISH_RESOLVED: no push, no remote read, no second receipt", async (resolution) => {
+    const w = evidenceWorld(STUCK_PUSH); const receipt = await resolved(w, resolution);
+    const node = { nodeRef: "graph-1:node-1", projectId: PROJECT_ID, storeId: "D:/store.db", ownershipToken: "e".repeat(64) };
+    const delivery = { controllerId: "delivery-controller", controllerPid: 99 };
+    expect(w.repository.port.acquire(identity.root, node, delivery)).toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_BUSY" });
+    const observes = w.remote.observes;
+    expect(await w.publisher.publishOnce()).toEqual([{ goalId: GOAL, outcome: "REFUSED",
+      detail: `${PUBLISH_RESOLVED_CODES[resolution]}: ${receipt.refusal?.detail ?? ""}` }]);
+    expect(w.repository.phase()).toBeNull(); expect(w.repository.releases).toEqual(["PUBLISH_RESOLVED"]);
+    expect(w.remote.pushes).toBe(1); expect(w.remote.observes).toBe(observes);
+    expect(w.receipt()).toEqual(receipt); expect(refusedEvents(w)).toBe(1);
+    expect(w.card()).toMatchObject({ outcome: "REFUSED", code: PUBLISH_RESOLVED_CODES[resolution], observation: null });
+    // The node delivery the hold turned away is admitted now, and the next pass has nothing left to do.
+    expect(w.repository.port.acquire(identity.root, node, delivery)).toMatchObject({ ok: true });
+    expect(await w.publisher.publishOnce()).toEqual([]); expect(w.remote.pushes).toBe(1);
+  });
+  it("never mistakes another REFUSED receipt for an operator resolve: the hold stays where its own evidence left it", async () => {
+    const foreign = ["PUBLISH_REMOTE_DIVERGED", "PUBLISH_APPROVAL_REQUIRED", "PUBLISH_RESOLVE_NOT_UNKNOWN", "PUBLISH_RESOLVED"];
+    for (const code of foreign) {
+      const w = evidenceWorld(STUCK_PUSH);
+      expect(await w.publisher.publishOnce()).toEqual(STUCK(FOREIGN, PUSH_REJECTED));
+      recordPublishReceipt(w.store, { branch: approval.branch, decidedAt: NOW, decisionId: w.decisionId, goalId: GOAL, projectId: PROJECT_ID,
+        refusal: { code, detail: code }, remoteUrl: approval.remoteUrl, sha: approval.sha, url: null });
+      expect(await w.publisher.publishOnce()).toEqual([]);
+      expect(w.repository.phase()).toBe("PUBLISHING"); expect(w.repository.releases).toEqual([]); expect(w.remote.pushes).toBe(1);
+    }
+    expect(foreign).toHaveLength(4);
+  });
+  it("a wrapper that was DOWN when the operator resolved: the restarted one claims the dead controller's hold and gives it back, remote untouched", async () => {
+    const w = evidenceWorld(STUCK_PUSH); const receipt = await resolved(w, "ABANDON");
+    let claims = 0;
+    const port: RepositoryExecutionPort = { ...w.repository.port, claimController: (ws, owner, revision, controller) => {
+      claims += 1; return w.repository.port.transition(ws, owner, revision, { ...controller, phase: "PUBLISHING", baselineId: null, sessionId: null, pid: null });
+    } };
+    const offline = async (): Promise<never> => { throw new Error("a resolved publish never reaches the remote"); };
+    const restarted = createNodePublisher({ git: { push: offline, observe: offline, contains: offline }, projectId: PROJECT_ID, store: w.store,
+      workspace: identity.root, repository: port, storeId: "D:/store.db", controller: { controllerId: "controller-2", controllerPid: 5678 },
+      processAlive: () => false, clock: () => NOW });
+    expect(await restarted.publishOnce()).toEqual([{ goalId: GOAL, outcome: "REFUSED", detail: `PUBLISH_RESOLVED_ABANDON: ${receipt.refusal?.detail ?? ""}` }]);
+    expect(claims).toBe(1); expect(w.repository.releases).toEqual(["PUBLISH_RESOLVED"]); expect(w.repository.phase()).toBeNull();
+    expect(w.remote.pushes).toBe(1); expect(await restarted.publishOnce()).toEqual([]);
+  });
+  it("THE WINDOW, same goal: a fresh publish approved before the release pass pushes exactly once, right after the hold is given back", async () => {
+    const w = evidenceWorld(STUCK_PUSH); const receipt = await resolved(w, "ABANDON");
+    w.remote.onPush = LANDS; const next = decide(w.store, "publish-2");
+    expect(await w.publisher.publishOnce()).toEqual([
+      { goalId: GOAL, outcome: "REFUSED", detail: `PUBLISH_RESOLVED_ABANDON: ${receipt.refusal?.detail ?? ""}` }, PUSHED_REPORT(GOAL)]);
+    expect(w.remote.pushes).toBe(2); expect(w.repository.releases).toEqual(["PUBLISH_RESOLVED", "PUBLISHED"]);
+    expect(w.card()).toMatchObject({ outcome: "PUSHED", decisionId: next });
+    expect(await w.publisher.publishOnce()).toEqual([]); expect(w.remote.pushes).toBe(2);
+  });
+  it("THE WINDOW, another goal visited first: the fresh publish WAITS while the resolved hold stands, then pushes exactly once", async () => {
+    const OTHER = "goal-publisher-0";
+    // OTHER was published long ago, so the ledger walk visits it before the stuck goal.
+    const w = evidenceWorld(STUCK_PUSH, null, undefined, (store) => {
+      const old = decide(store, "publish-0", candidate, OTHER);
+      recordPublishReceipt(store, { branch: approval.branch, decidedAt: NOW, decisionId: old, goalId: OTHER, projectId: PROJECT_ID,
+        refusal: null, remoteUrl: approval.remoteUrl, sha: approval.sha, url: null });
+    });
+    const receipt = await resolved(w, "NOT_TRANSMITTED");
+    w.remote.onPush = LANDS; decide(w.store, "publish-2", candidate, OTHER);
+    expect(await w.publisher.publishOnce()).toEqual([
+      { goalId: OTHER, outcome: "WAITING", detail: `repository held by publish:${w.decisionId} (PUBLISHING)` },
+      { goalId: GOAL, outcome: "REFUSED", detail: `PUBLISH_RESOLVED_NOT_TRANSMITTED: ${receipt.refusal?.detail ?? ""}` }]);
+    expect(w.remote.pushes).toBe(1); expect(w.repository.releases).toEqual(["PUBLISH_RESOLVED"]);
+    expect(await w.publisher.publishOnce()).toEqual([PUSHED_REPORT(OTHER)]);
+    expect(w.remote.pushes).toBe(2); expect(w.repository.releases).toEqual(["PUBLISH_RESOLVED", "PUBLISHED"]);
+    expect(await w.publisher.publishOnce()).toEqual([]); expect(w.remote.pushes).toBe(2);
+  });
+});
+
+describe("the last observation of an unresolved publish: written when it changes, never once per pass", () => {
+  const BLIND = (pass: string) => [{ goalId: GOAL, outcome: "UNKNOWN",
+    detail: `PUBLISH_EFFECT_RECONCILIATION_REQUIRED: remote unreadable PUBLISH_REMOTE_UNREADABLE: PUBLISH_REMOTE_UNREADABLE; ${pass}` }];
+  it("writes none while the remote is unreadable, one for a new tip however many passes see it, and one more when it moves", async () => {
+    const w = evidenceWorld((remote) => { remote.blind = true; return REJECTED; });
+    expect(w.card()).toMatchObject({ outcome: "PENDING", observation: null });
+    for (const pass of [PUSH_REJECTED, REPLAY, REPLAY]) expect(await w.publisher.publishOnce()).toEqual(BLIND(pass));
+    expect(w.card()).toMatchObject({ outcome: "UNKNOWN", observation: null });
+    expect(w.remote.observes).toBe(5); expect(w.observations()).toBe(0);
+    w.remote.blind = false; w.remote.tip = FOREIGN;
+    for (let pass = 0; pass < 3; pass += 1) expect(await w.publisher.publishOnce()).toEqual(STUCK(FOREIGN, REPLAY));
+    expect(w.observations()).toBe(1); expect(w.observed()).toMatchObject({ observedSha: FOREIGN, reason: "REJECTED" });
+    w.remote.tip = null;
+    expect(await w.publisher.publishOnce()).toEqual(STUCK(null, REPLAY));
+    expect(w.observations()).toBe(2); expect(w.observed()).toMatchObject({ observedSha: null, expectedSha: approval.sha, reason: "REJECTED" });
+  });
+  it("writes none for a publish that resolved: PUSHED, or refused with the remote tip never moved", async () => {
+    const cases: [Remote["onPush"], string][] = [[(remote) => { remote.tip = approval.sha; return { ok: true }; }, "PUSHED"], [() => REJECTED, "REFUSED"]];
+    for (const [onPush, outcome] of cases) {
+      const w = evidenceWorld(onPush);
+      expect(await w.publisher.publishOnce()).toMatchObject([{ outcome }]); expect(w.observations()).toBe(0);
+      expect(w.card()).toMatchObject({ outcome, observation: null });
+    }
+    expect(cases).toHaveLength(2);
+  });
+  it("never lets a failed observation write change the publish: the same UNKNOWN each pass, one push, nothing written", async () => {
+    let failed = 0;
+    const w = evidenceWorld((remote) => { remote.tip = FOREIGN; return REJECTED; }, null, (store) => new Proxy(store, { get(target, key) {
+      if (key === "commitExpectedVersionDecision") return (input: Parameters<SqliteEventStore["commitExpectedVersionDecision"]>[0]) => {
+        if (input.commandKind !== "internal.repository.publication_observation") return target.commitExpectedVersionDecision(input);
+        failed += 1; throw new Error("SQLITE_FULL: database or disk is full");
+      };
+      const value: unknown = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value;
+    } }));
+    for (const pass of [PUSH_REJECTED, REPLAY]) expect(await w.publisher.publishOnce()).toEqual(STUCK(FOREIGN, pass));
+    expect(failed).toBe(2); expect(w.observations()).toBe(0); expect(w.remote.pushes).toBe(1);
+    expect(w.card()).toMatchObject({ outcome: "UNKNOWN", decisionId: w.decisionId });
   });
 });
 

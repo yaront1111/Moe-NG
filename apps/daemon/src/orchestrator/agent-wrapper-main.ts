@@ -81,7 +81,7 @@ import { brokerImageAt, resolveRuntimeBrokerPid } from "./runtime-broker-identit
  * a single pass, MOE_WRAPPER_MAX_ITEM_ATTEMPTS (default 3) staffing tries per
  * unmoved item before it is reported STAFFING_ATTEMPTS_EXHAUSTED instead of
  * respawned, MOE_AGENT_SILENCE_MS (default 20 min) how long a seat may show no
- * activity — no output, no tool child, flat CPU — before it is killed as hung,
+ * activity — no output, no tool child, no CPU growth — before it is killed for stillness,
  * and MOE_AGENT_TIMEOUT_MS (default 2 h) the absolute lifetime of one agent
  * process whatever it is doing, from which the agent's bearer TTL is derived. The trusted
  * wrapper hosts MCP on loopback; each agent receives only its scoped bearer,
@@ -428,13 +428,13 @@ async function main(): Promise<void> {
         event: "SEAT_LINE",
         write: (line) => { process.stdout.write(`${line}\n`); },
       }),
-      // The OS view of a seat that prints nothing (`claude -p` says nothing until it finishes):
-      // tool children and tree CPU. Silence kills a hung seat; the cap bounds a working one.
+      // The OS view of the seat's tree: tool children for every seat, and tree CPU, activity only
+      // for a non-streaming seat. Silence needs observed stillness; the cap bounds the rest.
       probeActivity: createSeatActivityProbe(process.platform),
       silenceMs: knobs.agentSilenceMs,
       timeoutMs: knobs.agentTimeoutMs,
-      // A probe that cannot see the tree (PowerShell timing out, `ps` missing) grants no liveness
-      // and would kill a working seat as silent; its first failure per seat is filed at WARN.
+      // A probe that cannot see the tree (PowerShell timing out, `ps` missing) counts no silence;
+      // only the absolute cap can end the seat until a tick sees the tree. First failure at WARN.
       warn: teeDiagnosticLine({
         emitter: seatDiagnostics,
         event: "SEAT_PROBE_FAILED",

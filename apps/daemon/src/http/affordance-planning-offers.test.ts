@@ -85,6 +85,13 @@ const NOTHING_LANDED = (): boolean => false;
 const NO_PREVIEW = (): PreviewReceiptState | null => null;
 
 /**
+ * A goal with NO publish stuck UNKNOWN is the default, because that is what every goal looks like
+ * unless a push lost its answer. The resolve card is offered off the opposite fact, so an arm that
+ * wants it must say so.
+ */
+const NO_UNKNOWN_PUBLISH = (): string | null => null;
+
+/**
  * A goal whose run was REJECTED and whose CURRENT run is its successor. The goal's own
  * `planningRunRef` STAYS on the rejected run: it is immutable, and the whole point of the
  * `currentRun` fact is that consumers RESOLVE past it rather than rewrite it.
@@ -130,6 +137,7 @@ function resolutionOver(
     previewReceipt: NO_PREVIEW,
     mintId: () => `cmd-${(minted += 1)}`,
     projectId: PROJECT,
+    unknownPublishDecision: NO_UNKNOWN_PUBLISH,
   });
 }
 
@@ -139,6 +147,7 @@ function resolutionFor(
   landedCommit: (goalId: string) => boolean = NOTHING_LANDED,
   previewReceipt?: (goalId: string) => PreviewReceiptState | null,
   designState: (goalId: string) => "ABSENT" | "PRESENT" | "SKIPPED" = () => "PRESENT",
+  unknownPublishDecision: (goalId: string) => string | null = NO_UNKNOWN_PUBLISH,
 ): PlanningOfferResolution {
   let minted = 0;
   return resolvePlanningOffers({
@@ -153,6 +162,7 @@ function resolutionFor(
     previewReceipt: previewReceipt ?? NO_PREVIEW,
     mintId: () => `cmd-${(minted += 1)}`,
     projectId: PROJECT,
+    unknownPublishDecision,
   });
 }
 
@@ -891,5 +901,125 @@ describe("the release decision card", () => {
       offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, NO_CONTRACT, spy.fact);
       expect(spy.asked, lifecycle).toEqual([GOAL_ID]);
     }
+  });
+});
+
+/**
+ * THE PUBLISH RESOLVE CARD (task-bbe7a5d2): the operator's way out of a publish stuck UNKNOWN,
+ * which otherwise holds the repository in PUBLISHING and blocks every later publish.
+ *
+ * `unknownPublishDecision` is a FACT, supplied by the composition root: it names the decision of
+ * the goal's UNKNOWN publish, or gives null. Its per-state answer for PENDING, PUSHED and REFUSED
+ * publishes is proven over a real store in `affordance-read-planning.test.ts`. The ladder cannot
+ * tell those three apart, because each is simply "null" here. These arms prove the RULE:
+ * - what is minted from the fact;
+ * - where it is targeted;
+ * - that it is never staffed;
+ * - that the fact is asked only where a publish can exist.
+ *
+ * Every arm is set-equality on `commandKind@target`, for the release card's reason.
+ */
+describe("the publish resolve card", () => {
+  const DECISION = "decision-offers-unknown";
+  const RESOLVE_TARGET = `publish-resolve:${DECISION}`;
+  const RELEASE_TARGET = releaseDossierAggregateId(GOAL_ID);
+  const unknown = (): string | null => DECISION;
+  const roster = (resolution: PlanningOfferResolution): string[] => resolution.offers
+    .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort();
+  const resolutionWith = (
+    goalLifecycle: string, fact: (goalId: string) => string | null,
+  ): PlanningOfferResolution => resolutionFor(
+    "PLAN_REVIEW", goalLifecycle, LEGACY_LANE, NO_CONTRACT, LANDED, NO_PREVIEW, () => "PRESENT", fact,
+  );
+
+  it("offers repository.publish_resolve at publish-resolve:<decisionId> for a goal whose publish is UNKNOWN", () => {
+    const resolution = resolutionWith("EXECUTION_ENABLED", unknown);
+    expect(roster(resolution)).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`, `release.decide@${RELEASE_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`, `repository.publish_resolve@${RESOLVE_TARGET}`,
+    ]);
+    const card = resolution.offers.find((entry) => entry.commandKind === "repository.publish_resolve");
+    expect(card?.targetAggregateId).toBe(RESOLVE_TARGET);
+    // The target is neither the goal nor the publish aggregate. `readDurableLedger` keeps the last
+    // committed result per target, so either would put a resolve over that aggregate's own record.
+    expect(card?.targetAggregateId).not.toBe(GOAL_ID);
+    expect(card?.targetAggregateId).not.toBe(`publish:${GOAL_ID}`);
+    // Fenced on its OWN aggregate's version: 0, because nothing commits there. The goal is at 3.
+    expect(card?.expectedVersion).toBe(0);
+    expect(card?.inputSchemaVersion).toBe(
+      resolution.offers.find((entry) => entry.commandKind === "repository.publish")?.inputSchemaVersion);
+    // It is an OPERATOR affordance, in neither compiler roster, so it is never a staffable step.
+    expect(resolution.compilerSteps).toEqual([]);
+  });
+
+  it("WITHHOLDS it when the fact names no UNKNOWN publish, leaving the release card's roster exact", () => {
+    expect(roster(resolutionWith("EXECUTION_ENABLED", NO_UNKNOWN_PUBLISH))).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`, `release.decide@${RELEASE_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`,
+    ]);
+  });
+
+  it("offers it on CLOSING and COMPLETED goals too, wherever publish is offered", () => {
+    expect(roster(resolutionWith("CLOSING", unknown))).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`, `release.decide@${RELEASE_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`, `repository.publish_resolve@${RESOLVE_TARGET}`,
+    ]);
+    expect(roster(resolutionWith("COMPLETED", unknown))).toEqual([
+      `release.decide@${RELEASE_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`, `repository.publish_resolve@${RESOLVE_TARGET}`,
+    ]);
+  });
+
+  it("offers a CANCELLED goal the resolve and nothing else, because the repository hold is the project's", () => {
+    // Abandoning a goal whose push lost its answer must not strand every later publish behind the
+    // hold its UNKNOWN publish keeps. So a cancelled goal is offered the way out, and only that.
+    const cancelled = resolutionWith("CANCELLED", unknown);
+    expect(roster(cancelled)).toEqual([`repository.publish_resolve@${RESOLVE_TARGET}`]);
+    expect(cancelled.compilerSteps).toEqual([]);
+    expect(roster(resolutionWith("CANCELLED", NO_UNKNOWN_PUBLISH))).toEqual([]);
+  });
+
+  it("asks the fact ONCE, only for goals that could hold a publish, across a surface of several goals", () => {
+    // Each goal has its own run. goal-f's run is still DRAFTING, so it sits on the plan.propose
+    // rung and never reaches the lifecycle ladder.
+    const goals: readonly (readonly [goalId: string, lifecycle: string, run: string])[] = [
+      ["goal-a-draft", "DRAFT", "PLAN_REVIEW"],
+      ["goal-b-unlanded", "EXECUTION_ENABLED", "PLAN_REVIEW"],
+      ["goal-c-landed", "EXECUTION_ENABLED", "PLAN_REVIEW"],
+      ["goal-d-completed", "COMPLETED", "PLAN_REVIEW"],
+      ["goal-e-cancelled", "CANCELLED", "PLAN_REVIEW"],
+      ["goal-f-planned", "DRAFT", "DRAFTING"],
+    ];
+    const aggregates = new Map<string, DurableAggregate>();
+    for (const [goalId, lifecycle, run] of goals) {
+      aggregates.set(goalId, { currentVersion: 3, result: {
+        goalId, lifecycle, planningRunRef: `run-${goalId}`, projectId: PROJECT } });
+      aggregates.set(`run-${goalId}`, { currentVersion: 4, result: { state: { goalRef: goalId, lifecycle: run } } });
+    }
+    const landed = new Set(["goal-a-draft", "goal-c-landed", "goal-d-completed", "goal-e-cancelled", "goal-f-planned"]);
+    const asked: string[] = [];
+    const walked: string[] = [];
+    let minted = 0;
+    const resolution = resolvePlanningOffers({
+      closeReadiness: NO_CONTRACT, compilerLane: LEGACY_LANE, currentRun: (ref) => ref,
+      designState: () => "PRESENT", landedCommit: (goalId) => { walked.push(goalId); return landed.has(goalId); },
+      ledger: { aggregates, decisionCount: 0, kinds: new Set() },
+      mintId: () => `cmd-${(minted += 1)}`, previewReceipt: NO_PREVIEW, projectId: PROJECT,
+      unknownPublishDecision: (goalId) => {
+        asked.push(goalId);
+        return `decision-of-${goalId}`;
+      },
+    });
+    // The built goals that landed, and the cancelled one, once each, in surface order. The draft,
+    // the unlanded and the unplanned goals are never asked, however the landing fact would answer.
+    expect(asked).toEqual(["goal-c-landed", "goal-d-completed", "goal-e-cancelled"]);
+    // A cancelled goal is asked WITHOUT the landing walk: the fact alone answers whether it holds one.
+    expect(walked).toEqual(["goal-b-unlanded", "goal-c-landed", "goal-d-completed"]);
+    // Every answer is minted on the goal that owns it, and nowhere else.
+    expect(roster(resolution).filter((entry) => entry.startsWith("repository.publish_resolve@"))).toEqual([
+      "repository.publish_resolve@publish-resolve:decision-of-goal-c-landed",
+      "repository.publish_resolve@publish-resolve:decision-of-goal-d-completed",
+      "repository.publish_resolve@publish-resolve:decision-of-goal-e-cancelled",
+    ]);
   });
 });

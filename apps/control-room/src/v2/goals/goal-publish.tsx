@@ -9,7 +9,7 @@ import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import { writeFailedSaid } from "../outcome-words.js";
 import type { OfferOutcome } from "../approvals/offer-wire.js";
-import type { PublishPort } from "./publish-port.js";
+import type { PublishPort, PublishResolution } from "./publish-port.js";
 import type { PublicationApproval } from "../../live/live-publication-candidate.js";
 
 /**
@@ -38,6 +38,18 @@ export function publishOffer(frame: SurfaceFrame | null, goalId: string): Record
   if (frame === null || frame.outcome !== "SURFACE") return null;
   const offer = frame.offers.find((row) =>
     row["commandKind"] === "repository.publish" && row["targetAggregateId"] === `publish:${goalId}`);
+  return offer ?? null;
+}
+
+/**
+ * The daemon's repository.publish_resolve offer for the publish this card shows as UNKNOWN. It is
+ * keyed on that DECISION, and the target is spelled here as the daemon mints it at the publish rung
+ * of affordance-planning-offers.ts. Edit both together.
+ */
+export function resolveOffer(frame: SurfaceFrame | null, decisionId: string): Record<string, unknown> | null {
+  if (frame === null || frame.outcome !== "SURFACE") return null;
+  const offer = frame.offers.find((row) =>
+    row["commandKind"] === "repository.publish_resolve" && row["targetAggregateId"] === `publish-resolve:${decisionId}`);
   return offer ?? null;
 }
 
@@ -75,6 +87,26 @@ export function publishLine(publish: RunGoalPublishView | null): string {
   return `Publish refused ${MIDDOT} ${code} ${MIDDOT} ${REFUSAL_INSTRUCTIONS[code] ?? "decide again to retry"}`;
 }
 
+/** The push outcome the publisher journaled, as the reason an unresolved publish gives. */
+const REASON_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  ACCEPTED: "git accepted the push",
+  INDETERMINATE: "git's answer to the push was lost",
+  REJECTED: "git refused the push",
+  UNRECORDED: "no record of how the push ended",
+});
+
+/**
+ * What the publisher last saw for a PENDING or UNKNOWN publish: where the remote branch is against
+ * where it should be, and why. Null when there is no observation, or once the publish resolved.
+ */
+export function observationLine(publish: RunGoalPublishView | null): string | null {
+  const seen = publish?.observation ?? null;
+  if (publish === null || seen === null || (publish.outcome !== "PENDING" && publish.outcome !== "UNKNOWN")) return null;
+  const branch = publish.branch ?? "the approved branch";
+  const where = seen.observedSha === null ? `${branch} does not exist` : `${branch} is at ${seen.observedSha.slice(0, 10)}`;
+  return `On the remote, ${where}; expected ${seen.expectedSha.slice(0, 10)} ${MIDDOT} ${REASON_WORDS[seen.reason] ?? seen.reason}`;
+}
+
 interface LandedCommit { readonly nodeKey: string; readonly sha: string }
 
 /** The commits this publish would push, as the runs read landed them. */
@@ -90,6 +122,49 @@ function landedWords(commits: readonly LandedCommit[]): string {
   return `${count} node${commits.length === 1 ? "" : "s"} landed as local commits on the workspace branch.`;
 }
 
+const RESOLUTIONS: readonly (readonly [PublishResolution, string])[] = [
+  ["NOT_TRANSMITTED", "The remote does not have this commit; allow a new publish"],
+  ["ABANDON", "Give up on this publish"],
+];
+
+/**
+ * The way out of a publish stuck UNKNOWN. It sits beside the observation it decides on, because the
+ * OPERATOR, not the daemon, is asserting what the remote holds. The daemon fences the kind to the
+ * operator and keeps it off every seat's roster. Renders nothing until the daemon offers it.
+ */
+function PublishResolve({ decisionId, frame, port }: {
+  readonly decisionId: string; readonly frame: SurfaceFrame | null; readonly port: PublishPort;
+}): JSX.Element | null {
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<OfferOutcome | null>(null);
+  const offer = resolveOffer(frame, decisionId);
+  if (offer === null) return null;
+  const resolve = (resolution: PublishResolution): void => {
+    setBusy(true); setAnswer(null);
+    void port.resolve(offer, decisionId, resolution).then((outcome) => { setAnswer(outcome); setBusy(false); }, () => {
+      setAnswer({ code: "PUBLISH_RESOLVE_DISPATCH_FAILED", layer: "CONTROL_ROOM_PUBLISH", ok: false }); setBusy(false);
+    });
+  };
+  return (
+    <div className="cr2-needs-action" data-testid="cr.publish.resolve">
+      {RESOLUTIONS.map(([resolution, words]) => (
+        <ActionButton disabled={busy || answer?.ok === true} key={resolution} onClick={(): void => { resolve(resolution); }}
+          testId={`cr.publish.resolve.${resolution}`} variant="secondary">{words}</ActionButton>
+      ))}
+      {answer === null ? null : answer.ok ? (
+        <p aria-live="polite" className="cr2-needs-note" data-testid="cr.publish.resolve.answer" role="status">
+          Recorded. The publisher lets go of the repository on its next pass; this card then says how it ended.
+        </p>
+      ) : (
+        <>
+          <OutcomeNote code={answer.code} layer={answer.layer} said={writeFailedSaid()} testId="cr.publish.resolve.answer" />
+          {answer.detail === undefined ? null : <p className="cr2-approve-mono" data-testid="cr.publish.resolve.detail">{answer.detail}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishProps): JSX.Element | null {
   const [typed, setTyped] = useState("");
   const [changing, setChanging] = useState(false);
@@ -100,6 +175,7 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
   const publish = goal?.publish ?? null;
   const commits = landedCommits(goal);
   const bound = boundRemoteUrl(remote);
+  const observed = observationLine(publish);
   // Nothing landed means no offer and no receipt: the card is not a thing on this screen at all.
   if (offer === null && publish === null) return null;
   // ALSO binding while something has been typed. The bound remote arrives from a POLL, so it can
@@ -143,6 +219,8 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
         </ul>
       )}
       <p className="cr2-needs-detail" data-testid="cr.publish.state">{publishLine(publish)}</p>
+      {observed === null ? null : <p className="cr2-needs-detail" data-testid="cr.publish.observed">{observed}</p>}
+      {publish?.outcome !== "UNKNOWN" || port === null ? null : <PublishResolve decisionId={publish.decisionId} frame={frame} port={port} />}
       {publish?.url === null || publish === null ? null : (
         <a className="cr2-link" data-testid="cr.publish.link" href={publish.url} rel="noreferrer" target="_blank">{publish.url}</a>
       )}

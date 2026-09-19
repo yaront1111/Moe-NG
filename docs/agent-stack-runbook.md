@@ -873,23 +873,27 @@ closing a goal is a person's decision; capped by
 `MOE_WRAPPER_MAX_AGENTS`, default 2)
 it opens a scoped session, claims the item under the AGENT'S credential (the
 claim's expiry is also the reap horizon), and spawns
-`claude -p --setting-sources "" --disable-slash-commands --no-session-persistence
---strict-mcp-config --mcp-config <per-agent> ...` with the mission over stdin. Chain agents get MCP tools only;
+`claude -p --output-format stream-json --verbose --include-partial-messages
+--setting-sources "" --disable-slash-commands --no-session-persistence
+--strict-mcp-config --mcp-config <per-agent> ...` with the mission over stdin. The
+wrapper console shows the seat's report (the `result` text), not its events. Chain agents get MCP tools only;
 code-node agents also get
 Edit/Write/Read/Glob/Grep/Bash and run in their workspace. Knobs:
 `MOE_WRAPPER_ONCE=1`, `MOE_WRAPPER_INTERVAL_MS` (15000), `MOE_AGENT_COMMAND`
 (default `claude`), `MOE_NODE_LANDING` (git landing below; default on),
-`MOE_AGENT_SILENCE_MS` (default 20 min: a seat with no output, no tool child and
-flat CPU for this long is killed as hung — the seat prints nothing until it
-finishes, so the wrapper probes its process tree once a minute instead), and
+`MOE_AGENT_SILENCE_MS` (default 20 min: a claude seat is killed after a whole
+window of observed ticks with no event and no tool child, a codex seat after no
+output, no tool child and no CPU growth; the wrapper probes each seat's process
+tree once a minute for its tool children and CPU), and
 `MOE_AGENT_TIMEOUT_MS` (default 2 h: the absolute cap, killed whatever it is
 doing; the bearer TTL is derived from it). The kill line names which limit fired
 (`killing: silent 20m0s (no output, no tool child, cpu unchanged since …)` vs
 `killing: absolute cap 2h0m reached (last activity: 1 tool child alive at …)`).
 If the probe itself is broken (PowerShell timing out, `ps` missing) the wrapper
-grants no liveness for it and prints, once per seat and at WARN on stderr,
-`liveness probe failed: <reason>` on the first failed tick; every later notice
-and the kill line carry `tree unobserved: <reason>`. A pass that staffs nothing says so
+counts no silence while it is blind and only the cap ends the seat; it prints,
+once per seat and at WARN on stderr, `liveness probe failed: <reason>` on the
+first failed tick; every later notice carries `tree unobserved: <reason>`. A
+silence kill line never does. A pass that staffs nothing says so
 (`[wrapper] nothing to staff (surface SURFACE, active N)`). The per-agent MCP
 config file lives in a wrapper-owned temp directory, is removed when that
 agent exits, and the directory goes when the wrapper process does. The wrapper
