@@ -402,8 +402,9 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       projectId: config.projectId,
       // The Publish card's OWN read, so the resolve is offered exactly while the card says UNKNOWN
       // and is keyed on the decision the card names. Asked only for a goal the publish rung reaches.
+      // UNKNOWN is never during the publish's own in-flight window (intent journaled, no receipt).
       unknownPublishDecision: (goalId) => {
-        const publish = readRunGoalPublication(config.store, config.projectId, publications.get(goalId));
+        const publish = readRunGoalPublication(config.store, config.projectId, publications.get(goalId), Date.parse(now));
         return publish?.outcome === "UNKNOWN" ? publish.decisionId : null;
       },
     });
