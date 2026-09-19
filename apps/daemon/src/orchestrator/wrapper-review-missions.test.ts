@@ -1,12 +1,13 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { closeStores, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { verifyStoredPackageItems } from "../review/review-package-restore.js";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
+import { NODE_TREES_DIRECTORY, ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
 import { MARKER, OPERATOR, reviewWorld } from "./wrapper-review-test-fixtures.js";
-import { withLatestVerifierFailure } from "./wrapper-review-missions.js";
+import { createReviewAwareNodeMissions, withLatestVerifierFailure } from "./wrapper-review-missions.js";
 
 /**
  * Every arm here builds a REAL durable world, and the heaviest takes about 2.1 s on an idle
@@ -32,6 +33,7 @@ async function failedWorld() {
 }
 afterEach(async () => {
   for (const w of worlds) await w.finishSeat();
+  forgetNodeTrees();
   closeStores();
   for (const w of worlds.splice(0)) rmSync(w.workspace, { recursive: true, force: true });
 });
@@ -62,6 +64,21 @@ it("delivers a real verifier failure to the next coding seat, then accepts a cor
   expect(w.runs()).toBe(2);
   expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).accepted).toBeDefined();
   expect(readFileSync(join(w.workspace, "app.mjs"), "utf8")).toContain("42");
+});
+
+it("briefs a node into the tree it already has with MOE_NODE_TREES off, and makes none for one without", () => {
+  // UnAI 2026-09-19: a restart without the knob briefed a node into the shared checkout while its
+  // changed files sat in its tree, so the lander recorded NOTHING_TO_COMMIT for accepted work.
+  const w = world();
+  const off = createReviewAwareNodeMissions({ workspace: w.workspace, testCommand: "node check.mjs",
+    nodeTrees: false, log: () => undefined, projectId: PROJECT_ID, operatorPrincipalId: OPERATOR, store: () => w.store });
+  expect(off.nodeMission(w.nodeRef)?.workspace).toBe(w.workspace);
+  expect(existsSync(join(w.workspace, NODE_TREES_DIRECTORY))).toBe(false);
+  const tree = ensureNodeTree({ nodeRef: w.nodeRef, projectRoot: w.workspace });
+  if (tree === null) throw new Error("fixture tree was not made");
+  expect(off.nodeMission(w.nodeRef)).toEqual({ ...w.compiled.mission(w.nodeRef), workspace: tree.path });
+  // The fixture's own resolver never names the knob at all: unset is off.
+  expect(w.missions.nodeMission(w.nodeRef)?.workspace).toBe(tree.path);
 });
 
 it("keeps another node's valid mission free of this node's diagnostic without writing state", async () => {

@@ -20,6 +20,13 @@ import { NODE_TREES_DIRECTORY, ensureNodeTree, nodeTreeName } from "./node-workt
  * longer look at, so turning this on mid-flight costs a node nothing: it finishes where it
  * started, and takes its own tree the next time it is staffed.
  *
+ * Turning it OFF mid-flight costs a node nothing either: MOE_NODE_TREES decides only whether NEW
+ * trees are made. A node whose tree is already on disk is still briefed into it and its review is
+ * still captured from it (`keepNodeTreeMissions`, `nodeWorkspaceOf`), whatever the knob says.
+ * Measured on UnAI 2026-09-19: a restart without the knob moved a node back to the shared checkout
+ * while its 34 changed files sat in .moe-next/trees/<node>. The lander looked at the shared
+ * checkout, recorded NOTHING_TO_COMMIT, and the accepted work never landed.
+ *
  * A tree that cannot be made leaves the mission exactly as it was, on the project's own
  * workspace: that is the single-tree behaviour that shipped before, and the node still runs. Each
  * reason is said once per node rather than on every pass.
@@ -33,6 +40,16 @@ const inspectHolder: ProjectHolder = (projectRoot) => {
   } catch { return null; }
 };
 
+/** The node's own tree when one is already on disk, else null. It looks; it never makes one. */
+export function ownNodeTree(projectRoot: string, nodeRef: string): string | null {
+  const name = nodeTreeName(nodeRef);
+  if (name === null) return null;
+  try {
+    const tree = join(realpathSync.native(resolve(projectRoot)), NODE_TREES_DIRECTORY, name);
+    return existsSync(join(tree, ".git")) ? tree : null;
+  } catch { return null; }
+}
+
 /**
  * The workspace `createNodeTreeMissions` briefs this node into, answered WITHOUT making anything:
  * the checkout it already holds, else its own tree when that tree exists, else the project. The
@@ -40,12 +57,16 @@ const inspectHolder: ProjectHolder = (projectRoot) => {
  */
 export function nodeWorkspaceOf(projectRoot: string, nodeRef: string, holder: ProjectHolder = inspectHolder): string {
   if (holder(projectRoot) === nodeRef) return projectRoot;
-  const name = nodeTreeName(nodeRef);
-  if (name === null) return projectRoot;
-  try {
-    const tree = join(realpathSync.native(resolve(projectRoot)), NODE_TREES_DIRECTORY, name);
-    return existsSync(join(tree, ".git")) ? tree : projectRoot;
-  } catch { return projectRoot; }
+  return ownNodeTree(projectRoot, nodeRef) ?? projectRoot;
+}
+
+/**
+ * The knob-OFF resolver: the same answer as `nodeWorkspaceOf`, so a node keeps the tree it already
+ * has and no node is given a new one. It creates nothing and has nothing to report.
+ */
+export function keepNodeTreeMissions(holder: ProjectHolder = inspectHolder) {
+  return (brief: NodeMission | null, nodeRef: string): NodeMission | null => brief === null ? null
+    : Object.freeze({ ...brief, workspace: nodeWorkspaceOf(brief.workspace, nodeRef, holder) });
 }
 
 export function createNodeTreeMissions(log: (line: string) => void, holder: ProjectHolder = inspectHolder) {

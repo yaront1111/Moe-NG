@@ -12,7 +12,7 @@ import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
 import { withAttributedFindings } from "./wrapper-attributed-findings.js";
 import { withIntegrationConflict } from "./wrapper-integration-conflict.js";
-import { createNodeTreeMissions } from "./wrapper-node-trees.js";
+import { createNodeTreeMissions, keepNodeTreeMissions } from "./wrapper-node-trees.js";
 
 export interface WrapperReviewContext {
   readonly operatorPrincipalId: string;
@@ -113,7 +113,9 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
     } });
   // The node's workspace is chosen once, here, and everything downstream follows it: the
   // reservation's identity, the baseline, the verifier, the review binding and the landing commit.
-  const intoTree = config.nodeTrees === true ? createNodeTreeMissions(config.log) : null;
+  // The knob decides only whether NEW trees are made. A tree already on disk is kept either way:
+  // on UnAI 2026-09-19 a restart without the knob moved a node off the tree that held its work.
+  const intoTree = config.nodeTrees === true ? createNodeTreeMissions(config.log) : keepNodeTreeMissions();
   return Object.freeze({ listNodes: source.listNodes,
     reviewContinuation: (nodeRef: string): ReviewContinuationApproval | null => {
       try {
@@ -125,7 +127,7 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
     },
     nodeMission: (nodeRef: string): NodeMission | null => {
       const brief = source.nodeMission(nodeRef);
-      const placed = intoTree === null ? brief : intoTree(brief, nodeRef);
+      const placed = intoTree(brief, nodeRef);
       // A merge the integrator could not take is the owning node's next piece of work.
       return withIntegrationConflict(config, nodeRef,
         withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed)));
