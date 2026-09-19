@@ -102,7 +102,7 @@
     }
   ],
   "planRevision": 13,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -122,7 +122,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:14:42.516Z",
-  "updatedAt": "2026-09-19T02:48:08.142Z",
+  "updatedAt": "2026-09-19T03:02:45.214Z",
   "dependsOn": [
     "task-a47babf8291943efb08258a0c1f6cc78",
     "task-52682237c158403b83fcf54b3b0bb2bd"
@@ -131,7 +131,9 @@
     "firstClaimAt": "2026-09-18T19:40:12.093Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-19T03:02:45.214Z",
+    "wallClockMs": 26553121
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -151,7 +153,8 @@
   },
   "planApprovedAt": "2026-09-18T19:42:22.075Z",
   "contextFetchedBy": [
-    "worker-69773bc1"
+    "worker-69773bc1",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-19T02:16:09.971Z",
   "reviewStartedAt": "2026-09-19T02:48:08.140Z",
@@ -169,7 +172,55 @@
     "apps/daemon/src/http/affordance-read.ts",
     "apps/control-room/src/v2/goals/goal-publish.tsx",
     "apps/control-room/src/v2/goals/goal-publish.test.tsx",
-    "apps/control-room/src/v2/goals/publish-port.ts"
+    "apps/control-room/src/v2/goals/publish-port.ts",
+    ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+    ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json"
   ],
-  "completionSummary": "The repository.publish_resolve offer and the Publish card's control are done. This is task-21be6e90's DoD 2, operator half.\n\nDAEMON\n- affordance-planning-offers.ts adds the kind to the closed union and a lazy fact, unknownPublishDecision(goalId). It is asked only when the goal is landed, or CANCELLED (no landing walk). It mints repository.publish_resolve@publish-resolve:<decisionId>.\n- CANCELLED is offered only the resolve. The publisher ignores goal lifecycle, so a cancelled goal's UNKNOWN publish would otherwise strand the project's hold.\n- affordance-read.ts answers the fact with the card's own readRunGoalPublication: the decisionId only while the outcome is UNKNOWN. The publish ledger is still walked once per poll.\n\nCARD\n- goal-publish.tsx adds a resolveOffer matcher, keyed on the same target, and two choices beside the observation, shown only for UNKNOWN with an offer: NOT_TRANSMITTED and ABANDON.\n- A refusal shows its code @ layer and the detail. The buttons lock after a recorded resolve.\n- publish-port.ts resolve() spends the offer verbatim with exactly {decisionId, resolution}.\n\nDoD\n1. Real surface: the roster is PENDING plus exactly publish_resolve@publish-resolve:<card decisionId>. The target is not the goal or publish:<goal>. Two survival arms keep the goal intact: one at the offered target, one through the served entry.\n2. The set is exact in both directions: the offer is absent for PENDING, PUSHED and REFUSED (each state asserted). No step carries the kind, and compilerSteps is [].\n3. The fact is lazy: 6-goal arm, asked=[c,d,e], walked=[b,c,d].\n4. The card arms check the payload toStrictEqual, the refusal code@layer and the detail.\n5. Gates are in the verification.\n\nDRILLS (in memory, disk SHA unchanged): daemon T1 (publish:<goal>) is red at :1650 and T2 (goal id) at :1647; L1, L2 and F1 are also red. Card mutants C1 to C5 are all red.\n\nPLAN DEVIATION (step 1): the async entry never commits at the envelope target. A served-entry arm cannot see a retarge"
+  "completionSummary": "The repository.publish_resolve offer and the Publish card's control are done. This is task-21be6e90's DoD 2, operator half.\n\nDAEMON\n- affordance-planning-offers.ts adds the kind to the closed union and a lazy fact, unknownPublishDecision(goalId). It is asked only when the goal is landed, or CANCELLED (no landing walk). It mints repository.publish_resolve@publish-resolve:<decisionId>.\n- CANCELLED is offered only the resolve. The publisher ignores goal lifecycle, so a cancelled goal's UNKNOWN publish would otherwise strand the project's hold.\n- affordance-read.ts answers the fact with the card's own readRunGoalPublication: the decisionId only while the outcome is UNKNOWN. The publish ledger is still walked once per poll.\n\nCARD\n- goal-publish.tsx adds a resolveOffer matcher, keyed on the same target, and two choices beside the observation, shown only for UNKNOWN with an offer: NOT_TRANSMITTED and ABANDON.\n- A refusal shows its code @ layer and the detail. The buttons lock after a recorded resolve.\n- publish-port.ts resolve() spends the offer verbatim with exactly {decisionId, resolution}.\n\nDoD\n1. Real surface: the roster is PENDING plus exactly publish_resolve@publish-resolve:<card decisionId>. The target is not the goal or publish:<goal>. Two survival arms keep the goal intact: one at the offered target, one through the served entry.\n2. The set is exact in both directions: the offer is absent for PENDING, PUSHED and REFUSED (each state asserted). No step carries the kind, and compilerSteps is [].\n3. The fact is lazy: 6-goal arm, asked=[c,d,e], walked=[b,c,d].\n4. The card arms check the payload toStrictEqual, the refusal code@layer and the detail.\n5. Gates are in the verification.\n\nDRILLS (in memory, disk SHA unchanged): daemon T1 (publish:<goal>) is red at :1650 and T2 (goal id) at :1647; L1, L2 and F1 are also red. Card mutants C1 to C5 are all red.\n\nPLAN DEVIATION (step 1): the async entry never commits at the envelope target. A served-entry arm cannot see a retarge",
+  "commits": [
+    {
+      "sha": "8b3857f55421a806ab83ff119a6775e436cf63c3",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-19T02:15:56Z",
+      "paths": [
+        ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+        ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json",
+        "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+        "apps/control-room/src/v2/goals/goal-publish.tsx",
+        "apps/control-room/src/v2/goals/publish-port.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-19T02:48:26.561Z",
+      "treeId": "c656f42487c384ed3bcbd1f218c1327a60beaeb0",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/goals/goal-publish.tsx",
+    "apps/control-room/src/v2/goals/publish-port.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/CLAUDE.md"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-69773bc1@2026-09-19T02:15:56Z",
+    "at": "2026-09-19T02:48:26.561Z"
+  },
+  "completedAt": "2026-09-19T03:02:45.214Z",
+  "reviewCompletedAt": "2026-09-19T03:02:45.214Z",
+  "reviewSummary": "APPROVED. Reviewed completion commit 8b3857f5 (pushed). It is an ancestor of HEAD 2835aabd, and the owned paths are byte-identical there; peer e0e3d704 touched census tests only.\n\nGATES, re-run by me:\n- verification cmd: 3 files, 139 passed.\n- src/http/affordance*: 8 files, 164 passed.\n- Blast radius (all affordance-root consumers plus the publish/runs tests): 32 files, 551 passed | 1 skipped.\n- Full daemon suite (under lease, clean apps tree): 766 files, 12662 passed | 22 skipped, exit 0.\n- control-room: 195 files, 2610 passed.\n- pnpm typecheck: 19 Done, 0 errors.\n\nDoD:\n1. Real surface: the roster is PENDING plus exactly publish_resolve@publish-resolve:<card decisionId>. The goal's state is unchanged by value both after a survival commit at the offered target and after a real served-entry resolve.\n2. Set-equality holds both ways. PENDING, PUSHED and REFUSED each assert the card state, then an empty resolve slice. No step or compilerStep carries the kind.\n3. The fact is lazy: readRunGoalPublication over one ledger walk, asked only for landed or CANCELLED goals.\n4. Card arms check the placement, the exact payload, refusal code@layer plus detail, and the dispatch-failure code.\n\nMY IN-MEMORY DRILLS (disk SHA unchanged, configs deleted):\n- T1: survival arm red at :1667. T2: red at :1664.\n- F1: the 3 withhold arms red. L1: lazy arm red. K1: CANCELLED arms red.\n- S1: red at :1580, :952 and :978.\n- C1 to C4: red at the intended arms.\n- Controls: 96/96 and 20/20.\n\nThe control is production-reachable: the async edge has no target refusal, and the client builder exists. The refusal layer matches the contracts map.\n\nCAP: affordance-read.ts was already over cap at 661 lines and is now 669 (+8, minimal). The other files are under 400.\n\nFollow-ups: comment-6bf8b38c."
 }

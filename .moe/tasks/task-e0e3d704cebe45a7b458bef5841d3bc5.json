@@ -111,7 +111,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:47:15.589Z",
-  "updatedAt": "2026-09-19T02:53:19.217Z",
+  "updatedAt": "2026-09-19T02:53:42.916Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:11:11.476Z",
     "plannedStepCount": 5,
@@ -172,7 +172,58 @@
     "apps/daemon/src/daemon-command-registry.test.ts",
     "apps/daemon/src/daemon-v2-command-registry.test.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
-    "apps/daemon/CLAUDE.md"
+    "apps/daemon/CLAUDE.md",
+    ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json"
   ],
-  "completionSummary": "The daemon suite now keeps ONE hand census per fact. daemon-command-vocabulary.test.ts holds ROWS (wired kinds, ordered) and OPERATOR_ONLY, and asserts OPERATOR_ONLY two-way against OPERATOR_PRINCIPAL_KINDS with sorted toEqual, no counts. Every other whole-set site derives from production:\n- allowlist.test: expectedExcluded and all count objects gone; the relation arms are kept.\n- mcp-main and http-host: EXCLUSION_CASES = production, with a >0 guard.\n- human-approver: its hand list is gone.\n- registry.test: OPERATOR_ONLY aliases production; REGISTRATION_ORDER = Object.keys(PAYLOAD_KEYS); sizes became set equality vs ROWS.\n- v2 and store-deps: set equality vs PAYLOAD_KEYS-derived sets.\nPlus one apps/daemon/CLAUDE.md gotcha line, which had said the vocabulary test pins counts.\nDoD1: a git grep census of two operator literals finds only the census, ROWS rows, single-kind arms, and preview-start's HUMAN_ONLY_STEPS census (a different fact).\nDoD2, drill M1 in memory (policy.validate made operator-only and never-delegated): 1 file / 1 test red after, the vocabulary census, \"+ \\\"policy.validate\\\"\". The same mutant on the pre-row test blobs reds 6 files / 8 tests; the no-mutant control is 8/8 green.\nDoD3, drill M2 (escalation.decide dropped): the census is red with \"- \\\"escalation.decide\\\"\". M3 (registry filled out of order) reds the derived order arm.\nDoD4: `pnpm typecheck` 19/19 Done, 0 errors. Full daemon suite under the lease: 766/766 files, 12662 passed | 22 skipped, exit 0, with hashes unchanged across the run.\nDeviations:\n- Deleted the n*2 transport-product pins as tautologies instead of re-forming them.\n- Deleted {delegable,never}, as the plan said. RESIDUAL: a single move between the two production lists is now caught only for publish_resolve. See comment-6a24fa8a.\nDrill details and the per-pin review are in the step-5 note."
+  "completionSummary": "The daemon suite now keeps ONE hand census per fact. daemon-command-vocabulary.test.ts holds ROWS (wired kinds, ordered) and OPERATOR_ONLY, and asserts OPERATOR_ONLY two-way against OPERATOR_PRINCIPAL_KINDS with sorted toEqual, no counts. Every other whole-set site derives from production:\n- allowlist.test: expectedExcluded and all count objects gone; the relation arms are kept.\n- mcp-main and http-host: EXCLUSION_CASES = production, with a >0 guard.\n- human-approver: its hand list is gone.\n- registry.test: OPERATOR_ONLY aliases production; REGISTRATION_ORDER = Object.keys(PAYLOAD_KEYS); sizes became set equality vs ROWS.\n- v2 and store-deps: set equality vs PAYLOAD_KEYS-derived sets.\nPlus one apps/daemon/CLAUDE.md gotcha line, which had said the vocabulary test pins counts.\nDoD1: a git grep census of two operator literals finds only the census, ROWS rows, single-kind arms, and preview-start's HUMAN_ONLY_STEPS census (a different fact).\nDoD2, drill M1 in memory (policy.validate made operator-only and never-delegated): 1 file / 1 test red after, the vocabulary census, \"+ \\\"policy.validate\\\"\". The same mutant on the pre-row test blobs reds 6 files / 8 tests; the no-mutant control is 8/8 green.\nDoD3, drill M2 (escalation.decide dropped): the census is red with \"- \\\"escalation.decide\\\"\". M3 (registry filled out of order) reds the derived order arm.\nDoD4: `pnpm typecheck` 19/19 Done, 0 errors. Full daemon suite under the lease: 766/766 files, 12662 passed | 22 skipped, exit 0, with hashes unchanged across the run.\nDeviations:\n- Deleted the n*2 transport-product pins as tautologies instead of re-forming them.\n- Deleted {delegable,never}, as the plan said. RESIDUAL: a single move between the two production lists is now caught only for publish_resolve. See comment-6a24fa8a.\nDrill details and the per-pin review are in the step-5 note.",
+  "commits": [
+    {
+      "sha": "2835aabd607bea61ef6dc152ed21057559c5fb11",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-19T02:16:14Z",
+      "paths": [
+        ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json",
+        "apps/daemon/CLAUDE.md",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-19T02:53:42.916Z",
+      "treeId": "8f7f005b37fab2283545d86f57559d573ba085f8",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-21be6e9055984413a651ce6ee331e2c8"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/CLAUDE.md",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-952c612b@2026-09-19T02:16:14Z",
+    "at": "2026-09-19T02:53:42.916Z"
+  }
 }
