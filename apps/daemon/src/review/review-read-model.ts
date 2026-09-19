@@ -166,8 +166,18 @@ function fold(
   if (round === undefined) acc.unreadable = true;
   else {
     const failureSource = isPlainJsonObject(result) ? result["verifierFailureSource"] : undefined;
-    if (failureSource !== undefined && (!storedVerifierFailureSourceMatches(failureSource, acc.rounds.at(-1))
-      || round.aggregateVersion !== priorVersion + 1 || round.routing.route === "ACCEPT")) acc.unreadable = true;
+    const hostFailure = failureSource !== undefined && storedVerifierFailureSourceMatches(failureSource, acc.rounds.at(-1))
+      && round.aggregateVersion === priorVersion + 1 && round.routing.route !== "ACCEPT";
+    if (failureSource !== undefined && !hostFailure) acc.unreadable = true;
+    // A host-recorded failed round may take back the one acceptance it names: accepted work that
+    // then failed to deliver (UnAI 2026-09-19) goes back to a seat as an ordinary charged round,
+    // so no reader meets a new state. Any other shape fails closed and un-accepts nothing.
+    const withdrawn = isPlainJsonObject(result) ? result["withdrawsAcceptance"] : undefined;
+    if (withdrawn !== undefined) {
+      if (hostFailure && typeof withdrawn === "string" && acc.accepted?.verifierReceiptId === withdrawn) {
+        acc.accepted = undefined;
+      } else acc.unreadable = true;
+    }
     const raw = isPlainJsonObject(result) ? result["continuation"] : undefined;
     const use = raw === undefined ? undefined
       : readReviewContinuationUse(raw, acc.continuation, acc.rounds.at(-1), round);
