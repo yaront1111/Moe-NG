@@ -22,7 +22,7 @@ import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
 import { landingVerificationClass } from "./node-lander-verification.js";
 import { createNodeIntegration } from "./node-integration.js";
-import { createDeliveryWithdrawal } from "./node-delivery-withdrawal.js";
+import { createDeliveryWithdrawal, ownsDirtIn } from "./node-delivery-withdrawal.js";
 import { landedNodeBranches } from "./node-landed-branches.js";
 import { createNodePublisher, pendingPublication } from "./node-publisher.js";
 import type { ReleasePublisher } from "../release/release-decide-service.js";
@@ -161,13 +161,19 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       if (dirtyMetadata.length > 0 && await checkpointMetadata(nodeRef, brief.workspace, dirtyMetadata)) {
         observed = await git.observe(brief.workspace);
       }
-      if (!observed.ok || observed.observation.entries.length !== 0) {
+      // GATE B HAS ONE EXIT: a node whose refused landing was withdrawn, in the workspace that still
+      // holds its own accepted, uncommitted work (`ownsDirtIn`). Refusing it admission over that
+      // work would strand it for good: nobody else may commit it and no seat could reach it (UnAI
+      // 2026-09-19). Every other node on the same dirt is refused exactly as before.
+      const dirty = !observed.ok || observed.observation.entries.length !== 0;
+      const ownDirt = dirty && observed.ok && ownsDirtIn(store, projectId, nodeRef, brief.workspace);
+      if (dirty && !ownDirt) {
         config.log(observed.ok
           ? `[lander] ${nodeRef}: BASELINE_WORKSPACE_DIRTY (${observed.observation.entries.length} changed paths). Review git status --short and checkpoint existing work before execution; Moe rechecks automatically.`
           : `[lander] ${nodeRef}: ${observed.code} (${observed.detail}); Moe rechecks repository admission automatically.`);
         return null;
       }
-      const report = await landerFor(nodeRef, root, null).baseline(nodeRef);
+      const report = await landerFor(nodeRef, root, null).baseline(nodeRef, ownDirt);
       config.log(`[lander] ${report.nodeRef}: ${report.outcome} (${report.detail})`);
       return report.baselineId ?? null;
     },

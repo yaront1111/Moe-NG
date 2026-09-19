@@ -28,7 +28,7 @@ const BRANCH_REF_PREFIX = "refs/heads/";
  * NOTHING_TO_COMMIT with its branch never merged.
  */
 export function adoptedSeatCommit(
-  git: IntegrationGit, projectRoot: string | null, binding: VerifiedWorkspaceBinding, message: string,
+  git: IntegrationGit, projectRoot: string | null, binding: Pick<VerifiedWorkspaceBinding, "branchRef" | "headSha">, message: string,
 ): LandingCommit | null {
   const sha = binding.headSha;
   if (projectRoot === null || sha === null || !binding.branchRef.startsWith(`${BRANCH_REF_PREFIX}${NODE_BRANCH_PREFIX}`)) return null;

@@ -212,6 +212,22 @@ describe("createNodeLander", () => {
     ]);
   });
 
+  // UnAI 2026-09-19: a node returned to a seat after a refused landing finds its OWN accepted work
+  // dirty. Recorded as the baseline it would be called operator dirt and only part of what the
+  // verifier binds would be delivered, which the strict port refuses after journaling an intent.
+  it("records an empty baseline over a dirty tree when the dirt is the node's own undelivered work", async () => {
+    const own = [{ blobId: BLOB_A, path: "src/accepted.ts" }, { blobId: BLOB_B, path: "src/accepted.test.ts" }];
+    const git = fakeGit(observation(own));
+    const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT });
+    const report = await made.baseline(NODE, true);
+    expect(report).toEqual({ baselineId: expect.stringMatching(/^[a-f0-9]{64}$/u), nodeRef: NODE, outcome: "BASELINE_RECORDED",
+      detail: "2 dirty path(s) before the seat, all this node's own undelivered work and none recorded" });
+    expect(readLatestLandingBaseline(store, PROJECT_ID, NODE)?.entries).toEqual([]);
+    // So the next landing delivers every one of them.
+    expect(await made.landOnce()).toEqual([expect.objectContaining({ outcome: "COMMITTED" })]);
+    expect(git.commits[0]?.paths).toEqual(["src/accepted.ts", "src/accepted.test.ts"]);
+  });
+
   it("commits exactly the seat's paths on acceptance and records the landing once", async () => {
     const git = fakeGit(observation([{ blobId: BLOB_A, path: "operator-dirty.ts" }]));
     const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT });

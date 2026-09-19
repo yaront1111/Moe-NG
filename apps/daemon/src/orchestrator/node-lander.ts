@@ -140,14 +140,24 @@ export function createNodeLander(config: NodeLanderConfig) {
       ? null : { verifierReceiptId: ledger.accepted.verifierReceiptId };
   });
 
-  /** Record what is dirty NOW, before the seat for this node starts working. */
-  const baseline = async (nodeRef: string): Promise<LanderReport> => {
+  /**
+   * Record what is dirty NOW, before the seat for this node starts working.
+   *
+   * `ownDirt` is for a node returned to a seat after its landing was refused
+   * (node-delivery-withdrawal.ts): what is dirty is that node's own accepted, never committed work,
+   * so NONE of it is recorded and the next landing delivers all of it. Recording the observed
+   * entries instead would call the work operator dirt: the landing would deliver a subset of what
+   * the verifier bound, and the strict port refuses that VERIFIED_WORKSPACE_PATHS_MISMATCH after
+   * the intent is journaled, which blocks the node (UnAI 2026-09-19). Only the caller can know
+   * whose dirt it is, so it says so; the default is unchanged.
+   */
+  const baseline = async (nodeRef: string, ownDirt = false): Promise<LanderReport> => {
     const brief = config.nodeMission(nodeRef);
     if (brief === null) return { detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" };
     const observed = await config.git.observe(brief.workspace);
     if (!observed.ok) return { detail: observed.detail, nodeRef, outcome: observed.code };
     const recorded = recordLandingBaseline(config.store, {
-      entries: observed.observation.entries,
+      entries: ownDirt ? [] : observed.observation.entries,
       observedAt: clock(),
       projectId: config.projectId,
       subjectRef: nodeRef,
@@ -156,7 +166,7 @@ export function createNodeLander(config: NodeLanderConfig) {
     if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
     return {
       baselineId: recorded.baselineId,
-      detail: `${String(observed.observation.entries.length)} dirty path(s) before the seat`,
+      detail: `${String(observed.observation.entries.length)} dirty path(s) before the seat${ownDirt ? ", all this node's own undelivered work and none recorded" : ""}`,
       nodeRef,
       outcome: "BASELINE_RECORDED",
     };

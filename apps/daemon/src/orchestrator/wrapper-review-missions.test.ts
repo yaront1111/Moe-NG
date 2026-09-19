@@ -87,6 +87,30 @@ it("briefs a node into the tree it already has with MOE_NODE_TREES off, and make
   expect(w.missions.nodeMission(w.nodeRef)?.workspace).toBe(tree.path);
 });
 
+// UnAI 2026-09-19: a landing refused over an edited .moe-next/start.ps1 left the accepted files
+// uncommitted in the project's checkout. The node no longer held that checkout, so its next mission
+// moved to a tree of its own that held none of them. NOTHING_TO_COMMIT pins nothing: that landing
+// looked in the wrong place, and the node's own tree is where its work is.
+it.each([["TRACKED_RUNTIME_METADATA_DIRTY", "the refused landing's workspace"], ["LANDING_VERIFIED_WORKSPACE_CHANGED", "the refused landing's workspace"],
+  ["NOTHING_TO_COMMIT", "its own tree"]])("after a landing refused %s, briefs the node into %s", async (code, where) => {
+  const w = world();
+  expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+  writeFileSync(join(w.workspace, "app.mjs"), "export const answer = 42;\n");
+  expect(await w.submitSeat(w.requests[0]!)).toMatchObject({ ok: true });
+  await w.finishSeat();
+  expect(await w.verifier.verifyOnce()).toMatchObject([{ outcome: "ACCEPTED" }]);
+  const tree = ensureNodeTree({ nodeRef: w.nodeRef, projectRoot: w.workspace });
+  if (tree === null) throw new Error("fixture tree was not made");
+  expect(w.missions.nodeMission(w.nodeRef)?.workspace).toBe(tree.path);
+
+  expect(recordLandingReceipt(w.store, { commit: null, decidedAt: new Date().toISOString(), projectId: PROJECT_ID,
+    refusal: { code, detail: "refused for the fixture" }, subjectRef: w.nodeRef,
+    verifierReceiptId: readReviewLedger(w.store, PROJECT_ID, w.nodeRef).accepted!.verifierReceiptId, workspace: w.workspace }).ok).toBe(true);
+
+  expect(w.missions.nodeMission(w.nodeRef)).toEqual({ ...w.compiled.mission(w.nodeRef),
+    workspace: where === "its own tree" ? tree.path : w.workspace });
+});
+
 // UnAI 2026-09-19: a recorded merge conflict reached no seat. It now arrives as the node's latest
 // verifier failure. The payload keeps the TAIL of the text and this brief keeps the HEAD, so both
 // the integrator's worst record (64 paths) and an ordinary one must arrive with both ends whole.
