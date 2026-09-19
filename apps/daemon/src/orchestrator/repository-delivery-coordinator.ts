@@ -199,18 +199,31 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
    * A BLOCKED hold resumes on its own once every runtime that ran a process for it is gone
    * (owner decision 2026-09-16): a gone broker closed its Job, which killed every process in it.
    * Only review states come back; a landing whose Git effect is unknown stays for a human.
+   * Returns the hold when it came back RESERVED, so the same pass can give an idle one back.
    */
-  const resumeGone = (handle: RepositoryExecutionHandle): void => {
-    if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) return;
+  const resumeGone = (handle: RepositoryExecutionHandle): RepositoryExecutionHandle | null => {
+    if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) return null;
     const facts = config.facts(handle.owner.nodeRef, handle);
-    if (idleFacts(facts)) change(handle, { phase: "RESERVED", sessionId: null, pid: null });
-    else if (facts === "SUBMITTED") change(handle, { phase: "VERIFYING" });
+    if (idleFacts(facts)) {
+      const next = change(handle, { phase: "RESERVED", sessionId: null, pid: null });
+      return next.ok ? next.handle : null;
+    }
+    if (facts === "SUBMITTED") change(handle, { phase: "VERIFYING" });
+    return null;
   };
 
   const advanceOne = async (initial: RepositoryExecutionHandle): Promise<void> => {
     let handle = initial;
     const nodeRef = handle.owner.nodeRef;
-    if (handle.reservation.phase === "BLOCKED") { resumeGone(handle); return; }
+    if (handle.reservation.phase === "BLOCKED") {
+      // In the SAME pass, not the next one. UnAI 2026-09-19: a restart brought a dead seat's hold
+      // back RESERVED over a clean checkout; staffing ran before the next pass could yield it, so
+      // the holder was staffed right there, on a project branch that lacked its dependencies, and
+      // the integrator (which needs that checkout) could merge none of three landed branches.
+      const resumed = resumeGone(handle);
+      if (resumed !== null) await yieldIdle(resumed);
+      return;
+    }
     if (handle.reservation.phase === "RESERVED") { await yieldIdle(handle); return; }
     if (handle.reservation.phase === "EXECUTING") {
       const closed = exits.get(handle.owner.ownershipToken);

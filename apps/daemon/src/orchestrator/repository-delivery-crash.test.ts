@@ -36,7 +36,8 @@ function request(workspace: string): SpawnRequest {
     mission: "implement", sessionId: "session-node-a", workItemId: "node.deliver@node-a", workspace };
 }
 /** A controller A (pid 101, broker 501) or B (pid 102, broker 502), with its own liveness view. */
-function controller(workspace: string, controllerId: string, controllerPid: number, containment?: RepositoryContainmentLedger) {
+function controller(workspace: string, controllerId: string, controllerPid: number, containment?: RepositoryContainmentLedger,
+  clean?: (root: string) => Promise<boolean>) {
   const port = createRepositoryExecutionPort();
   const releases: RepositoryExecutionReleaseReason[] = [];
   const recording: RepositoryExecutionPort = { ...port, release(root, owner, revision, reason, id) {
@@ -49,6 +50,7 @@ function controller(workspace: string, controllerId: string, controllerPid: numb
   const land = vi.fn(async () => { facts = "LANDED"; });
   const coordinator = createRepositoryDeliveryCoordinator({ baseline: async () => "baseline-original",
     controller: { controllerId, controllerPid }, ...(containment === undefined ? {} : { containment }),
+    ...(clean === undefined ? {} : { clean }),
     facts: () => facts, isProcessAlive: (pid: number) => live.has(pid), land, port: recording, projectId: "project-a",
     retired: () => retired, storeId: "store-a", verify, workspaces: () => [workspace] });
   let finish!: () => void;
@@ -127,6 +129,43 @@ describe("a hold whose runtime was hard-stopped", () => {
     await b.coordinator.advance();
 
     expect(b.port.inspect(workspace)).toMatchObject({ reservation: { phase: "BLOCKED", controllerId: "controller-b" } });
+  }, 120_000);
+
+  /**
+   * UnAI 2026-09-19: a restart brought a dead seat's hold back RESERVED over a clean checkout, and
+   * staffing ran before the NEXT pass could yield it. The holder was staffed right there, on a
+   * project branch that lacked its dependencies, and the integrator could merge nothing.
+   */
+  it("gives an idle, clean checkout back in the same pass that resumed it", async () => {
+    const { workspace, runtime } = world();
+    const a = controller(workspace, "controller-a", 101, runtime(501));
+    const started = await a.coordinator.start(request(workspace), a.spawn);
+    if (!started.ok) throw new Error(started.code);
+    a.fail(new AgentProcessContainmentError("TREE_KILL_FAILED"));
+    await expect(started.exit).rejects.toThrow();
+
+    const asked: string[] = [];
+    const b = controller(workspace, "controller-b", 102, runtime(502), async (root) => { asked.push(root); return true; });
+    b.live.delete(101); b.live.delete(201); b.live.delete(501); b.retire();
+    expect(b.port.inspect(workspace)).toMatchObject({ reservation: { phase: "BLOCKED" } });
+    await b.coordinator.advance();
+
+    expect(b.releases).toEqual(["YIELDED"]);
+    expect(b.port.inspect(workspace)).toMatchObject({ ok: true, reservation: null });
+    expect(asked).toHaveLength(1);
+
+    // A checkout that still holds work is never given back: the hold stays, RESERVED.
+    const dirty = world();
+    const c = controller(dirty.workspace, "controller-a", 101, dirty.runtime(501));
+    const again = await c.coordinator.start(request(dirty.workspace), c.spawn);
+    if (!again.ok) throw new Error(again.code);
+    c.fail(new AgentProcessContainmentError("TREE_KILL_FAILED"));
+    await expect(again.exit).rejects.toThrow();
+    const d = controller(dirty.workspace, "controller-b", 102, dirty.runtime(502), async () => false);
+    d.live.delete(101); d.live.delete(201); d.live.delete(501); d.retire();
+    await d.coordinator.advance();
+    expect(d.releases).toEqual([]);
+    expect(d.port.inspect(dirty.workspace)).toMatchObject({ reservation: { phase: "RESERVED", sessionId: null } });
   }, 120_000);
 
   it.each([
