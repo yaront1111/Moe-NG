@@ -167,6 +167,12 @@ its own: a caller that injects no dependency provider is refused, never served a
   is left to an approved publish that has not held it yet: `RepositoryDeliveryConfig.publishWaiting`
   (wired to `pendingPublication`) turns deliveries away in `admission` and `start`, because the
   delivery pass runs before the publisher's and won every race (UnAI 2026-09-18).
+- **A trunk workspace publishes a goal branch, never the default.** When the workspace branch
+  is the remote's measured default, or that default has not been measured, `publication-candidate.ts`
+  approves `moe/release/<goalId>` and the publisher pushes that ref, never the default branch
+  itself. Release opens the PR from that head into the measured default. `RELEASE_HEAD_IS_BASE`
+  is the named refusal when a head and base still coincide, as they do for goals published onto
+  the default before this rule.
 
 ## Gotchas
 
