@@ -15,52 +15,94 @@
     {
       "stepId": "step-1",
       "description": "CONFIRM THE PREREQUISITES AND RE-MEASURE, then stop. (a) Confirm task-a47babf8 and task-52682237 are DONE: the resolve service is registered in place of row 3's stub, and `RunGoalPublish` carries `observation` and `decisionId`. (b) Re-confirm the offer union at affordance-planning-offers.ts:128-131, the lazy facts at :45-88, and the publish mint at :241. (c) Confirm `resolvePlanningOffers` fills compiler steps only from COMPILER kinds, so an operator kind offered through `staffAll` never becomes agent work. (d) Confirm goal-publish.tsx:37-40 still finds its offer by commandKind plus a hand-spelled target, since the resolve matcher follows it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURED at HEAD d15064c6, no edits.\n(a) PREREQUISITES. task-a47babf8 is DONE and landed at 2e62bb54. publish-resolve-command.ts:38-53 is the served async entry, in the order fence (403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION), then payload (422 INPUT_INVALID@DAEMON_COMMAND_SEAM), then resolvePublish. task-52682237 is DONE and landed at dc15621b. RunGoalPublish carries decisionId and observation (run-goal-publication.ts:22). The generated client has builder repository.publish_resolve (generated-client.ts:399).\n(b) Confirmed in affordance-planning-offers.ts: the closed union at :128-131, the lazy facts at :45-88 and the publish mint at :241.\n(c) compilerSteps is filled only from COMPILER_OFFER_KINDS over `staffable` (:326-331). The wrapper staffs only surface steps (agent-wrapper.ts:332). publish_resolve is not a BOOTSTRAP_COMMAND_KIND, so no step can mint it. It is NOT in HUMAN_ONLY_STEPS (agent-spawn-contract.ts:283). Adding it would red preview-start-command.test.ts, which transcribes the served members by hand, so that is outside this row and recorded as a follow-up.\n(d) goal-publish.tsx:37-40 matches `commandKind` plus the hand-spelled `publish:${goalId}`.\n\nTHE PLAN'S PREMISE, MEASURED. The async handler never reads envelope.targetAggregateId or expectedVersion. decideAsync (daemon-command-decision-port.ts:75) commits nothing at the target. The resolve's only durable write is the receipt on publish:<goalId> (publish-ledger.ts:222). So a resolve sent through the real command edge CANNOT go red when the mint is retargeted, and after a real resolve stateOf(publish:<goalId>) necessarily becomes the receipt, as it does for every publisher receipt.\nStep 4 will therefore carry TWO arms:\n- (i) The release-precedent survival arm: a decision committed AT the offered target and version. This is the drill's subject; it proves both the goal's and the publish decision's durable records are unchanged.\n- (ii) A real served-entry resolve. It proves the goal survives by value, the publish ledger still reads its request, and the resolve offer is withdrawn.\n\nSCOPE GROWTH (+1 path): apps/control-room/src/v2/goals/publish-port.ts, the card's only wire. It gains `resolve` through spendOffer and reuses the module-private PUBLISH_LAYER, so no new *_LAYER is added and the boundary-roster and layer-visibility censuses stay unchanged.\n\nSIZES: affordance-planning-offers.ts is 338 lines. affordance-read.ts is 661, already over the 400 cap and grown by many prior rows, so growth there stays at a few lines. goal-publish.tsx is 227.\n\nNOTE: `pnpm typecheck` (`pnpm --recursive typecheck`) DOES typecheck control-room src/** including tests, so the CLAUDE.md claim otherwise is stale.\n\nPeer dirt: .moe/* board files only.",
+      "startedAt": "2026-09-19T02:16:09.971Z",
+      "completedAt": "2026-09-19T02:22:08.155Z"
     },
     {
       "stepId": "step-2",
       "description": "RED FIRST — the offer's shape and set, in apps/daemon/src/http/affordance-planning-offers.test.ts, following the release card's arms. Assert BY VALUE, as `commandKind@target` sets with SET-EQUALITY in both directions and never `not.toContain` (which passes against a differently-named offer): (1) a goal whose latest publish is UNKNOWN is offered `repository.publish_resolve@publish-resolve:<decisionId>` among its offers; (2) the same goal with a PENDING, a PUSHED and a REFUSED publish is offered NO resolve — one arm each; (3) the resolve's target is NOT the bare goal id and NOT `publish:<goalId>`; (4) the kind never becomes a compiler step (staffable agent work). Assert the lazy fact is called ONLY for goals that could hold a publish, by counting its calls across a surface of several goals. Confirm RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-planning-offers.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ],
+      "note": "RED CONFIRMED.\n\n(A) affordance-planning-offers.test.ts adds the describe \"the publish resolve card\". The helpers gain the default fact NO_UNKNOWN_PUBLISH. All four arms compare sorted `kind@target` sets for exact equality.\n1. For an UNKNOWN publish the roster is exactly {goal.cancel, goal.close, release.decide@release:, repository.publish@publish:, repository.publish_resolve@publish-resolve:<decisionId>}. The target is not the goal id and not publish:<goalId>. expectedVersion is 0. compilerSteps is [].\n2. The fact answering null gives exactly the release card's 4-entry roster.\n3. The same holds for CLOSING and COMPLETED.\n4. A 6-goal ledger (DRAFT, unlanded, landed, COMPLETED, CANCELLED, a DRAFTING run) asks the fact exactly for [goal-c-landed, goal-d-completed]. Each answer is minted on its own goal.\nRun: Tests 3 failed | 47 passed (50). Arms 1, 3 and 4 fail with the resolve entry missing and asked=[]. Arm 2 stays green, as a withholding guard should today.\n\n(B) Real-store, per-state arms (DoD 2 wants the three states told apart, and the pure ladder cannot do that). These go in affordance-read-planning.test.ts, as the nested describe \"and the publish resolve card on the same landed goal\", reusing the release suite's world. The seed's own repository.publish request starts PENDING. Each arm first asserts the Publish card's readRunGoalPublication state BY VALUE, so the fixture provably built the state the arm names.\n- UNKNOWN (an intent is journaled): the roster equals the PENDING roster plus exactly one entry, publish_resolve@publish-resolve:<card decisionId>. The target is not the goal and not publish:. expectedVersion equals store.getAggregateVersion(target). No surface step has the kind, and steps is non-empty.\n- PENDING, PUSHED (intent plus receipt) and REFUSED (PUBLISH_NOT_LANDED): the resolve slice is []. The positive control is that repository.publish@publish:goal-1 is present.\nThe surface helper also returns `steps`.\nRun: Tests 1 failed | 41 passed (42). The failure is the UNKNOWN arm, missing publish_resolve@publish-resolve:8461653d…. The three state arms pass with their states asserted.",
+      "startedAt": "2026-09-19T02:22:10.869Z",
+      "completedAt": "2026-09-19T02:26:30.846Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN — mint it. In apps/daemon/src/http/affordance-planning-offers.ts: widen the closed union at :128-131 with `\"repository.publish_resolve\"`; add a lazy fact to `PlanningOfferInput` (e.g. `unknownPublishDecision: (goalId: string) => string | null`) documented like its siblings; and mint `offer(input, \"repository.publish_resolve\", `publish-resolve:${decisionId}`)` at the publish rung, reading the fact only where a publish is possible. Write at the site why the target is neither the goal id nor `publish:<goalId>` — `readDurableLedger` keeps the last result per target, so either would overwrite a durable record — and name the control-room matcher that spells the same target. In apps/daemon/src/http/affordance-read.ts supply the fact from the composition root: the goal's UNKNOWN publish decisionId via the publish ledger, or null. Confirm step 2's arms are GREEN.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-planning-offers.ts",
         "apps/daemon/src/http/affordance-read.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ],
+      "note": "GREEN.\naffordance-planning-offers.ts (338 -> 353 lines):\n- The closed union gains \"repository.publish_resolve\".\n- PlanningOfferInput gains a lazy fact, unknownPublishDecision: (goalId) => string | null, documented like its siblings.\n- The publish rung reads the fact ONLY when `landed` (built && landedCommit) and mints offer(input, \"repository.publish_resolve\", `publish-resolve:${decisionId}`) beside repository.publish.\n- A comment at the site says why the target is neither the goal id nor publish:<goalId>: readDurableLedger keeps the last result per target, and the served entry writes only a receipt on publish:<goalId> today. It names goal-publish.tsx `resolveOffer` as the matcher that spells the same target.\naffordance-read.ts (661 -> 668; pre-existing over-cap file, growth kept minimal):\n- The fact is answered by the Publish card's OWN read, readRunGoalPublication(store, projectId, publications.get(goalId)). It returns decisionId when outcome === \"UNKNOWN\", else null. The offer and the card therefore cannot disagree on WHEN or on WHICH decision.\n- The readPublishLedger walk, already unconditional per poll for the deployment steps, is hoisted above resolvePlanningOffers and shared. So there is still exactly ONE publish-ledger walk per poll, and the per-goal intent reads run only for goals the rung reaches.\nTest fix in affordance-read-planning.test.ts: goal.create* targets are minted fresh on every read, so the extra mint shifted their ids. The UNKNOWN arm now compares those two entries by kind alone (durableRoster); every other entry still compares by kind@target.\nGate: pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-planning-offers.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-read.test.ts -> Test Files 3 passed (3), Tests 135 passed (135).\npnpm --filter @moe/daemon typecheck: exit 0, 2686 files (tsc 7).\nPEER DIRT, not mine and untouched: daemon-command-registry-human-approver.test.ts, daemon-command-vocabulary.test.ts, mcp-http-host.test.ts, mcp-main.test.ts, mcp-tool-allowlist.test.ts, plus .moe/*.",
+      "startedAt": "2026-09-19T02:26:33.439Z",
+      "completedAt": "2026-09-19T02:28:50.767Z"
     },
     {
       "stepId": "step-4",
       "description": "THE SURVIVAL ARM — prove the target is a safety property, not tidiness. In apps/daemon/src/http/affordance-read-planning.test.ts, following the release card's survival arm there (the suite header at :1350 states the hazard): commit a real `repository.publish_resolve` through the command edge, then assert BY VALUE that (a) the GOAL is still present in the durable goal set with its state unchanged, and (b) the PUBLISH decision's durable record is unchanged — the publish ledger still reads its request. Read both through `stateOf(readDurableLedger(...))`, before and after. MUTATION-VERIFY: back up affordance-planning-offers.ts to %TEMP%/moe-task-bbe7a5d2-affordance-planning-offers-<workerId>.ts recording its SHA256 (task id in the path, because seat ids are reused and a seat-only backup can hold the wrong vintage), change the minted target to `publish:<goalId>`, and confirm the survival arm goes RED — quote the line. Restore by copying the backup back, never `git checkout --` on this shared tree, and prove the restore by SHA256 equality in a call SEPARATE from the restore.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-read-planning.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ],
+      "note": "SURVIVAL ARMS. Both are in the nested describe \"and the publish resolve card on the same landed goal\", and share the helper unknownWorld(): a landed goal, the seed's publish request, and a journaled intent.\n(i) \"THE GOAL AND THE PUBLISH DECISION SURVIVE a decision committed at the offered resolve target\" follows the release precedent. The served entry writes nothing at its target (step 1 measurement), so a decision is committed AT offer.targetAggregateId and offer.expectedVersion (EFFECTS_COMMITTED). Then, by value:\n- stateOf(readDurableLedger, goal-1) equals the before value;\n- the surface roster is unchanged;\n- stateOf(publish:goal-1) equals the before value;\n- the publish ledger still reads [decisionId].\n(ii) \"a resolve through the SERVED entry\": the offer is spent verbatim through createAsyncCommandEntries(...)[\"repository.publish_resolve\"].asyncHandler, with the operator as principal. Then:\n- the decision is {commandId: offer.commandId, DECIDED, PUBLISH_RESOLVED_ABANDON};\n- the goal state is unchanged by value;\n- the publish ledger's requests are unchanged by value (toEqual);\n- the card reads REFUSED / PUBLISH_RESOLVED_ABANDON;\n- the roster is the before roster minus exactly the resolve entry.\nBecause the served entry ignores the envelope target, stateOf(publish:goal-1) necessarily becomes the receipt there. So (b) for the real edge is asserted through the publish ledger, as step 1 recorded.\n\nMUTATION DRILL, IN MEMORY and not on disk. The binding drill rail prefers process-local transforms on the shared tree, and peers may be running suites.\n- Config: %TEMP%/moe-task-bbe7a5d2-drill-worker-69773bc1.config.mjs, an enforce:pre transform. An absent anchor throws, and hits are logged.\n- Pre-SHA: offers.ts ea09bd55…, read.ts 0deeee7d…. `sha256sum -c` after the drills: both OK, so no bytes moved.\n- Control NONE: 2 files, 94/94 passed.\n- T1, the target set to `publish:${goal.goalId}` (the plan's drill): 6 red. The survival arm is red at :1650 `expect(durable(\\`publish:${SEED_GOAL}\\`)).toEqual(publishBefore);` with \"expected { …(2) } to deeply equal { candidate: …(8) }\".\n- T2, the target set to the bare goal id: 6 red. The survival arm is red at :1647 `expect(durable(SEED_GOAL)).toEqual(goalBefore);`.\n- L1, the fact asked whether or not the goal landed: 1 red, the lazy-count arm.\n- F1, the composition root answering any outcome: 5 red (PENDING, PUSHED, REFUSED, UNKNOWN, and the served arm).\n- Hits: each mutant was generated exactly once (T1, T2, L1: offers.ts; F1: read.ts).\nGate: affordance-read-planning.test.ts, Tests 44 passed (44). daemon tsc exit 0.",
+      "startedAt": "2026-09-19T02:28:53.123Z",
+      "completedAt": "2026-09-19T02:31:50.139Z"
     },
     {
       "stepId": "step-5",
       "description": "The card's control. In apps/control-room/src/v2/goals/goal-publish.tsx add a resolve-offer matcher beside `publishOffer` (:37-40): the row whose commandKind is `repository.publish_resolve` and whose target is `publish-resolve:<decisionId>`, using the decisionId from `RunGoalPublish`, with a comment naming the daemon mint site that spells the same target. For an UNKNOWN publish with a resolve offer, render the two choices — NOT_TRANSMITTED ('the remote does not have this commit; allow a new publish') and ABANDON ('give up on this publish') — beside the observation task-52682237 shows, and submit `{ decisionId, resolution }` through the offer exactly as the other cards submit theirs. Render the command's refusal with its code and detail. In apps/control-room/src/v2/goals/goal-publish.test.tsx add arms by value: the control renders only for an UNKNOWN publish that has a resolve offer; each choice submits the exact payload; a refusal renders its code; and no control renders for PENDING, PUSHED or REFUSED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/goals/goal-publish.tsx",
         "apps/control-room/src/v2/goals/goal-publish.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/goal-publish.tsx",
+        "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+        "apps/control-room/src/v2/goals/publish-port.ts"
+      ],
+      "note": "THE CARD'S CONTROL, TDD. First run RED: 5 failed (\"resolveOffer is not a function\", no control). Then GREEN: Test Files 1 passed, Tests 20 passed (20).\n- goal-publish.tsx (227 -> 283 lines):\n  - `resolveOffer(frame, decisionId)` sits beside publishOffer. It matches commandKind repository.publish_resolve AND target `publish-resolve:${decisionId}`, and a comment names the daemon's mint site (the publish rung of affordance-planning-offers.ts). The decisionId comes from RunGoalPublish.\n  - A small `PublishResolve` component, with its own busy and answer state, renders right after cr.publish.observed, and only when publish.outcome === \"UNKNOWN\", a port exists, and the offer is present.\n  - It shows two secondary buttons: cr.publish.resolve.NOT_TRANSMITTED (\"The remote does not have this commit; allow a new publish\") and cr.publish.resolve.ABANDON (\"Give up on this publish\").\n  - A success shows a note. A refusal shows OutcomeNote (code @ layer) plus cr.publish.resolve.detail when the authority sent a detail. A rejected dispatch shows PUBLISH_RESOLVE_DISPATCH_FAILED @ CONTROL_ROOM_PUBLISH.\n  - GoalPublish grows by 1 line.\n- publish-port.ts (+1 path, the card's only wire): a new `resolve(affordance, decisionId, resolution)` spends the offer VERBATIM through spendOffer, as \"repository.publish_resolve\" with payload exactly {decisionId, resolution}. It reuses the module-private PUBLISH_LAYER. `PublishResolution` is exported. No new *_LAYER constant and no new layer VALUE, so the boundary-roster and TASK-LV censuses are unchanged.\n- Tests (by value):\n  - matcher: keyed on its own decision; another decision, the publish kind at the same target, null, and a no-offer frame all give null;\n  - placement: the control is observed.nextElementSibling, with the exact button texts; no offer, or an offer for another decision, gives no control;\n  - PENDING, PUSHED and REFUSED beside a resolve offer give no control (the loop is asserted to have run all 3);\n  - each choice: kind repository.publish_resolve, the affordance is the SAME offer object, and the payload toStrictEqual {decisionId: \"d-unknown\", resolution};\n  - a refusal gives \"PUBLISH_RESOLVE_REMOTE_HOLDS_SHA @ DAEMON_PREREQUISITE\" plus the detail;\n  - a rejected dispatch gives its own code, and resolve was called with (RESOLVE, \"d-unknown\", \"ABANDON\").\n  - The wireWith helper now records `kind`. The test port literal gains `resolve`.\n- IN-MEMORY DRILLS: %TEMP%/moe-task-bbe7a5d2-cr-drill-worker-69773bc1.config.mjs, with plugins [drill, react()] and jsdom.\n  - Control NONE: 20/20.\n  - C1, the UNKNOWN gate dropped: the settled-states arm goes red.\n  - C2, the matcher spelling `publish:`: 5 red.\n  - C3, an extra payload key: the exact-payload arm goes red.\n  - C4, the detail dropped: the refusal arm goes red.\n  - C5, the dispatch code borrowed: the failure arm goes red.\n  - Each mutant was hit exactly once. `sha256sum -c` of both files: OK.\n- control-room tsc --project tsconfig.json exits 0.",
+      "startedAt": "2026-09-19T02:31:52.668Z",
+      "completedAt": "2026-09-19T02:34:51.848Z"
     },
     {
       "stepId": "step-6",
       "description": "GATES AND ADVERSARIAL REVIEW. Read each leg's OUTPUT, not its exit code. (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-planning-offers.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-read.test.ts`, count quoted. (B) `pnpm --filter @moe/control-room test`, count quoted — apps/control-room is in no other gate. (C) The full `pnpm --filter @moe/daemon test` and `pnpm typecheck`, both quoted; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (D) ADVERSARIAL REVIEW, in the completion record: Can the resolve ever be offered to an agent, over MCP or as staffable work? Can it be offered for a publish that is not UNKNOWN? Does the lazy fact run for goals that cannot publish? Can the daemon's target and the card's matcher drift apart, and would any test notice? Does a committed resolve disturb the goal or the publish decision? (E) Record as a follow-up comment on this row, not a new row: command-side target validation, a refusal for a dispatch whose target is not `publish-resolve:<decisionId>`, which needs a new code in row 2's closed map.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/control-room/src/v2/goals/goal-publish.tsx",
+        "apps/control-room/src/v2/goals/goal-publish.test.tsx"
+      ],
+      "note": "GATES. I read each leg's output, not only its exit code.\n(A) The 3 affordance files: Test Files 3 passed (3), Tests 139 passed (139).\n(B) pnpm --filter @moe/control-room test: Test Files 195 passed (195), Tests 2610 passed (2610), exit 0.\n(C) pnpm --filter @moe/daemon test, run under the full-suite-gate lease (no other vitest running): Test Files 766 passed (766), Tests 12662 passed | 22 skipped (12684), exit 0.\npnpm typecheck: 19 \"typecheck: Done\", 0 errors, exit 0.\ntests/security/boundary-roster.security.ts: 56 passed.\nNo red anywhere, so no attribution was needed.\n\nADVERSARIAL FIXES made in this step (TDD, red first):\n1. A CANCELLED goal with an UNKNOWN publish had NO exit. I measured that node-publisher ignores goal lifecycle, so the project-wide PUBLISHING hold stayed stranded.\n   - The ladder now offers a CANCELLED goal the resolve and nothing else. The fact is asked WITHOUT the landing walk.\n   - Ladder arm, plus a real-store arm (goal.cancel through the production pipeline, then a slice of exactly [resolve]).\n   - The lazy arm now pins asked=[c,d,e] and walked=[b,c,d].\n   - Drill L2 goes red.\n2. The resolve buttons now stay disabled after a recorded resolve. A second click would only be refused NOT_UNKNOWN. Asserted as [true, true].\nDrills were re-run in memory after the fixes. Control 96/96. T1 8 red, T2 8 red, L1 1 red, L2 3 red, F1 5 red. Each mutant was hit once, and sha256sum -c is OK.\n\n(D) REVIEW.\n- Agent reach? Over MCP: publish_resolve is in OPERATOR_PRINCIPAL_KINDS, so it is excluded by derivation. The entry answers 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION (row a47babf8). As staffable work: never a compilerStep, and never a surface step (asserted on the real surface with steps>0). The wrapper staffs only steps.\n- Non-UNKNOWN offer? The fact is the card's own readRunGoalPublication, and answers only when it says UNKNOWN. Real-store PENDING, PUSHED and REFUSED arms withhold. F1 goes red.\n- Fact on goals that cannot publish? No. It is asked only for landed or CANCELLED goals. There is one readPublishLedger walk per poll, shared with the deployment steps. A goal with no publish is a Map miss. It cannot throw: the intent read is try-wrapped and the observation read swallows errors.\n- Target/matcher drift?\n  - Both spell `publish-resolve:${decisionId}`, and each comment names the other.\n  - The daemon asserts the target equals the card read's decisionId. Control-room arms pin the matcher by value.\n  - Drift reds that side (T1/T2; C2).\n  - No single test spans both packages; the control room cannot import the daemon. This is the same as the publish and release precedents.\n- Committed resolve disturbs the goal or the publish? At the offered target: the goal and publish:<goal> records are unchanged (T1 red :1650, T2 red :1647). Through the served entry:\n  - the goal is unchanged;\n  - the publish requests are unchanged by value;\n  - the card reads REFUSED/PUBLISH_RESOLVED_ABANDON;\n  - the roster loses exactly the resolve.\n- Concurrency: the client guards with busy plus disable-after-success. The service refuses NOT_UNKNOWN (row a47babf8), and the version race is task-978669b6.\n(E) Follow-ups are in comment-6bf8b38c: target validation, HUMAN_ONLY_STEPS, Needs-you, words.\nPEER DIRT, not mine: apps/daemon/CLAUDE.md, daemon-command-registry{,-human-approver}.test.ts, daemon-command-vocabulary.test.ts, daemon-store-dependencies.test.ts, daemon-v2-command-registry.test.ts, mcp-http-host.test.ts, mcp-main.test.ts, mcp-tool-allowlist.test.ts.",
+      "startedAt": "2026-09-19T02:34:54.623Z",
+      "completedAt": "2026-09-19T02:47:05.542Z"
     }
   ],
-  "planRevision": 1,
-  "status": "WORKING",
+  "planRevision": 13,
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -70,10 +112,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1022.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-6bf8b38ca414403fb246eec1858498eb",
+      "author": "worker-69773bc1",
+      "content": "FOLLOW-UPS (step 6E, DELIVERY BIAS). These are for the epic-final hardening row; none is a new row.\n\n1. COMMAND-SIDE TARGET VALIDATION (the plan's E). publish-resolve-command.ts:38-53 never reads envelope.targetAggregateId or expectedVersion. decideAsync (daemon-command-decision-port.ts:75) commits nothing at the target, and the only durable write is the receipt on publish:<goalId>. So a dispatch aimed at ANY target is accepted today. The fix is to refuse a dispatch whose target is not `publish-resolve:<decisionId>`, with the payload decisionId. That needs a NEW code, e.g. PUBLISH_RESOLVE_TARGET_INVALID, in row 2's closed code→layer map (publish-resolve-contracts.ts), plus a check at the command seam, as release-decide-command.ts:47 does with RELEASE_TARGET_INVALID. While there, the offer's expectedVersion (always 0, since nothing commits at publish-resolve:<id>) could be fenced.\n   Pinned today by: the release-precedent survival arm in affordance-read-planning.test.ts, which commits AT the offered target and version.\n\n2. HUMAN_ONLY_STEPS (agent-spawn-contract.ts:283) does not list repository.publish_resolve. No surface step can carry the kind:\n   - compilerSteps come from COMPILER_OFFER_KINDS only;\n   - it is not a BOOTSTRAP_COMMAND_KIND;\n   - both the ladder test and the real-surface test assert no step has it.\n   Adding it would be belt-and-braces. It moves preview-start-command.test.ts's hand transcription of the SERVED human-only members, so it belongs in a row that owns that file.\n\n3. NEEDS-YOU. NEEDS_YOU_KINDS (needs-you-model.ts:67) is closed and has no item for an UNKNOWN publish, so the operator only meets the resolve control on the goal's Publish card (Technical detail). An \"UNKNOWN publish holds the repository\" item would surface it.\n\n4. WORDS. Once resolved, publishLine reads \"Publish refused · PUBLISH_RESOLVED_ABANDON · decide again to retry\". REFUSAL_INSTRUCTIONS in goal-publish.tsx could word the two PUBLISH_RESOLVED_* codes, for example \"you gave up on this publish\" and \"you said the remote never got it; publish again when ready\".\n\n5. SCOPE NOTE, measured and fixed in-row. The publisher ignores goal lifecycle, so an UNKNOWN publish left by a CANCELLED goal kept the project's repository in PUBLISHING with no offered exit. The ladder now offers a CANCELLED goal the resolve and nothing else. The fact is asked with no landing walk; the composition root answers null from the already-walked publish ledger with zero store reads for a goal that never published. Pinned by a ladder arm, a real-store arm (goal.cancel committed through the production pipeline), and drill L2.",
+      "timestamp": "2026-09-19T02:40:17.313Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:14:42.516Z",
-  "updatedAt": "2026-09-18T19:42:22.075Z",
+  "updatedAt": "2026-09-19T02:48:08.142Z",
   "dependsOn": [
     "task-a47babf8291943efb08258a0c1f6cc78",
     "task-52682237c158403b83fcf54b3b0bb2bd"
@@ -81,16 +130,46 @@
   "metrics": {
     "firstClaimAt": "2026-09-18T19:40:12.093Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T19:42:19.802Z",
   "planningNotes": {
     "codebaseInsights": "Filed by me today as a CHILD of task-21be6e90, delivering the operator-facing half of its DoD 2. dependsOn [task-a47babf8 (the service, so the control never ships pointing at row 3's refusing stub), task-52682237 (the observation, which this control sits beside, and which also edits goal-publish.tsx)]. Follows task-21209552's release.decide offer precedent exactly. Measured at HEAD 2026-09-18.\n\n(1) THE CLOSED OFFER UNION. apps/daemon/src/http/affordance-planning-offers.ts:128-131 types the mintable kinds as `CompilerOfferKind | \"approval.decide\" | \"approval.decide_intent\" | \"goal.cancel\" | \"goal.close\" | \"plan.propose\" | \"preview.decide\" | \"release.decide\" | \"repository.publish\"`. Adding the kind is a type edit PLUS a mint site: a mint without the widening does not compile, and a widening without a mint offers nothing.\n\n(2) THE LAZY-FACT PATTERN. `PlanningOfferInput` (:45) carries per-goal facts supplied by the composition root: `closeReadiness` (:52), `landedCommit` (:75), `previewReceipt` (:88). The resolve needs one more — for a goal, the decisionId of its UNKNOWN publish, or null — supplied by apps/daemon/src/http/affordance-read.ts and resolved ONLY for a goal that could hold a publish. A per-poll walk over every goal would repeat the 09-05 affordances hot-path incident.\n\n(3) THE TARGET, AND THE SECOND HAZARD IT AVOIDS. `readDurableLedger` keeps the last committed result per targetAggregateId. Targeting the bare goal id overwrites the goal's durable record — the documented hazard. Targeting the PUBLISH decision's own aggregate (`publish:<goalId>`, minted at :241) would be the same hazard again: the resolve would overwrite the publish decision's durable result that the publish ledger reads. So the resolve targets a DISTINCT aggregate, `publish-resolve:<decisionId>`, keyed on the decision being resolved.\n\n(4) HOW THE CARD FINDS ITS OFFER. apps/control-room/src/v2/goals/goal-publish.tsx:37-40 `publishOffer(frame, goalId)` matches `row[\"commandKind\"] === \"repository.publish\" && row[\"targetAggregateId\"] === `publish:${goalId}``. The control-room cannot import daemon code, so spelling the target on both sides of the package boundary is the ESTABLISHED pattern here. The resolve matcher uses the decisionId the card already has from `RunGoalPublish.decisionId`. Each spelling carries a comment naming the other, so a future change edits both.\n\n(5) OFFERED, NEVER STAFFED. The ladder's `staffAll` makes offers staffable, but `resolvePlanningOffers` fills compiler steps only from COMPILER kinds. An operator kind that is in neither COMPILER_OFFER_KINDS nor COMPILER_SCHEMA_KINDS is therefore offered to the operator but never becomes agent work — exactly how release.decide stays an operator affordance. `repository.publish_resolve` is also human-only and MCP-excluded (row 3)."
   },
-  "planApprovedAt": "2026-09-18T19:42:22.075Z"
+  "planApprovedAt": "2026-09-18T19:42:22.075Z",
+  "contextFetchedBy": [
+    "worker-69773bc1"
+  ],
+  "workStartedAt": "2026-09-19T02:16:09.971Z",
+  "reviewStartedAt": "2026-09-19T02:48:08.140Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-planning-offers.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-read.test.ts",
+    "exitCode": 0,
+    "outputTail": " Test Files  3 passed (3)\n      Tests  139 passed (139)\n   Start at  05:47:47\n   Duration  7.94s (transform 13.94s, setup 0ms, import 18.28s, tests 3.03s, environment 0ms)\n\nEXIT=0\n\nAlso this session: pnpm --filter @moe/control-room test -> Test Files 195 passed (195), Tests 2610 passed (2610), exit 0. pnpm --filter @moe/daemon test (under full-suite-gate lease) -> Test Files 766 passed (766), Tests 12662 passed | 22 skipped (12684), exit 0. pnpm typecheck -> 19 typecheck: Done, 0 errors, exit 0. tests/security/boundary-roster.security.ts -> 56 passed.",
+    "reportedAt": "2026-09-19T02:48:08.140Z",
+    "source": "agent-reported"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/control-room/src/v2/goals/goal-publish.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/control-room/src/v2/goals/publish-port.ts"
+  ],
+  "completionSummary": "The repository.publish_resolve offer and the Publish card's control are done. This is task-21be6e90's DoD 2, operator half.\n\nDAEMON\n- affordance-planning-offers.ts adds the kind to the closed union and a lazy fact, unknownPublishDecision(goalId). It is asked only when the goal is landed, or CANCELLED (no landing walk). It mints repository.publish_resolve@publish-resolve:<decisionId>.\n- CANCELLED is offered only the resolve. The publisher ignores goal lifecycle, so a cancelled goal's UNKNOWN publish would otherwise strand the project's hold.\n- affordance-read.ts answers the fact with the card's own readRunGoalPublication: the decisionId only while the outcome is UNKNOWN. The publish ledger is still walked once per poll.\n\nCARD\n- goal-publish.tsx adds a resolveOffer matcher, keyed on the same target, and two choices beside the observation, shown only for UNKNOWN with an offer: NOT_TRANSMITTED and ABANDON.\n- A refusal shows its code @ layer and the detail. The buttons lock after a recorded resolve.\n- publish-port.ts resolve() spends the offer verbatim with exactly {decisionId, resolution}.\n\nDoD\n1. Real surface: the roster is PENDING plus exactly publish_resolve@publish-resolve:<card decisionId>. The target is not the goal or publish:<goal>. Two survival arms keep the goal intact: one at the offered target, one through the served entry.\n2. The set is exact in both directions: the offer is absent for PENDING, PUSHED and REFUSED (each state asserted). No step carries the kind, and compilerSteps is [].\n3. The fact is lazy: 6-goal arm, asked=[c,d,e], walked=[b,c,d].\n4. The card arms check the payload toStrictEqual, the refusal code@layer and the detail.\n5. Gates are in the verification.\n\nDRILLS (in memory, disk SHA unchanged): daemon T1 (publish:<goal>) is red at :1650 and T2 (goal id) at :1647; L1, L2 and F1 are also red. Card mutants C1 to C5 are all red.\n\nPLAN DEVIATION (step 1): the async entry never commits at the envelope target. A served-entry arm cannot see a retarge"
 }

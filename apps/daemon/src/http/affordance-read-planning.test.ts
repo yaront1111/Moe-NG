@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { NextAllowedCommand } from "@moe/contracts";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -38,7 +39,9 @@ import {
   PROJECT_ID as SEED_PROJECT,
   closeStores as closeSeedStores,
   driveThrough,
+  envelope,
   openStore as openSeedStore,
+  send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
@@ -46,6 +49,12 @@ import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js"
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { releaseDossierAggregateId } from "../release/release-dossier-contracts.js";
 import { recordReleaseDossier } from "../release/release-dossier-ledger.js";
+import { createAsyncCommandEntries } from "../daemon-command-async-entries.js";
+import { publicationRepositoryId } from "../repository/publication-approval-contracts.js";
+import { recordPublicationIntent } from "../repository/publication-effect-ledger.js";
+import { readPublishLedger, recordPublishReceipt } from "../repository/publish-ledger.js";
+import type { PublishRefusal } from "../repository/publish-receipt-contracts.js";
+import { readRunGoalPublication } from "./run-goal-publication.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { finalizeChain, planningChain } from "../orchestrator/demo-seed-payloads.js";
@@ -1380,9 +1389,10 @@ describe("the release decision card over a real store", () => {
     return store;
   }
 
-  /** The whole offer slice as the surface states it, UNFILTERED by target. */
+  /** The whole offer slice as the surface states it, UNFILTERED by target, and its steps. */
   function surface(store: ReturnType<typeof openSeedStore>): {
     readonly offers: readonly NextAllowedCommand[]; readonly roster: readonly string[];
+    readonly steps: readonly string[];
   } {
     let seq = 0;
     const result = createAffordancePort({
@@ -1393,6 +1403,7 @@ describe("the release decision card over a real store", () => {
     return {
       offers,
       roster: offers.map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort(),
+      steps: result.steps.map((step) => `${step.kind}@${step.aggregateId ?? "-"}`),
     };
   }
 
@@ -1501,5 +1512,188 @@ describe("the release decision card over a real store", () => {
     expect(roster.filter((entry) =>
       entry.startsWith("release.decide@") || entry.startsWith("repository.publish@")))
       .toEqual([]);
+  });
+
+  /**
+   * THE PUBLISH RESOLVE CARD (task-bbe7a5d2), on this suite's real world. The goal's node landed
+   * a COMMITTED commit, and the seed itself decided the goal's publish: `driveThrough` commits
+   * `repository.publish` before `goal.close`. So the publish starts PENDING, and each arm moves it
+   * the way the publisher would.
+   *
+   * These arms drive the per-state half of the `unknownPublishDecision` fact through the SHIPPED
+   * composition root. The ladder cannot tell PENDING, PUSHED and REFUSED apart, because to it each
+   * is just "no UNKNOWN publish". So every arm first asserts that the Publish card reads the state
+   * the arm names; an arm whose fixture built some other state would otherwise pass for the wrong
+   * reason.
+   */
+  describe("and the publish resolve card on the same landed goal", () => {
+    const AT = "2026-09-19T08:00:00.000Z";
+    const identity = { gitDirectory: "D:/ws/.git", root: "D:/ws" };
+    const candidate = { identity, approval: { branch: "approved-branch", sha: "a".repeat(40),
+      remoteUrl: "https://github.com/fixture/repo.git", repositoryId: publicationRepositoryId(identity) } };
+    type Store = ReturnType<typeof openSeedStore>;
+
+    /** The seed's own publish request for the goal. */
+    function decisionOf(store: Store): string {
+      const request = readPublishLedger(store, SEED_PROJECT).get(SEED_GOAL)?.requests[0];
+      if (request === undefined) throw new Error("the seed decided no publish for the goal");
+      return request.decisionId;
+    }
+    /** The publisher journals its intent, and the push is UNKNOWN from then until a receipt lands. */
+    function journal(store: Store, decisionId: string): void {
+      recordPublicationIntent(store, { candidate, controllerId: "wrapper-controller", decisionId, goalId: SEED_GOAL,
+        intendedAt: AT, ownerDigest: "e".repeat(64), projectId: SEED_PROJECT, reservationRevision: 1,
+        version: "moe-publication-intent/1" });
+    }
+    function receipt(store: Store, decisionId: string, refusal: PublishRefusal | null): void {
+      const written = recordPublishReceipt(store, { branch: candidate.approval.branch, decidedAt: AT, decisionId,
+        goalId: SEED_GOAL, projectId: SEED_PROJECT, refusal, remoteUrl: candidate.approval.remoteUrl,
+        sha: candidate.approval.sha, url: null });
+      if (!written.ok) throw new Error(written.code);
+    }
+    /** The Publish card's own read of the goal, whose decisionId the card's resolve matcher spells. */
+    const card = (store: Store) =>
+      readRunGoalPublication(store, SEED_PROJECT, readPublishLedger(store, SEED_PROJECT).get(SEED_GOAL));
+    const resolveSlice = (entries: readonly string[]): readonly string[] =>
+      entries.filter((entry) => entry.startsWith("repository.publish_resolve@"));
+    /** `goal.create*` targets are minted afresh on every read, so those two compare by kind alone. */
+    const durableRoster = (entries: readonly string[]): readonly string[] =>
+      entries.map((entry) => (entry.startsWith("goal.create") ? entry.slice(0, entry.indexOf("@")) : entry));
+
+    it("offers repository.publish_resolve at publish-resolve:<the card's decisionId> once the publish is UNKNOWN", () => {
+      const store = releaseWorld(true);
+      const decisionId = decisionOf(store);
+      const pending = surface(store);
+      journal(store, decisionId);
+      expect(card(store)).toMatchObject({ decisionId, outcome: "UNKNOWN" });
+      const unknown = surface(store);
+      // BOTH directions against the same goal's PENDING roster: exactly this one offer appeared.
+      expect(durableRoster(unknown.roster)).toEqual(
+        durableRoster([...pending.roster, `repository.publish_resolve@publish-resolve:${decisionId}`].sort()));
+      const offer = unknown.offers.find((entry) => entry.commandKind === "repository.publish_resolve");
+      expect(offer?.targetAggregateId).toBe(`publish-resolve:${card(store)?.decisionId ?? "?"}`);
+      expect(offer?.targetAggregateId).not.toBe(SEED_GOAL);
+      expect(offer?.targetAggregateId).not.toBe(`publish:${SEED_GOAL}`);
+      expect(offer?.expectedVersion).toBe(store.getAggregateVersion(`publish-resolve:${decisionId}`));
+      // Offered to the operator, never staffed: the surface has steps, and none of them is this kind.
+      expect(unknown.steps.length).toBeGreaterThan(0);
+      expect(resolveSlice(unknown.steps)).toEqual([]);
+    });
+
+    it("WITHHOLDS it while the publish is PENDING", () => {
+      const store = releaseWorld(true);
+      expect(card(store)).toMatchObject({ decisionId: decisionOf(store), outcome: "PENDING" });
+      const roster = surface(store).roster;
+      // The publish rung ran, so the fact was reachable: the withholding is the fact's answer.
+      expect(roster).toContain(`repository.publish@publish:${SEED_GOAL}`);
+      expect(resolveSlice(roster)).toEqual([]);
+    });
+
+    it("WITHHOLDS it once the publish is PUSHED", () => {
+      const store = releaseWorld(true);
+      const decisionId = decisionOf(store);
+      journal(store, decisionId);
+      receipt(store, decisionId, null);
+      expect(card(store)).toMatchObject({ decisionId, outcome: "PUSHED" });
+      const roster = surface(store).roster;
+      expect(roster).toContain(`repository.publish@publish:${SEED_GOAL}`);
+      expect(resolveSlice(roster)).toEqual([]);
+    });
+
+    it("WITHHOLDS it once the publish is REFUSED", () => {
+      const store = releaseWorld(true);
+      const decisionId = decisionOf(store);
+      journal(store, decisionId);
+      receipt(store, decisionId, { code: "PUBLISH_NOT_LANDED", detail: "git refused the push" });
+      expect(card(store)).toMatchObject({ code: "PUBLISH_NOT_LANDED", decisionId, outcome: "REFUSED" });
+      const roster = surface(store).roster;
+      expect(roster).toContain(`repository.publish@publish:${SEED_GOAL}`);
+      expect(resolveSlice(roster)).toEqual([]);
+    });
+
+    it("still offers the way out once the operator CANCELS a goal whose publish is UNKNOWN, and nothing else of it", () => {
+      const store = releaseWorld(true);
+      const decisionId = decisionOf(store);
+      journal(store, decisionId);
+      const cancelled = send(store, envelope("goal.cancel", store.getAggregateVersion(SEED_GOAL), { goalId: SEED_GOAL }));
+      expect(cancelled.ok, cancelled.ok ? "" : cancelled.code).toBe(true);
+      expect(stateOf(readDurableLedger(store, SEED_PROJECT), SEED_GOAL)).toMatchObject({ lifecycle: "CANCELLED" });
+      expect(card(store)).toMatchObject({ decisionId, outcome: "UNKNOWN" });
+      // The goal's whole slice, by kind: the resolve is ALL that is left of it.
+      const goalKinds = ["goal.cancel@", "goal.close@", "preview.decide@", "release.decide@", "repository.publish@",
+        "repository.publish_resolve@"];
+      expect(surface(store).roster.filter((entry) => goalKinds.some((kind) => entry.startsWith(kind))))
+        .toEqual([`repository.publish_resolve@publish-resolve:${decisionId}`]);
+    });
+
+    /** An UNKNOWN publish, the surface that offers its resolve, and that offer. */
+    function unknownWorld(): { store: Store; decisionId: string; before: ReturnType<typeof surface>;
+      offer: NextAllowedCommand } {
+      const store = releaseWorld(true);
+      const decisionId = decisionOf(store);
+      journal(store, decisionId);
+      const before = surface(store);
+      const offer = before.offers.find((entry) => entry.commandKind === "repository.publish_resolve");
+      if (offer === undefined) throw new Error("no resolve offer to spend");
+      return { before, decisionId, offer, store };
+    }
+
+    it("THE GOAL AND THE PUBLISH DECISION SURVIVE a decision committed at the offered resolve target", () => {
+      // THE SAFETY PROPERTY OF THE KEY, on the release card's terms. The served entry writes nothing
+      // at its target today, so this commits the decision the dispatcher's own envelope shape would
+      // commit: AT the target and version the offer carries, never at a target this test chose. A
+      // retargeted mint is therefore what this arm sees.
+      const { before, decisionId, offer, store } = unknownWorld();
+      const durable = (aggregateId: string) => stateOf(readDurableLedger(store, SEED_PROJECT), aggregateId);
+      const goalBefore = durable(SEED_GOAL);
+      const publishBefore = durable(`publish:${SEED_GOAL}`);
+      expect(goalBefore).toMatchObject({ goalId: SEED_GOAL });
+      expect(publishBefore).toBeDefined();
+      const body = encoder.encode(JSON.stringify({ decisionId, resolution: "ABANDON" }));
+      const response = store.commitExpectedVersionDecision({
+        commandKind: "repository.publish_resolve", committedResultBytes: body,
+        correlationId: "publish-resolve-survival", decidedAt: AT,
+        events: [{ eventId: `${decisionId}-PublishResolved`, eventType: "RepositoryPublishResolved", payload: body }],
+        expectedVersion: offer.expectedVersion,
+        key: { commandId: "cmd-publish-resolve-survival", principalId: "operator-local", projectId: SEED_PROJECT },
+        requestBytes: body, targetAggregateId: offer.targetAggregateId,
+      });
+      // SPENDABLE: the store accepted the version the offer carried.
+      expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+      // (a) The goal's durable record is intact, and the surface still answers for it unchanged.
+      expect(durable(SEED_GOAL)).toEqual(goalBefore);
+      expect(durableRoster(surface(store).roster)).toEqual(durableRoster(before.roster));
+      // (b) The publish decision's durable record is intact, and the publish ledger still reads its request.
+      expect(durable(`publish:${SEED_GOAL}`)).toEqual(publishBefore);
+      expect(readPublishLedger(store, SEED_PROJECT).get(SEED_GOAL)?.requests.map((request) => request.decisionId))
+        .toEqual([decisionId]);
+    });
+
+    it("a resolve through the SERVED entry keeps the goal and its publish request, and withdraws the card", async () => {
+      const { before, decisionId, offer, store } = unknownWorld();
+      const goalBefore = stateOf(readDurableLedger(store, SEED_PROJECT), SEED_GOAL);
+      const requestsBefore = readPublishLedger(store, SEED_PROJECT).get(SEED_GOAL)?.requests;
+      const handler = createAsyncCommandEntries({ operatorPrincipalId: "operator-local", projectId: SEED_PROJECT, store })[
+        "repository.publish_resolve"].asyncHandler;
+      if (handler === undefined) throw new Error("repository.publish_resolve carries no async handler");
+      // The offer spent VERBATIM, as the card's port spends it; the operator authors only the payload.
+      const decided = await handler({
+        envelope: { commandId: offer.commandId, commandKind: offer.commandKind, correlationId: "corr-publish-resolve",
+          expectedVersion: offer.expectedVersion, payload: { decisionId, resolution: "ABANDON" },
+          requestDigest: "d".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+          sessionCredential: "publish-resolve-credential", targetAggregateId: offer.targetAggregateId },
+        principal: { capabilities: [], principalId: "operator-local", projectId: SEED_PROJECT },
+      });
+      expect(decided).toMatchObject({ commandId: offer.commandId, disposition: "DECIDED",
+        resultCode: "PUBLISH_RESOLVED_ABANDON" });
+      // (a) The goal is untouched, by value.
+      expect(stateOf(readDurableLedger(store, SEED_PROJECT), SEED_GOAL)).toEqual(goalBefore);
+      // (b) The publish ledger still reads the same request, now answered by the operator's receipt.
+      expect(readPublishLedger(store, SEED_PROJECT).get(SEED_GOAL)?.requests).toEqual(requestsBefore);
+      expect(card(store)).toMatchObject({ code: "PUBLISH_RESOLVED_ABANDON", decisionId, outcome: "REFUSED" });
+      // The card is withdrawn, and exactly it: every other offer of the goal is still there.
+      expect(durableRoster(surface(store).roster)).toEqual(durableRoster(before.roster.filter((entry) =>
+        entry !== `repository.publish_resolve@publish-resolve:${decisionId}`)));
+    });
   });
 });

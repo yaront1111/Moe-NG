@@ -38,6 +38,7 @@ import { resolveDeployTargetOffers } from "./affordance-deploy-target-offers.js"
 import { resolveRollbackOffers } from "./affordance-rollback-offers.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
+import { readRunGoalPublication } from "./run-goal-publication.js";
 import type {
   AffordancePort,
   AffordanceRefused,
@@ -359,6 +360,8 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const ledger = readDurableLedger(config.store, config.projectId);
     const landings = createGoalLandingReader(config.store, config.projectId, ledger);
     const designFailures: AffordanceRefused[] = [];
+    // ONE walk per poll, read by the resolve fact below and by the deployment steps.
+    const publications = readPublishLedger(config.store, config.projectId);
     const planning = resolvePlanningOffers({
       // Derived per call, never cached: an acceptance that lands between two polls shows up on
       // the next one. The ladder invokes this only for a goal it could offer a close.
@@ -397,6 +400,12 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       // receipt written between two polls shows up on the next one.
       previewReceipt: createPreviewReceiptReader(config.store, config.projectId),
       projectId: config.projectId,
+      // The Publish card's OWN read, so the resolve is offered exactly while the card says UNKNOWN
+      // and is keyed on the decision the card names. Asked only for a goal the publish rung reaches.
+      unknownPublishDecision: (goalId) => {
+        const publish = readRunGoalPublication(config.store, config.projectId, publications.get(goalId));
+        return publish?.outcome === "UNKNOWN" ? publish.decisionId : null;
+      },
     });
     if (designFailures[0] !== undefined) return designFailures[0];
     offers.push(...planning.offers);
@@ -414,7 +423,6 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now, planningSubject);
     // Deployment follows each goal's own publication, independent of the legacy single-goal
     // planning card. The environment remains a dispatch choice on that goal's offer.
-    const publications = readPublishLedger(config.store, config.projectId);
     const deployBound = ENVIRONMENT_NAMES.some((environment) => deployTarget(environment) !== null);
     const deploymentSteps: ChainStep[] = [];
     for (const goalId of new Set(Object.values(planning.planningGoalRefs))) {

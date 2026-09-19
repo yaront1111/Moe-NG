@@ -87,6 +87,13 @@ export interface PlanningOfferInput {
    */
   readonly previewReceipt: (goalId: string) => "REFUSED" | "STARTED" | null;
   readonly projectId: string;
+  /**
+   * The decision of this goal's publish that is stuck UNKNOWN, or null when none is. A FACT, and
+   * LAZY for the reasons `landedCommit` gives: it is asked only for a goal the publish rung
+   * reaches. The composition root answers it with the Publish card's own read, so the resolve is
+   * offered exactly while the card says UNKNOWN, and it names the decision the card shows.
+   */
+  readonly unknownPublishDecision: (goalId: string) => string | null;
 }
 
 export function record(value: unknown): JsonRecord | null {
@@ -128,7 +135,7 @@ function offer(
   input: PlanningOfferInput,
   kind: CompilerOfferKind
     | "approval.decide" | "approval.decide_intent" | "goal.cancel" | "goal.close" | "plan.propose"
-    | "preview.decide" | "release.decide" | "repository.publish",
+    | "preview.decide" | "release.decide" | "repository.publish" | "repository.publish_resolve",
   aggregateId: string,
 ): NextAllowedCommand {
   return Object.freeze({
@@ -237,9 +244,16 @@ function offersForGoal(
   // incident, re-entered by a rung that merely looked like an independent gate. The `built &&`
   // short-circuit keeps the walk skipped entirely for a goal that could offer neither.
   const landed = built && input.landedCommit(goal.goalId);
-  const publish = landed
-    ? [offer(input, "repository.publish", `publish:${goal.goalId}`)]
-    : [];
+  // THE OPERATOR'S WAY OUT OF A PUBLISH STUCK UNKNOWN. It is asked only where a publish can exist:
+  // a landed goal, or a CANCELLED one, which is asked without the landing walk. The target is keyed
+  // on the DECISION being resolved, never the goal id or `publish:<goalId>`. `readDurableLedger`
+  // keeps the last committed result per target, so a decision committed at either would overwrite
+  // that aggregate's own durable record. The served entry writes only a receipt on
+  // `publish:<goalId>` today; this key is where any decision recorded AT the offer's target lands.
+  // goal-publish.tsx `resolveOffer` spells the same target, so edit both together.
+  const unknown = landed || lifecycle === "CANCELLED" ? input.unknownPublishDecision(goal.goalId) : null;
+  const resolve = unknown === null ? [] : [offer(input, "repository.publish_resolve", `publish-resolve:${unknown}`)];
+  const publish = landed ? [offer(input, "repository.publish", `publish:${goal.goalId}`), ...resolve] : [];
   // The product-preview verdict, offered only once a preview really STARTED for this goal — a
   // Decide card for a preview that never became answerable would ask the operator to judge a
   // product that is not serving, the same defect PUBLISH had before `landedCommit` gated it.
@@ -293,6 +307,9 @@ function offersForGoal(
       : [cancel, ...publish, ...preview, ...release]);
   }
   if (lifecycle === "COMPLETED") return staffAll([...publish, ...preview, ...release]);
+  // A CANCELLED goal is offered only the way out of a publish it left UNKNOWN. The repository hold
+  // belongs to the PROJECT, so abandoning the goal must not strand every later publish behind it.
+  if (lifecycle === "CANCELLED") return staffAll(resolve);
   return staffAll([]);
 }
 
