@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import type { SqliteEventStore } from "@moe/store";
+import { isMoeMetadata } from "../repository/git-landing-port.js";
 import type { RepositoryExecutionController, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 import { readRepositoryIntegration } from "../repository/repository-integration-read.js";
 import { INTEGRATION_REF_PREFIX } from "../repository/repository-workflow-ref.js";
@@ -122,9 +123,13 @@ export function createNodeIntegration(config: NodeIntegrationConfig) {
     // paths names nothing a node could answer, so it holds nothing back: it is simply tried again.
     const recorded = readRepositoryIntegration(config.store, config.projectId, pending).branches;
     if (recorded.some((branch) => branch.state === "CONFLICTED" && branch.conflictPaths.length > 0)) return [];
-    const dirty = git(workspace, ["status", "--porcelain=v1", "--untracked-files=no"]);
+    const dirty = git(workspace, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=no"]);
     if (dirty.code !== 0) return [report(pending[0]!.nodeRef, "UNAVAILABLE", "the project checkout could not be read")];
-    if (dirty.stdout.trim() !== "") {
+    // Moe's own tracked runtime files are nobody's uncommitted work (the lander's own reading,
+    // git-landing-port.ts). Only a node staffed IN this checkout ever checkpoints them, so once every
+    // node lived in a tree one operator edit to .moe-next/start.ps1 skipped every merge, forever
+    // (UnAI 2026-09-19). A merge that would touch the edited file is still refused, by Git, whole.
+    if (dirty.stdout.split("\0").some((entry) => entry.length > 3 && !isMoeMetadata(entry.slice(3)))) {
       return [report(pending[0]!.nodeRef, "SKIPPED", "the project checkout holds uncommitted work; nothing was merged")];
     }
     const owner = { projectId: config.projectId, nodeRef: `${INTEGRATION_REF_PREFIX}${config.projectId}`,

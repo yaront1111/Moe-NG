@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -227,6 +227,51 @@ describe("integrating the nodes' branches", () => {
     expect(reports.map((entry) => entry.outcome)).toEqual(["SKIPPED"]);
     expect(existsSync(join(w.workspace, "alpha.txt"))).toBe(false);
     expect(w.events()).toEqual([]);
+  }, 120_000);
+
+  /** Moe's own tracked runtime file, committed and then edited by the operator (UnAI 2026-09-19). */
+  const editedStartScript = (workspace: string): string => {
+    const script = join(workspace, ".moe-next", "start.ps1");
+    mkdirSync(join(workspace, ".moe-next"), { recursive: true });
+    writeFileSync(script, "moe start\n", "utf8");
+    git(workspace, "add", "-f", ".moe-next/start.ps1");
+    git(workspace, "commit", "--quiet", "-m", "track the start script");
+    writeFileSync(script, "moe start --the-operator-changed-this\n", "utf8");
+    return script;
+  };
+
+  it("does not take an edit to Moe's own tracked runtime file for uncommitted work: the merge is taken", async () => {
+    const w = world();
+    const script = editedStartScript(w.workspace);
+    const entry = w.landedNode("node:v1:alpha", "alpha.txt", "alpha\n");
+    // Beside product dirt the checkout is still left alone: the runtime file excuses only itself.
+    writeFileSync(join(w.workspace, "shared.txt"), "the operator is editing this\n", "utf8");
+    expect((await w.integration.integrateOnce()).map((report) => report.outcome)).toEqual(["SKIPPED"]);
+    git(w.workspace, "checkout", "--", "shared.txt");
+
+    const reports = await w.integration.integrateOnce();
+
+    expect(reports.map((report) => report.outcome)).toEqual(["MERGED"]);
+    expect(git(w.workspace, "merge-base", "--is-ancestor", entry.sha, "HEAD")).toBe("");
+    // The operator's edit is neither merged over nor committed: it is still theirs, still uncommitted.
+    expect(readFileSync(script, "utf8")).toBe("moe start --the-operator-changed-this\n");
+    expect(git(w.workspace, "status", "--porcelain", "--untracked-files=no").trim()).toBe("M .moe-next/start.ps1");
+  }, 120_000);
+
+  it("leaves a merge that would write over the edited runtime file to Git, which refuses it whole", async () => {
+    const w = world();
+    const script = editedStartScript(w.workspace);
+    w.landedNode("node:v1:alpha", ".moe-next/start.ps1", "moe start --the-node-changed-this\n");
+    const before = git(w.workspace, "rev-parse", "HEAD");
+
+    const reports = await w.integration.integrateOnce();
+
+    expect(reports.map((report) => report.outcome)).toEqual(["UNAVAILABLE"]);
+    expect(reports[0]?.detail).toContain("would be overwritten by merge");
+    expect(w.events()).toEqual([]);
+    expect(git(w.workspace, "rev-parse", "HEAD")).toBe(before);
+    expect(readFileSync(script, "utf8")).toBe("moe start --the-operator-changed-this\n");
+    expect(w.port.inspect(w.workspace)).toEqual({ ok: true, reservation: null });
   }, 120_000);
 
   it("waits for a checkout another owner holds", async () => {
