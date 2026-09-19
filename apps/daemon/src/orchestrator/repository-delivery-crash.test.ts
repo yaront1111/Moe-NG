@@ -136,6 +136,21 @@ describe("a hold whose runtime was hard-stopped", () => {
    * staffing ran before the NEXT pass could yield it. The holder was staffed right there, on a
    * project branch that lacked its dependencies, and the integrator could merge nothing.
    */
+  it("gives back, in the same pass, an idle clean checkout whose crashed seat is proven contained", async () => {
+    // The EXECUTING path: the previous runtime died with the seat running (a Ctrl-C), the new
+    // controller proves containment through the gone broker, and the node is READY again.
+    const { workspace, runtime } = world();
+    const a = controller(workspace, "controller-a", 101, runtime(501));
+    expect((await a.coordinator.start(request(workspace), a.spawn)).ok).toBe(true);
+
+    const b = controller(workspace, "controller-b", 102, runtime(502), async () => true);
+    b.live.delete(101); b.live.delete(201); b.live.delete(501); b.retire();
+    await b.coordinator.advance();
+
+    expect(b.releases).toEqual(["YIELDED"]);
+    expect(b.port.inspect(workspace)).toMatchObject({ ok: true, reservation: null });
+  }, 120_000);
+
   it("gives an idle, clean checkout back in the same pass that resumed it", async () => {
     const { workspace, runtime } = world();
     const a = controller(workspace, "controller-a", 101, runtime(501));

@@ -245,7 +245,11 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       // A replanned node's contained seat is done for good: back to RESERVED, where it may yield.
       const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "VERIFYING" });
-      if (!next.ok || idleFacts(facts)) return;
+      if (!next.ok) return;
+      // The SAME pass gives an idle, clean checkout back (UnAI 2026-09-19, twice): staffing runs
+      // right after this advance, and a RESERVED holder is staffed where it holds, so the next
+      // pass's yield came too late every time and the integrator never got the checkout.
+      if (idleFacts(facts)) { await yieldIdle(next.handle); return; }
       handle = next.handle;
     }
     if (handle.reservation.phase === "VERIFYING") {
@@ -264,7 +268,8 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       if (facts !== "ACCEPTED" && !idleFacts(facts)) { block(handle); return; }
       const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "AWAITING_LANDING" });
-      if (!next.ok || idleFacts(facts)) return;
+      if (!next.ok) return;
+      if (idleFacts(facts)) { await yieldIdle(next.handle); return; }
       handle = next.handle;
     }
     if (handle.reservation.phase === "AWAITING_LANDING") {
