@@ -94,6 +94,28 @@ its own: a caller that injects no dependency provider is refused, never served a
   tight loop against SQLite and `active < NaN` staffs nothing while the log says idle.
   `sessionTtlMs` is *derived* (`max(claimTtl, agentTimeout) + 60 s`) so the bearer outlives the
   child's own release. `MOE_NODE_TREES=1` and `MOE_WRAPPER_ONCE=1` are the two `=== "1"` flags.
+- **`MOE_NODE_TREES` decides only whether NEW trees are made.** A node that already has a tree
+  keeps it with the knob off (`keepNodeTreeMissions`), and `review.submit` always captures
+  `nodeWorkspaceOf(...)`, so the mission, the submission evidence and the verifier name ONE
+  directory. Measured UnAI 2026-09-19: a restart without the knob re-pointed a tree node at the
+  clean project checkout, the verifier tested that, ACCEPTED it, and the lander recorded
+  `NOTHING_TO_COMMIT` over 34 files it never looked at.
+- **An acceptance can be WITHDRAWN, by the host alone.** `node-delivery-withdrawal.ts` scans once
+  per `advance()` and records one failed `review.submit` round carrying `withdrawsAcceptance`
+  (never on the wire: `SUBMIT_PAYLOAD_KEYS` is unchanged; the fold in `review-read-model.ts` and
+  `replan-guidance-history.ts` are its only readers). It charges one unsuccessful round, which is
+  the loop bound. Three closed rules: `INTEGRATION_CONFLICT` (a recorded conflict with paths whose
+  sha is provably not in the project branch), `LANDING_REFUSED` (a pre-intent refusal in
+  `RECOVERABLE_LANDING_REFUSALS`) and `DELIVERED_NOTHING` (`NOTHING_TO_COMMIT` while the node's
+  own tree holds work). The node returns to a seat PINNED to the workspace that holds its work
+  (`refusedLandingWorkspace`), its own dirt is admitted as an empty baseline (`entries: []`, or the
+  strict port refuses `VERIFIED_WORKSPACE_PATHS_MISMATCH` after the intent), and a new round mints
+  a new verifier receipt and a new landing receipt. A terminal landing receipt is never retried in
+  place: the accepted binding pins `headSha`, `treeSha` and `dirtySha256` together.
+- **The lander ADOPTS a seat-authored commit** on a `moe/` branch (`node-lander-adopt.ts`): a merge
+  that resolves a conflict must be a real two-parent commit, which the single-parent plumbing
+  commit cannot make. Adoption at the SAME sha is deliberate: a do-nothing resolution conflicts
+  and is withdrawn again instead of being credited as owing no bytes.
 - **A seat is killed on SILENCE, and only backstopped by the cap.** `claude -p` prints nothing
   until it finishes, so bytes-on-stdout is 0 for a seat's whole life. `seat-liveness-probe.ts`
   looks at the OS once per tick (win32: PowerShell CIM `Win32_Process`; POSIX: `ps`) for the
