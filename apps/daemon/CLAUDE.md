@@ -110,6 +110,10 @@ its own: a caller that injects no dependency provider is refused, never served a
   SYNC_CONFLICT | SYNC_SKIPPED | SYNC_FAILED (...)` line per staffing is the whole record.
   Measured UnAI 2026-09-19: 6 of 7 tree-landed nodes conflicted at integration because their seats
   began on the HEAD their tree was cut from; the ones re-staffed after the branch moved merged clean.
+- **A merge Git holds always gets its record.** Each `integrateOnce` pass (`orchestrator/node-integration.ts`)
+  writes `NodeBranchMerged` with `mergeSha: null` for a landed sha that `merge-base --is-ancestor` answers
+  EXACTLY 0 for and no record names (a store write that failed, the owner's own merge), before every early
+  return and from ONE `readIntegrationRecords` walk; the dependency gate and the publication credit wait on it.
 - **An acceptance can be WITHDRAWN, by the host alone.** `node-delivery-withdrawal.ts` scans once
   per `advance()` and records one failed `review.submit` round carrying `withdrawsAcceptance`
   (never on the wire: `SUBMIT_PAYLOAD_KEYS` is unchanged; the fold in `review-read-model.ts` and

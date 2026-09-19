@@ -46,6 +46,9 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import {
   reviewerCalibrationSlice, verifierPolicySlice,
 } from "../orchestrator/demo-seed-policy.js";
+import { createNodeIntegration } from "../orchestrator/node-integration.js";
+import { landedNodeBranches } from "../orchestrator/node-landed-branches.js";
+import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { recordLandingReceipt } from "../repository/landing-ledger.js";
 import { LANDING_NOTHING_TO_COMMIT } from "../repository/landing-receipt-contracts.js";
 import type { LandingCommit, LandingRefusal } from "../repository/landing-receipt-contracts.js";
@@ -56,6 +59,7 @@ import {
 import { readReviewLedger } from "../review/review-read-model.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
+import { dependencySatisfied } from "./dependency-integration.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import type { NodeSpec } from "./affordance-contract.js";
 import type { DeployTarget } from "../deployment/deploy-ports.js";
@@ -1029,6 +1033,31 @@ describe("a node waits on its hard dependencies", () => {
     expect(stepFor(spec, "node-dep-wip-child")).toMatchObject({ missing: [`depends:${W}`], status: "BLOCKED" });
     recordIntegration("NodeBranchMerged", W, "wip", sha, null);
     expect(stepFor(spec, "node-dep-wip-child")).toMatchObject({ missing: [], status: "READY" });
+  });
+
+  it("is released by the record the integrator's own reconciliation writes for a merge that had none", async () => {
+    // Git holds the merge (a record the store refused, or the owner's own merge) and nothing names
+    // it: the sha is an ancestor already, so no pass merges it again and this gate waited forever.
+    const R = "node-dep-reconciled";
+    const spec: readonly NodeSpec[] = Object.freeze([
+      Object.freeze({ dependsOn: Object.freeze([]), nodeRef: R, title: "Reconciled" }),
+      Object.freeze({ dependsOn: Object.freeze([R]), nodeRef: "node-dep-reconciled-child", title: "After it" }),
+    ]);
+    accept(R);
+    land(R, commitOn("moe/node-dep-reconciled", "4".repeat(40)), null, TREE_OF(R));
+    expect(dependencySatisfied(store, PROJECT, R)).toBe(false);
+    expect(stepFor(spec, "node-dep-reconciled-child")).toMatchObject({ missing: [`depends:${R}`], status: "BLOCKED" });
+
+    // The production integrator over this store and the production candidates; Git says "contained".
+    const reports = await createNodeIntegration({
+      candidates: () => landedNodeBranches(store, PROJECT, [{ nodeRef: R }]), clock: () => "2026-09-04T12:08:00.000Z",
+      controller: { controllerId: "controller-affordance", controllerPid: 1 }, git: () => ({ code: 0, stdout: "" }),
+      projectId: PROJECT, repository: createRepositoryExecutionPort(), store, storeId: "store-affordance", workspace: PROJECT_CHECKOUT,
+    }).integrateOnce();
+
+    expect(reports.map((report) => [report.nodeRef, report.outcome])).toEqual([[R, "MERGED"]]);
+    expect(dependencySatisfied(store, PROJECT, R)).toBe(true);
+    expect(stepFor(spec, "node-dep-reconciled-child")).toMatchObject({ missing: [], status: "READY" });
   });
 
   it("credits a genuine zero-byte delivery, and only that refusal", () => {

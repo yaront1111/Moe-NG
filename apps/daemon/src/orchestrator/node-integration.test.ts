@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SqliteEventStore } from "@moe/store";
 import type { RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
-import { readRepositoryIntegration } from "../repository/repository-integration-read.js";
+import { nodeCommitMerged, readRepositoryIntegration } from "../repository/repository-integration-read.js";
 import { ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
 import { createNodeIntegration } from "./node-integration.js";
 import type { IntegrationGit, LandedBranch } from "./node-integration.js";
@@ -47,11 +47,23 @@ function world(runner?: IntegrationGit) {
   let acquisitions = 0;
   const repository: RepositoryExecutionPort = { ...port, acquire: (...args) => { acquisitions += 1; return port.acquire(...args); } };
   const landed: LandedBranch[] = [];
+  /** The integrator's store counts its calls and refuses `refusals[method]` more of them. The instance is sealed, so no spy lies on it. */
+  const refusals: Record<string, number> = {};
+  const calls: Record<string, number> = {};
+  const refusing = new Proxy(store, { get(target, property): unknown {
+    const held: unknown = Reflect.get(target, property, target);
+    if (typeof held !== "function") return held;
+    return (...args: unknown[]): unknown => {
+      calls[String(property)] = (calls[String(property)] ?? 0) + 1;
+      if ((refusals[String(property)] ?? 0) > 0) { refusals[String(property)]! -= 1; throw new Error("the store is busy"); }
+      return (held as (...inner: unknown[]) => unknown).apply(target, args);
+    };
+  } });
   const integration = createNodeIntegration({
     candidates: () => landed, clock: () => "2026-09-16T10:00:00.000Z",
     controller: { controllerId: "controller-a", controllerPid: 101 },
     ...(runner === undefined ? {} : { git: runner }),
-    projectId: "project-a", repository, store, storeId: "store-a", workspace,
+    projectId: "project-a", repository, store: refusing, storeId: "store-a", workspace,
   });
   /** A node that coded in its own tree and landed one commit on its own branch (its latest landing counts). */
   const landedNode = (nodeRef: string, file: string, body: string): LandedBranch => {
@@ -78,7 +90,7 @@ function world(runner?: IntegrationGit) {
       committedAt: "2026-09-16T09:00:00.000Z", expectedVersion: version,
       events: [{ eventId: `${commandId}-e1`, eventType, payload: new TextEncoder().encode(JSON.stringify({ ...facts, version: "moe-repository-integration/1" })) }] });
   };
-  return { acquisitions: () => acquisitions, events, integration, landed, landedNode, port, recorded, store, workspace };
+  return { acquisitions: () => acquisitions, calls, events, integration, landed, landedNode, port, recorded, refusals, store, workspace };
 }
 
 /** Where parallel nodes meet again (owner decision 2026-09-16). */
@@ -291,5 +303,98 @@ describe("integrating the nodes' branches", () => {
     const w = world();
     expect(await w.integration.integrateOnce()).toEqual([]);
     expect(w.port.inspect(w.workspace)).toEqual({ ok: true, reservation: null });
+  }, 120_000);
+});
+
+/** A merge Git holds and no record names: never merged again, while the dependency gate and the publication credit wait on the record. */
+describe("reconciling a merge that has no record", () => {
+  const reconciledLine = (entry: LandedBranch) => ({ nodeRef: entry.nodeRef, outcome: "MERGED",
+    detail: `${entry.branch} ${entry.sha.slice(0, 10)} was already on the project branch; its missing record was written` });
+  const mergedByHand = (w: ReturnType<typeof world>, nodeRef: string): LandedBranch => {
+    const entry = w.landedNode(nodeRef, `${nodeRef.slice(8)}.txt`, `${nodeRef}\n`);
+    git(w.workspace, "merge", "--no-ff", "--no-edit", entry.sha);
+    return entry;
+  };
+  const heldByAnother = (w: ReturnType<typeof world>): void => {
+    expect(w.port.acquire(w.workspace, { projectId: "project-a", nodeRef: "node-holder", ownershipToken: "c".repeat(64),
+      storeId: "store-a" }, { controllerId: "controller-b", controllerPid: 102 }).ok).toBe(true);
+  };
+
+  it("says a real merge lost its record, retries in silence while the store refuses, and writes it once", async () => {
+    const w = world();
+    const entry = w.landedNode("node:v1:alpha", "alpha.txt", "alpha\n");
+    w.refusals["commit"] = 2;
+    const first = await w.integration.integrateOnce();
+    // Git took the merge and the store refused its record: the report says both.
+    expect(git(w.workspace, "merge-base", "--is-ancestor", entry.sha, "HEAD")).toBe("");
+    expect(first.map((report) => [report.outcome, report.detail])).toEqual([["MERGED",
+      `${entry.branch} ${entry.sha.slice(0, 10)} merged; the record could not be written and is retried next pass`]]);
+    // The store refuses again: nothing written, and nothing said every pass while it does.
+    expect(await w.integration.integrateOnce()).toEqual([]);
+    expect(w.events()).toEqual([]);
+    expect(nodeCommitMerged(w.store, "project-a", entry.nodeRef, entry.sha)).toBe(false);
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(entry)]);
+    // The merge commit is unknown by now, and never invented.
+    expect(w.events().map((event) => [event.type, event.facts["sha"], event.facts["mergeSha"]])).toEqual([["NodeBranchMerged", entry.sha, null]]);
+    expect(nodeCommitMerged(w.store, "project-a", entry.nodeRef, entry.sha)).toBe(true);
+    // Written once: a later pass writes nothing and reports nothing.
+    expect(await w.integration.integrateOnce()).toEqual([]);
+    expect(w.events()).toHaveLength(1);
+    expect(w.acquisitions()).toBe(1);
+  }, 120_000);
+
+  it("records a branch the owner merged by hand, behind every state that stops a merge", async () => {
+    const w = world();
+    // Nothing pending.
+    const alpha = mergedByHand(w, "node:v1:alpha");
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(alpha)]);
+    // A branch is pending and another owner holds the checkout.
+    const beta = w.landedNode("node:v1:beta", "beta.txt", "beta\n");
+    const gamma = mergedByHand(w, "node:v1:gamma");
+    heldByAnother(w);
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(gamma)]);
+    // The checkout holds uncommitted work.
+    const delta = mergedByHand(w, "node:v1:delta");
+    writeFileSync(join(w.workspace, "shared.txt"), "the operator is editing this\n", "utf8");
+    expect((await w.integration.integrateOnce()).map((report) => report.outcome)).toEqual(["MERGED", "SKIPPED"]);
+    // A conflict is parked. The record at the same commit as a conflict supersedes it: latest wins.
+    const epsilon = mergedByHand(w, "node:v1:epsilon");
+    w.recorded("NodeBranchConflicted", { at: "2026-09-16T09:00:00.000Z", branch: beta.branch, nodeRef: beta.nodeRef, paths: ["beta.txt"], projectId: "project-a", sha: beta.sha });
+    w.recorded("NodeBranchConflicted", { at: "2026-09-16T09:00:00.000Z", branch: epsilon.branch, nodeRef: epsilon.nodeRef, paths: ["epsilon.txt"], projectId: "project-a", sha: epsilon.sha });
+    const reads = w.calls["readEvents"] ?? 0;
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(epsilon)]);
+    // Four contained branches and a pending one cost the pass ONE walk of the aggregate, not one each.
+    expect((w.calls["readEvents"] ?? 0) - reads).toBe(1);
+    expect(w.events().filter((event) => event.type === "NodeBranchMerged").map((event) => [event.facts["nodeRef"], event.facts["mergeSha"]]))
+      .toEqual([alpha, gamma, delta, epsilon].map((entry) => [entry.nodeRef, null]));
+    expect(nodeCommitMerged(w.store, "project-a", epsilon.nodeRef, epsilon.sha)).toBe(true);
+    // One refused try at the held checkout in all of it, and the pending branch is still unmerged.
+    expect(w.acquisitions()).toBe(1);
+    expect(existsSync(join(w.workspace, "beta.txt"))).toBe(false);
+  }, 120_000);
+
+  it("takes only Git's exact yes for evidence: an is-ancestor that never answered records nothing", async () => {
+    let answers = false;
+    const w = world((cwd, args) => args[0] === "merge-base" && !answers ? { code: 128, stderr: "fatal: Git never answered", stdout: "" } : realGit(cwd, args));
+    mergedByHand(w, "node:v1:alpha");
+    // The pass ends at the hold, so no merge of its own is there to record.
+    heldByAnother(w);
+    expect(await w.integration.integrateOnce()).toEqual([]);
+    expect(w.events()).toEqual([]);
+    // THE CONTROL: the same world, once Git answers.
+    answers = true;
+    expect((await w.integration.integrateOnce()).map((report) => report.outcome)).toEqual(["MERGED"]);
+    expect(w.events()).toHaveLength(1);
+  }, 120_000);
+
+  it("writes nothing over records it could not read: 'no record' is never inferred from 'unreadable'", async () => {
+    const w = world();
+    const entry = mergedByHand(w, "node:v1:alpha");
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(entry)]);
+    // A read that fails hides the record just written; the write itself would still succeed, every pass.
+    w.refusals["readEvents"] = 1;
+    expect(await w.integration.integrateOnce()).toEqual([]);
+    expect(w.refusals["readEvents"]).toBe(0);
+    expect(w.events()).toHaveLength(1);
   }, 120_000);
 });

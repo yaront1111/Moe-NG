@@ -9,7 +9,7 @@ import { createNodeIntegration } from "../orchestrator/node-integration.js";
 import type { LandedBranch } from "../orchestrator/node-integration.js";
 import { ensureNodeTree, forgetNodeTrees } from "../orchestrator/node-worktrees.js";
 import { createRepositoryExecutionPort } from "./repository-execution-port.js";
-import { readRepositoryIntegration } from "./repository-integration-read.js";
+import { nodeCommitMerged, readIntegrationRecords, readRepositoryIntegration } from "./repository-integration-read.js";
 
 const roots: string[] = [];
 const stores: SqliteEventStore[] = [];
@@ -105,6 +105,26 @@ describe("reading the integration of the nodes' branches", () => {
       { branch: named.branch, conflictPaths: [], mergeSha: "a".repeat(40), nodeRef: named.nodeRef, sha: named.sha, state: "MERGED" },
       { branch: waiting.branch, conflictPaths: [], mergeSha: null, nodeRef: waiting.nodeRef, sha: waiting.sha, state: "WAITING" },
     ]);
+  }, 120_000);
+
+  it("answers the merged question and the view from one walk, the latest record at a commit winning", async () => {
+    const w = world();
+    w.landedNode("node:v1:one", "shared.txt", "one edits the shared line\n");
+    const second = w.landedNode("node:v1:two", "shared.txt", "two edits the same line\n");
+    await w.integration.integrateOnce();
+    expect(nodeCommitMerged(w.store, "project-a", second.nodeRef, second.sha)).toBe(false);
+    // What the integrator's reconciliation writes once Git holds the commit: a merge with no name.
+    w.recordedMerge(second, null);
+
+    const records = readIntegrationRecords(w.store, "project-a");
+
+    expect(records.whole).toBe(true);
+    expect(records.merged(second.nodeRef, second.sha)).toBe(true);
+    expect(records.merged(second.nodeRef, "0".repeat(40))).toBe(false);
+    expect(nodeCommitMerged(w.store, "project-a", second.nodeRef, second.sha)).toBe(true);
+    // The conflict is superseded, and a merge with no name is still served as nothing.
+    expect(records.view(w.landed).branches.map((branch) => [branch.nodeRef, branch.state])).toEqual([["node:v1:one", "MERGED"]]);
+    expect(records.view(w.landed)).toEqual(readRepositoryIntegration(w.store, "project-a", w.landed));
   }, 120_000);
 
   it("reads nothing for a project whose nodes landed nothing", () => {

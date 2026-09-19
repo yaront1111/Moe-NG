@@ -3,7 +3,8 @@ import { createHash, randomBytes } from "node:crypto";
 import type { SqliteEventStore } from "@moe/store";
 import { isMoeMetadata } from "../repository/git-landing-port.js";
 import type { RepositoryExecutionController, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
-import { readRepositoryIntegration } from "../repository/repository-integration-read.js";
+import { readIntegrationRecords } from "../repository/repository-integration-read.js";
+import type { IntegrationRecords } from "../repository/repository-integration-read.js";
 import { INTEGRATION_REF_PREFIX } from "../repository/repository-workflow-ref.js";
 
 /**
@@ -85,20 +86,34 @@ export interface NodeIntegrationConfig {
 export function createNodeIntegration(config: NodeIntegrationConfig) {
   const git = config.git ?? runGit;
   const aggregateId = `repository-integration/${createHash("sha256").update(config.projectId, "utf8").digest("hex")}`;
-  const record = (eventType: string, facts: Record<string, unknown>): void => {
+  /** Whether the record was WRITTEN: a merge's missing record holds its dependents and its publication. */
+  const record = (eventType: string, facts: Record<string, unknown>): boolean => {
     try {
       const version = config.store.getAggregateVersion(aggregateId);
       const commandId = `rin-${createHash("sha256").update(aggregateId, "utf8").digest("hex").slice(0, 32)}-${String(version)}`;
-      config.store.commit({
+      return config.store.commit({
         aggregateId, commandBytes: encoder.encode(JSON.stringify({ eventType })), commandId,
         committedAt: config.clock(),
         events: [{ eventId: `${commandId}-e1`, eventType, payload: encoder.encode(JSON.stringify({ ...facts, version: VERSION })) }],
         expectedVersion: version,
-      });
-    } catch { /* an unrecorded outcome only costs the surface its line; Git is the truth */ }
+      }).disposition === "COMMITTED";
+    } catch { return false; /* Git is the truth: a merge's missing record is written by `reconcile` on a later pass */ }
   };
   const report = (nodeRef: string, outcome: IntegrationReport["outcome"], detail: string): IntegrationReport =>
     Object.freeze({ detail, nodeRef, outcome });
+  /**
+   * A merge Git holds and no record names: this integrator's own whose record the store refused, or
+   * one the owner made by hand. Its sha is an ancestor already, so no pass merges it again, yet the
+   * dependency gate and the publication credit both wait on the record, forever. Git's own "this is
+   * contained" is the positive evidence; the merge commit is unknown and never invented. No Git
+   * effect and no hold. Reported only once written: a store that keeps refusing is retried in silence.
+   */
+  const reconcile = (contained: ReadonlySet<LandedBranch>, records: IntegrationRecords): IntegrationReport[] =>
+    !records.whole ? [] : [...contained].filter((entry) => !records.merged(entry.nodeRef, entry.sha)).flatMap((entry) =>
+      record(MERGED, { at: config.clock(), branch: entry.branch, mergeSha: null,
+        nodeRef: entry.nodeRef, projectId: config.projectId, sha: entry.sha })
+        ? [report(entry.nodeRef, "MERGED", `${entry.branch} ${entry.sha.slice(0, 10)} was already on the project branch; its missing record was written`)]
+        : []);
   /**
    * The merge commit's name, asked for twice: the operator's surface serves a merge only with its
    * name, so a merge Git will not name is recorded as taken, with no name, and served as nothing.
@@ -117,38 +132,46 @@ export function createNodeIntegration(config: NodeIntegrationConfig) {
     let landed: readonly LandedBranch[];
     try { landed = config.candidates(); } catch { return []; }
     if (landed.length === 0) return [];
+    // Exit 0 EXACTLY is Git saying "contained": 1 is its "no" and 128 is no answer, and neither proves anything.
+    const contained = new Set(landed.filter((entry) => git(workspace, ["merge-base", "--is-ancestor", entry.sha, "HEAD"]).code === 0));
     // Only branches the project's own branch does not already contain.
-    const pending = landed.filter((entry) => git(workspace, ["merge-base", "--is-ancestor", entry.sha, "HEAD"]).code !== 0);
-    if (pending.length === 0) return [];
+    const pending = landed.filter((entry) => !contained.has(entry));
+    // ONE walk of the aggregate per pass serves the reconciliation and the conflict check below.
+    const records = readIntegrationRecords(config.store, config.projectId);
+    // BEFORE every early return: nothing pending, a parked conflict, a dirty checkout and a held
+    // repository are exactly the states a dependent stranded by a missing record sits behind.
+    const reconciled = reconcile(contained, records);
+    if (pending.length === 0) return Object.freeze(reconciled);
     // A conflict already recorded at a node's exact commit is answered by that node landing again,
     // not by trying the same merge every pass; nothing later merges until it is. A record with no
     // paths names nothing a node could answer, so it holds nothing back: it is simply tried again.
-    const recorded = readRepositoryIntegration(config.store, config.projectId, pending).branches;
-    if (recorded.some((branch) => branch.state === "CONFLICTED" && branch.conflictPaths.length > 0)) return [];
+    const recorded = records.view(pending).branches;
+    if (recorded.some((branch) => branch.state === "CONFLICTED" && branch.conflictPaths.length > 0)) return Object.freeze(reconciled);
     const dirty = git(workspace, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=no"]);
-    if (dirty.code !== 0) return [report(pending[0]!.nodeRef, "UNAVAILABLE", "the project checkout could not be read")];
+    if (dirty.code !== 0) return [...reconciled, report(pending[0]!.nodeRef, "UNAVAILABLE", "the project checkout could not be read")];
     // Moe's own tracked runtime files are nobody's uncommitted work (the lander's own reading,
     // git-landing-port.ts). Only a node staffed IN this checkout ever checkpoints them, so once every
     // node lived in a tree one operator edit to .moe-next/start.ps1 skipped every merge, forever
     // (UnAI 2026-09-19). A merge that would touch the edited file is still refused, by Git, whole.
     if (dirty.stdout.split("\0").some((entry) => entry.length > 3 && !isMoeMetadata(entry.slice(3)))) {
-      return [report(pending[0]!.nodeRef, "SKIPPED", "the project checkout holds uncommitted work; nothing was merged")];
+      return [...reconciled, report(pending[0]!.nodeRef, "SKIPPED", "the project checkout holds uncommitted work; nothing was merged")];
     }
     const owner = { projectId: config.projectId, nodeRef: `${INTEGRATION_REF_PREFIX}${config.projectId}`,
       ownershipToken: randomBytes(32).toString("hex"), storeId: config.storeId };
     const acquired = config.repository.acquire(workspace, owner, config.controller);
-    if (!acquired.ok) return [];
-    const reports: IntegrationReport[] = [];
+    if (!acquired.ok) return Object.freeze(reconciled);
+    const reports: IntegrationReport[] = [...reconciled];
     try {
       for (const entry of pending) {
         const merged = git(workspace, ["merge", "--no-ff", "--no-edit", entry.sha]);
         if (merged.code === 0) {
           // A merge whose commit cannot be named is still a merge; its name stays unknown, never empty.
           const mergeSha = mergeNameOf(workspace);
-          record(MERGED, { at: config.clock(), branch: entry.branch, mergeSha,
+          const written = record(MERGED, { at: config.clock(), branch: entry.branch, mergeSha,
             nodeRef: entry.nodeRef, projectId: config.projectId, sha: entry.sha });
           reports.push(report(entry.nodeRef, "MERGED",
-            `${entry.branch} ${entry.sha.slice(0, 10)} merged${mergeSha === null ? "; the merge commit could not be read" : ""}`));
+            `${entry.branch} ${entry.sha.slice(0, 10)} merged${mergeSha === null ? "; the merge commit could not be read" : ""}${
+              written ? "" : "; the record could not be written and is retried next pass"}`));
           continue;
         }
         const conflicts = git(workspace, ["diff", "--name-only", "--diff-filter=U"]);
