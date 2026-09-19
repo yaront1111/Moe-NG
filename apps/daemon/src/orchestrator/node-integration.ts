@@ -63,8 +63,8 @@ export const runGit: IntegrationGit = (cwd, args) => {
   }
 };
 
-/** Git's own words for a merge it stopped, on one line, so the report says why. */
-const reasonOf = (stderr: string | undefined): string => {
+/** Git's own words for a merge it stopped, on one line, so the report says why. Shared with the tree sync. */
+export const reasonOf = (stderr: string | undefined): string => {
   const words = (stderr ?? "").split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== "").join(" ");
   return words === "" ? "Git gave no reason" : words.slice(0, 240);
 };

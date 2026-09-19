@@ -146,24 +146,35 @@ export interface IntegrationConflictFacts {
   readonly sha: string;
 }
 
-/** What the seat is told. Paths give way before the recipe does: Git lists them all at the merge. */
-export function integrationConflictOutput(conflict: IntegrationConflictFacts): string {
+/**
+ * The conflict brief a seat is handed, by this withdrawal and by the staffing-time tree sync
+ * (node-tree-sync.ts): `lead` first, then the paths, then the four steps `last` closes. Paths give
+ * way before the recipe does: Git lists them all at the merge.
+ */
+export function conflictRecipe(lead: readonly string[], paths: readonly string[], projectBranch: string, last: string): string {
   const render = (shown: number): string => [
-    `INTEGRATION_CONFLICT: nothing was tested. Your accepted work is safe on ${conflict.branch} at ${conflict.sha}: it is committed and is not lost.`,
-    `It could not be merged into the project's branch ${conflict.projectBranch}, so the acceptance was withdrawn. Your branch is left out of integration until you land again.`,
-    `Git could not join ${String(conflict.paths.length)} path(s):`,
-    ...conflict.paths.slice(0, shown).map((path) => path.slice(0, MAX_PATH_CHARACTERS)),
-    ...(conflict.paths.length > shown ? [`[${String(conflict.paths.length - shown)} more not shown; Git names every one when you merge]`] : []),
+    ...lead,
+    `Git could not join ${String(paths.length)} path(s):`,
+    ...paths.slice(0, shown).map((path) => path.slice(0, MAX_PATH_CHARACTERS)),
+    ...(paths.length > shown ? [`[${String(paths.length - shown)} more not shown; Git names every one when you merge]`] : []),
     "Answer it in your own working tree:",
-    `1. Run: git -c user.name=Moe -c user.email=moe@moe.local -c commit.gpgsign=false merge ${conflict.projectBranch}`,
+    `1. Run: git -c user.name=Moe -c user.email=moe@moe.local -c commit.gpgsign=false merge ${projectBranch}`,
     "2. Settle every conflicting path, keeping every criterion you own satisfied.",
     "3. COMMIT the merge. Leave no merge in progress and nothing uncommitted.",
-    "4. Re-run the test, then submit the review again.",
+    `4. ${last}`,
   ].join("\n");
-  for (let shown = Math.min(conflict.paths.length, MAX_PATHS); ; shown -= 1) {
+  for (let shown = Math.min(paths.length, MAX_PATHS); ; shown -= 1) {
     const text = render(shown);
     if (text.length <= WITHDRAWAL_OUTPUT_MAX_CHARACTERS || shown === 0) return text;
   }
+}
+
+/** What the withdrawn seat is told. */
+export function integrationConflictOutput(conflict: IntegrationConflictFacts): string {
+  return conflictRecipe([
+    `INTEGRATION_CONFLICT: nothing was tested. Your accepted work is safe on ${conflict.branch} at ${conflict.sha}: it is committed and is not lost.`,
+    `It could not be merged into the project's branch ${conflict.projectBranch}, so the acceptance was withdrawn. Your branch is left out of integration until you land again.`,
+  ], conflict.paths, conflict.projectBranch, "Re-run the test, then submit the review again.");
 }
 
 // Whatever a receipt or a path holds is cut before it is quoted, so the steps below it always arrive.

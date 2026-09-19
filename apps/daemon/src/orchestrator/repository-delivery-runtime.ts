@@ -26,6 +26,7 @@ import { createNodeIntegration } from "./node-integration.js";
 import { createDeliveryWithdrawal, ownsDirtIn } from "./node-delivery-withdrawal.js";
 import { landedNodeBranches } from "./node-landed-branches.js";
 import { createNodePublisher, pendingPublication } from "./node-publisher.js";
+import { syncTreeBeforeSeat } from "./node-tree-sync.js";
 import type { ReleasePublisher } from "../release/release-decide-service.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { NodeVerifierConfig } from "./node-verifier.js";
@@ -158,6 +159,13 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
         const brief = nodeMission(nodeRef); return brief === null ? [] : [brief.workspace];
       }),
     ])],
+    // Before `baseline`, in the coordinator's order; the merge leaves a clean tree, so the baseline
+    // that follows records no entries and the merge is never the seat's delivery.
+    sync: async (nodeRef, root) => {
+      const brief = missionIn(root)(nodeRef);
+      return brief === null ? null
+        : syncTreeBeforeSeat({ log: config.log, nodeRef, projectRoot: config.compiledWorkspace, workspace: brief.workspace });
+    },
     baseline: async (nodeRef, root) => {
       const brief = missionIn(root)(nodeRef);
       if (brief === null) return null;

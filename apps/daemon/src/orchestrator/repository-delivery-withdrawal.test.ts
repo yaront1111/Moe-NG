@@ -24,7 +24,9 @@ import { createRepositoryDeliveryRuntime, readRepositoryDeliveryFacts } from "./
  * where a node is briefed: the runtime, coordinator, verifier, lander, integrator, withdrawal
  * scanner, admission gates, stores and Git are the ones production runs. It lives beside
  * repository-delivery-runtime.test.ts rather than in it because that file is already past the
- * size this repository splits at.
+ * size this repository splits at. The same fixture drives the staffing-time tree sync
+ * (node-tree-sync.ts): the project's branch is brought into a clean tree before the baseline and
+ * the seat, and a conflicting one is briefed to the seat instead.
  */
 const cleanup: (() => void)[] = [];
 afterEach(() => { forgetNodeTrees(); for (const close of cleanup.splice(0).reverse()) close(); });
@@ -79,10 +81,12 @@ async function fixture() {
     },
   });
   cleanup.push(() => { void runtime.close(); });
+  /** The mission text each node's LAST seat was handed: what the wrapper composed, plus what the sync found. */
+  const missions = new Map<string, string>();
   const start = (nodeRef: string) => {
     const request: SpawnRequest = { credential: "seat", expiresAt: "2026-09-20T00:00:00.000Z", kind: "node.deliver",
       mission: "implement", sessionId: randomUUID(), workItemId: `node.deliver@${nodeRef}`, workspace: placed.get(nodeRef)! };
-    return runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(request);
+    return runtime.start(async (spawned) => { missions.set(nodeRef, spawned.mission); return { ok: true, pid: process.pid, exit: Promise.resolve() }; })(request);
   };
   /** One seat: staffed where the node is briefed, does `work` there, submits a clean review, exits. */
   const seat = async (nodeRef: string, work: (tree: string) => void): Promise<void> => {
@@ -104,7 +108,7 @@ async function fixture() {
     try { git(workspace, "merge-base", "--is-ancestor", sha, "HEAD"); return true; } catch { return false; }
   };
   return { facts: (nodeRef: string) => readRepositoryDeliveryFacts(store, projectId, nodeRef), landedCommit,
-    landedSha: (nodeRef: string): string => landedCommit(nodeRef).sha, logs, merged, placed, projectId, runtime, seat, start, store, trees, workspace };
+    landedSha: (nodeRef: string): string => landedCommit(nodeRef).sha, logs, merged, missions, placed, projectId, runtime, seat, start, store, trees, workspace };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 /** What one node was told, in order: its own `[lander]`, `[withdrawal]` and `[integration]` lines. */
@@ -149,6 +153,22 @@ it("returns a conflicted node to a seat, merges the branch that waited behind it
   await f.runtime.advance();
   expect(f.logs.slice(quiet).filter((line) => line.startsWith("[withdrawal]") || line.startsWith("[integration]"))).toEqual([]);
 
+  // b is staffed again on a tree still at its conflicting commit. The staffing-time sync tries the
+  // project's branch first, meets the same conflict, aborts, and briefs THIS seat in its mission.
+  // A seat that ignores the brief lands at the same sha, conflicts again and is withdrawn again:
+  // the recorded conflict, not the sync, is what the withdrawal scanner reads.
+  const trials = linesOf(f, "b").length;
+  await f.seat("b", (tree) => { expect(git(tree, "rev-parse", "HEAD")).toBe(conflictedSha); });
+  expect(linesOf(f, "b").slice(trials, trials + 2)).toEqual(["[trees] b: SYNC_CONFLICT (1 path(s))",
+    "[lander] b: BASELINE_RECORDED (0 dirty path(s) before the seat)"]);
+  expect(f.missions.get("b")).toContain("implement\nSYNC_CONFLICT: your working tree is behind the project's branch main");
+  expect(f.missions.get("b")).toContain("Git could not join 1 path(s):\nshared.txt\nAnswer it in your own working tree:");
+  await f.runtime.advance();
+  expect(f.landedSha("b")).toBe(conflictedSha);
+  await f.runtime.advance();
+  expect(f.facts("b")).toBe("READY");
+  expect(linesOf(f, "b").filter((line) => line.startsWith("[withdrawal] b: INTEGRATION_CONFLICT"))).toHaveLength(2);
+
   // The seat follows the recipe it was handed, in its own tree: merge, settle, COMMIT the merge.
   await f.seat("b", (tree) => {
     expect(() => git(tree, ...recipe!)).toThrow();
@@ -169,6 +189,45 @@ it("returns a conflicted node to a seat, merges the branch that waited behind it
   expect(readFileSync(join(f.workspace, "shared.txt"), "utf8")).toBe("a edits the shared line\nb edits the same line\n");
   expect(readFileSync(join(f.workspace, "c.txt"), "utf8")).toBe("c\n");
   expect(git(f.workspace, "status", "--porcelain", "--untracked-files=no")).toBe("");
+}, 600_000);
+
+// UnAI 2026-09-19: 6 of 7 tree-landed nodes conflicted at integration, each seat having begun on
+// the project HEAD its tree was cut from an hour or more earlier; the nodes re-staffed after the
+// branch had moved merged clean first time.
+it("brings the project's branch into a clean tree before the seat, records the baseline after it, and lands only the seat's files", async (context) => {
+  const f = await fixture();
+  context.onTestFailed(() => { console.error(f.logs.join("\n")); });
+  const tree = f.trees.get("c")!;
+  const cut = git(tree.path, "rev-parse", "HEAD");
+  await f.seat("a", (root) => writeFileSync(join(root, "a.txt"), "a\n"));
+  expect(linesOf(f, "a")[0]).toBe("[trees] a: SYNC_SKIPPED (up to date)");
+
+  await f.runtime.advance();
+
+  expect(linesOf(f, "a").at(-1)).toContain("[integration] a: MERGED");
+  const moved = git(f.workspace, "rev-parse", "HEAD");
+  expect(moved).not.toBe(cut);
+
+  // c's tree was cut before a landed; its seat begins on the project's HEAD, with a's file in place.
+  await f.seat("c", (root) => {
+    expect(git(root, "rev-parse", "HEAD")).toBe(moved);
+    expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("a\n");
+    writeFileSync(join(root, "c.txt"), "c\n");
+  });
+
+  expect(linesOf(f, "c")).toEqual([`[trees] c: SYNCED (${cut.slice(0, 10)} -> ${moved.slice(0, 10)})`,
+    "[lander] c: BASELINE_RECORDED (0 dirty path(s) before the seat)"]);
+  expect(readLatestLandingBaseline(f.store, f.projectId, "c")).toMatchObject({ entries: [], workspace: tree.path });
+  expect(f.missions.get("c")).toBe("implement");
+
+  await f.runtime.advance();
+
+  const landed = f.landedCommit("c");
+  expect({ branch: landed.branch, files: landed.files, parentSha: landed.parentSha }).toEqual({ branch: tree.branch, files: ["c.txt"], parentSha: moved });
+  expect(git(f.workspace, "show", "--name-only", "--format=", landed.sha)).toBe("c.txt");
+  expect(linesOf(f, "c").at(-1)).toContain("[integration] c: MERGED");
+  expect(f.merged(landed.sha)).toBe(true);
+  expect(f.logs.join("\n")).not.toContain("CONFLICT");
 }, 600_000);
 
 // UnAI 2026-09-19: a tracked .moe-next/start.ps1 was edited while a seat worked in the project's

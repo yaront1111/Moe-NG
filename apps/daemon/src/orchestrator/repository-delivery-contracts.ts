@@ -54,6 +54,12 @@ export interface RepositoryDeliveryConfig {
   /** Both durable claim and staffing evidence must permit retirement. */
   readonly retired: (nodeRef: string) => boolean;
   readonly storeId: string;
+  /**
+   * Brings the project's branch into the node's own tree, on EVERY staffing, once the root is
+   * proved this node's and before the baseline and the seat (node-tree-sync.ts). Answers the text
+   * the seat must read when the merge conflicts, else null. Absent = trees are never synced.
+   */
+  readonly sync?: ((nodeRef: string, reservedRoot: string) => Promise<string | null>) | undefined;
   readonly verify: (nodeRef: string, reservedRoot: string) => Promise<void>;
   readonly workspaces: () => readonly string[];
 }

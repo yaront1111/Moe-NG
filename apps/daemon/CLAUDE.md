@@ -100,6 +100,16 @@ its own: a caller that injects no dependency provider is refused, never served a
   directory. Measured UnAI 2026-09-19: a restart without the knob re-pointed a tree node at the
   clean project checkout, the verifier tested that, ACCEPTED it, and the lander recorded
   `NOTHING_TO_COMMIT` over 34 files it never looked at.
+- **A clean node tree is brought onto the project's HEAD before EVERY seat.**
+  `RepositoryDeliveryConfig.sync` (`orchestrator/node-tree-sync.ts`) runs in the coordinator's
+  `start` after the root is proved the node's and before the baseline, so the merge (a
+  fast-forward, or a merge commit as Moe) is never the seat's delivery and the verifier, which
+  binds after the seat, never sees HEAD move. A conflicting merge is aborted whole and the paths
+  ride to that seat on `request.mission` in the withdrawal's recipe words; a dirty tree, a merge in
+  progress and the shared project checkout are never touched. One `[trees] <node>: SYNCED |
+  SYNC_CONFLICT | SYNC_SKIPPED | SYNC_FAILED (...)` line per staffing is the whole record.
+  Measured UnAI 2026-09-19: 6 of 7 tree-landed nodes conflicted at integration because their seats
+  began on the HEAD their tree was cut from; the ones re-staffed after the branch moved merged clean.
 - **An acceptance can be WITHDRAWN, by the host alone.** `node-delivery-withdrawal.ts` scans once
   per `advance()` and records one failed `review.submit` round carrying `withdrawsAcceptance`
   (never on the wire: `SUBMIT_PAYLOAD_KEYS` is unchanged; the fold in `review-read-model.ts` and

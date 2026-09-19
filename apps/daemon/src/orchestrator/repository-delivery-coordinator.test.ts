@@ -7,6 +7,7 @@ import { createRepositoryExecutionPort } from "../repository/repository-executio
 import type { RepositoryExecutionPort, RepositoryExecutionReleaseReason } from "../repository/repository-execution-contracts.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 import { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
+import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createRepositoryDeliveryCoordinator } from "./repository-delivery-coordinator.js";
 import type { RepositoryDeliveryFacts } from "./repository-delivery-contracts.js";
 
@@ -25,6 +26,7 @@ interface FixtureExtras {
   readonly clean?: (root: string) => Promise<boolean>;
   readonly describeHolder?: (nodeRef: string, phase: string) => string;
   readonly publishWaiting?: () => string | null;
+  readonly sync?: (nodeRef: string, root: string) => Promise<string | null>;
 }
 function fixture(workspace = repository(), controllerId = "controller-a", controllerPid = 101, closed?: () => boolean,
   extras: FixtureExtras = {}) {
@@ -387,6 +389,54 @@ describe("an idle holder yields the repository", () => {
     expect(f.coordinator.admission(f.workspace, "node-a")).toBeNull();
     expect(f.port.inspect(f.workspace)).toEqual(before);
     f.finish();
+  }, 120_000);
+});
+
+/**
+ * UnAI 2026-09-19: 6 of 7 tree-landed nodes conflicted at integration because each seat began on
+ * the project HEAD its tree was cut from, an hour or more behind. The tree is synced on EVERY
+ * staffing, after the root is proved this node's and before the baseline and the seat, and what
+ * the sync found reaches this seat through its request, the mission text being frozen already.
+ */
+describe("the project's branch is brought into the tree before each seat", () => {
+  it("syncs after the reservation and before the baseline, on every staffing, and hands the seat what conflicts", async () => {
+    const order: string[] = [];
+    const briefs: (string | null)[] = ["SYNC_CONFLICT: shared.txt", null];
+    const f = fixture(undefined, undefined, undefined, undefined, {
+      sync: async (nodeRef, root) => { order.push(`sync ${nodeRef} ${root}`); return briefs.shift() ?? null; } });
+    f.baseline.mockImplementation(async () => { order.push("baseline"); return "baseline-original"; });
+    let fail!: (error: Error) => void;
+    const spawn: AgentSpawnStart = async (request) => {
+      order.push(`spawn ${request.mission}`);
+      return { ok: true, pid: 201, exit: new Promise<void>((_resolve, reject) => { fail = reject; }) };
+    };
+
+    const started = await f.coordinator.start(request(f.workspace), spawn);
+    if (!started.ok) throw new Error(started.code);
+
+    expect(order).toEqual([`sync node-a ${f.workspace}`, "baseline", "spawn implement\nSYNC_CONFLICT: shared.txt"]);
+    // A contained failed attempt keeps the hold AND its baseline; the retry still syncs first.
+    fail(new AgentProcessFailureError("EXIT_NONZERO", 1, null));
+    await expect(started.exit).rejects.toThrow("AGENT_PROCESS_FAILED");
+    f.retire(); await f.coordinator.advance();
+    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", baselineId: "baseline-original" } });
+    const retry = await f.coordinator.start({ ...request(f.workspace), sessionId: "session-retry" },
+      async (retried) => { order.push(`spawn ${retried.mission}`); return { ok: true, pid: 201, exit: Promise.resolve() }; });
+    if (!retry.ok) throw new Error(retry.code);
+    await retry.exit;
+    // No baseline the second time, and a clean sync leaves the request exactly as the wrapper built it.
+    expect(order.slice(3)).toEqual([`sync node-a ${f.workspace}`, "spawn implement"]);
+    expect(f.baseline).toHaveBeenCalledOnce();
+  }, 120_000);
+
+  it("neither syncs nor amends the mission when no sync is wired", async () => {
+    const f = fixture();
+    const missions: string[] = [];
+    const started = await f.coordinator.start(request(f.workspace),
+      async (spawned) => { missions.push(spawned.mission); return { ok: true, pid: 201, exit: Promise.resolve() }; });
+    if (!started.ok) throw new Error(started.code);
+    await started.exit;
+    expect(missions).toEqual(["implement"]);
   }, 120_000);
 });
 

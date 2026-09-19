@@ -127,6 +127,13 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     }
     busy.add(root);
     try {
+      // The project's branch is brought into the node's tree HERE and nowhere else: the root is
+      // proved this node's reserved workspace, the baseline is not yet recorded (so the merge is
+      // never read as the seat's delivery) and no seat exists (so the binding the verifier captures
+      // after it never sees HEAD move). Not inside `baseline`: that runs only while baselineId is
+      // null, and a node re-staffed on a hold it never released is exactly the stale tree (UnAI
+      // 2026-09-19: 6 of 7 tree-landed nodes conflicted at integration).
+      const briefing = config.sync === undefined ? null : await config.sync(nodeRef, root);
       if (handle.reservation.baselineId === null) {
         const baselineId = await config.baseline(nodeRef, root);
         if (baselineId === null) {
@@ -147,7 +154,9 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       // with no record only means no later controller may infer its closure from its runtime.
       config.containment?.recordRuntime("SEAT", handle);
       exits.delete(handle.owner.ownershipToken);
-      const started = await spawn(request);
+      // The mission text was composed before this chain was entered (agent-wrapper.ts) and the
+      // sync records nothing durable, so what it found reaches THIS seat through the request alone.
+      const started = await spawn(briefing === null ? request : { ...request, mission: `${request.mission}\n${briefing}` });
       if (!started.ok) {
         change(handle, { phase: "RESERVED", sessionId: null, pid: null });
         return started;
