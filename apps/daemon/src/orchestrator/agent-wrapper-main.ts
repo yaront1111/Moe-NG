@@ -67,7 +67,7 @@ export type {
   WrapperStopSignal,
 } from "./process-runner-lifecycle.js";
 import { enrollDecisionLedgerMemo } from "../decision-ledger-memo.js";
-import { resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
+import { brokerImageAt, resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
 
 /**
  * The process wrapper: `node src/orchestrator/agent-wrapper-main.ts` staffs the
@@ -271,6 +271,7 @@ async function main(): Promise<void> {
     });
     delivery = createRepositoryDeliveryRuntime({
       publisher: provider.releasePublisher(), runtimeBrokerPid: await resolveRuntimeBrokerPid(process.ppid),
+      brokerImageAt: (pid) => brokerImageAt(pid),
       compiledWorkspace, fence: staffingFence, landingOn,
       log: (line) => { process.stdout.write(`${line}\n`); },
       nodes: listNodes, storePath: config.storePath,

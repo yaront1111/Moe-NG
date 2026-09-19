@@ -118,6 +118,31 @@ describe("runtimes that ran a hold's processes", () => {
     expect(named.on(502).runtimesGone(handle(), () => { throw new Error("probe failed"); })).toBe(false);
   });
 
+  /**
+   * UnAI 2026-09-19: the recorded broker was pid 42564. After a restart Windows had handed that
+   * pid to the new runtime's launcher, so "alive" stayed true and the hold stayed BLOCKED for
+   * the whole run: the integrator never got the checkout and nothing merged.
+   */
+  it("does not take a reused pid for the broker, and takes an unanswerable OS for a live one", () => {
+    const { store } = shared();
+    const asked: number[] = [];
+    const ledger = (image: boolean | null) => createRepositoryContainmentLedger(store, 503,
+      (pid) => { asked.push(pid); return image; });
+    createRepositoryContainmentLedger(store, 501).recordRuntime("SEAT", handle());
+
+    // Alive, and the OS names another image there: the broker is gone, its Job closed with it.
+    expect(ledger(false).runtimesGone(handle(), aliveOnly(501))).toBe(true);
+    // Alive and still the broker image, or the OS could not say: never inferred.
+    expect(ledger(true).runtimesGone(handle(), aliveOnly(501))).toBe(false);
+    expect(ledger(null).runtimesGone(handle(), aliveOnly(501))).toBe(false);
+    expect(asked).toEqual([501, 501, 501]);
+    // A dead pid needs no second question, and a probe that throws still never infers.
+    expect(ledger(true).runtimesGone(handle(), aliveOnly())).toBe(true);
+    expect(asked).toEqual([501, 501, 501]);
+    expect(createRepositoryContainmentLedger(store, 503, () => { throw new Error("tasklist failed"); })
+      .runtimesGone(handle(), aliveOnly(501))).toBe(false);
+  });
+
   it("records one run once and lets a later run void an earlier proof", () => {
     const { store, on } = shared();
     const kept = on(501);

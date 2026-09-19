@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseRuntimeBroker, resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
+import { brokerImageAt, parseRuntimeBroker, resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
 
 /** The runtime's broker is named only when it really is the broker (addendum 2026-09-16). */
 describe("naming this runtime's Job broker", () => {
@@ -36,4 +36,34 @@ describe("naming this runtime's Job broker", () => {
   it.runIf(process.platform === "win32")("names no broker for a process that is not under one", async () => {
     expect(await resolveRuntimeBrokerPid(process.ppid)).toBeNull();
   }, 60_000);
+});
+
+/** A live pid is not a live broker: Windows reuses pids (UnAI 2026-09-19, pid 42564). */
+describe("whether a recorded broker pid still runs the broker image", () => {
+  const csv = (image: string, pid: number): string => `"${image}","${String(pid)}","Console","1","7,004 K"` + String.fromCharCode(13, 10);
+
+  it("says yes only for the broker image at exactly that pid", () => {
+    const calls: string[][] = [];
+    const run = (answer: string) => (file: string, args: readonly string[]): string => { calls.push([file, ...args]); return answer; };
+    expect(brokerImageAt(42564, run(csv("moe-windows-job-broker.exe", 42564)), "win32")).toBe(true);
+    expect(brokerImageAt(42564, run(csv("MOE-Windows-Job-Broker.EXE", 42564)), "win32")).toBe(true);
+    // The pid now belongs to something else, or to nothing: not the broker.
+    expect(brokerImageAt(42564, run(csv("node.exe", 42564)), "win32")).toBe(false);
+    expect(brokerImageAt(42564, run("INFO: No tasks are running which match the specified criteria."), "win32")).toBe(false);
+    // A row for ANOTHER pid proves nothing about this one.
+    expect(brokerImageAt(42564, run(csv("moe-windows-job-broker.exe", 4256)), "win32")).toBe(false);
+    expect(calls[0]?.slice(1)).toEqual(["/FI", "PID eq 42564", "/FO", "CSV", "/NH"]);
+    expect(calls[0]?.[0]?.toLowerCase().endsWith("tasklist.exe")).toBe(true);
+  });
+
+  it("cannot say off Windows, for an invalid pid, or when the query fails", () => {
+    const never = (): string => { throw new Error("must not run"); };
+    expect(brokerImageAt(42564, never, "linux")).toBeNull();
+    expect(brokerImageAt(0, never, "win32")).toBeNull();
+    expect(brokerImageAt(42564, () => { throw new Error("tasklist missing"); }, "win32")).toBeNull();
+  });
+
+  it.runIf(process.platform === "win32")("asks the real OS: this test process is not the broker", () => {
+    expect(brokerImageAt(process.pid)).toBe(false);
+  }, 30_000);
 });

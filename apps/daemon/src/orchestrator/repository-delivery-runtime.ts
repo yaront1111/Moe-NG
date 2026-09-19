@@ -17,6 +17,7 @@ import { readReviewSubmissionSource } from "../review/review-submission-source.j
 import type { RepositoryExecutionPhase } from "../repository/repository-execution-contracts.js";
 import { describeRepositoryHolder } from "./repository-holder-words.js";
 import { createRepositoryContainmentLedger } from "./repository-containment-witness.js";
+import type { BrokerImageProbe } from "./repository-containment-witness.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
@@ -38,6 +39,8 @@ interface RepositoryDeliveryRuntimeConfig {
   readonly publisher?: ReleasePublisher;
   /** The Windows Job broker that owns this runtime's Job; null or absent = unnamed, never inferred from. */
   readonly runtimeBrokerPid?: number | null;
+  /** Asks the OS whether a recorded broker pid still runs the broker image; absent means it cannot say. */
+  readonly brokerImageAt?: BrokerImageProbe;
   readonly compiledWorkspace: string | null;
   readonly fence: AgentSessionFence;
   readonly landingOn: boolean;
@@ -135,7 +138,7 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     // Deliveries leave a free repository to an approved publish that has not held it yet; the
     // publisher (below) runs after the delivery pass and would otherwise lose every race.
     publishWaiting: () => config.compiledWorkspace === null ? null : pendingPublication(store, projectId),
-    containment: createRepositoryContainmentLedger(store, config.runtimeBrokerPid ?? null),
+    containment: createRepositoryContainmentLedger(store, config.runtimeBrokerPid ?? null, config.brokerImageAt),
     // A probe that throws reads as "not clean": any throw inside advance blocks the reservation.
     clean: async (root) => {
       try {

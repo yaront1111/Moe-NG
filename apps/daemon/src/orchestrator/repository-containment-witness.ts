@@ -20,6 +20,14 @@ import type { RepositoryExecutionHandle } from "../repository/repository-executi
  * starts. A broker that is gone closed its Job, and closing a KILL_ON_JOB_CLOSE Job kills every
  * process in it. So when every runtime that ran a process for a hold is gone, nothing of it can
  * still be running. An unnamed runtime, an unreadable record, or a live broker never infers.
+ *
+ * A LIVE PID IS NOT A LIVE BROKER. Windows hands a dead process's pid to the next one that asks.
+ * Measured on UnAI 2026-09-19: the recorded broker was pid 42564; after the owner's restart that
+ * pid belonged to the NEW runtime's launcher, so "is 42564 alive" stayed true for the whole run,
+ * the hold stayed BLOCKED, the integrator could not take the checkout and nothing merged. So a
+ * live pid counts as the broker only while the OS still names the broker image at it. When the
+ * OS cannot say, the broker is taken to be alive: the wrong answer there costs a wait, never a
+ * release over a running process.
  */
 export type RepositoryContainmentWitness = "SEAT" | "VERIFICATION";
 
@@ -73,7 +81,11 @@ function runtimeOf(payload: Uint8Array, ownershipToken: string): RuntimeRecord |
   return { kind: record["kind"], brokerPid: broker, sessionId: session };
 }
 
-export function createRepositoryContainmentLedger(store: ContainmentStore, runtimeBrokerPid: number | null = null): RepositoryContainmentLedger {
+/** Whether the process at this pid still runs the broker image; null when the OS could not say. */
+export type BrokerImageProbe = (pid: number) => boolean | null;
+
+export function createRepositoryContainmentLedger(store: ContainmentStore, runtimeBrokerPid: number | null = null,
+  brokerImageAt: BrokerImageProbe = () => null): RepositoryContainmentLedger {
   const latestOf = (handle: RepositoryExecutionHandle) => [...store.readEvents(aggregateOf(handle))]
     .sort((left, right) => left.aggregateSequence - right.aggregateSequence).at(-1);
   const append = (handle: RepositoryExecutionHandle, eventType: string, payload: string): void => {
@@ -125,7 +137,7 @@ export function createRepositoryContainmentLedger(store: ContainmentStore, runti
         if (!runs.some((run) => run.kind === "SEAT" && run.sessionId === handle.reservation.sessionId)) return false;
         return runs.every((run) => {
           if (run.brokerPid === null) return false;
-          try { return !isAlive(run.brokerPid); } catch { return false; }
+          try { return !isAlive(run.brokerPid) || brokerImageAt(run.brokerPid) === false; } catch { return false; }
         });
       } catch { return false; }
     },
