@@ -162,7 +162,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:57:15.088Z",
-  "updatedAt": "2026-09-19T01:10:34.272Z",
+  "updatedAt": "2026-09-19T01:11:11.451Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:07:42.405Z",
     "plannedStepCount": 6,
@@ -230,7 +230,8 @@
     "docs/agent-stack-runbook.md",
     ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
     ".moe/tasks/task-815f803db7c94aa1a291c5db779e8ed6.json",
-    ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json"
+    ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json",
+    ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json"
   ],
   "completionSummary": "Claude seats now stream: argv `-p --output-format stream-json --verbose --include-partial-messages` (Q3). Every raw byte is liveness output. The pure seat-output-tail.ts (createStreamJsonReport, createSeatOutput) decodes stdout back to exactly what text mode printed: each result's text plus \"\\n\", non-event lines verbatim. So the console, the tail, SEAT_EXIT (outputSeen, lastLine) and the classifier keep their meaning. For a streaming seat CPU is reported, never counted: no event and no tool child for MOE_AGENT_SILENCE_MS kills it (Q1 kill line pinned). Codex seats keep the CPU rule (the moved C4 arms).\nDeviation, from the adversarial pass: at end of stream a `{\"…` line that does not parse (cut mid-write by a kill) yields nothing, so it cannot park the provider (U4b, Q7, Q8).\nEvidence, all fresh:\n- Focused 6 files: Test Files 6 passed (6), Tests 170 passed | 1 skipped.\n- Daemon: 765 passed, 12627 tests.\n- e2e: 33 passed | 1 skipped. Security: 12 passed, 1009 tests.\n- Root: 1 FOREIGN red, pack-artifact-sweep via node-spec-loader from f5d5f4ee (an ancestor of the start HEAD); filed as task-e3490ca9.\n- typecheck: 0.\n- Real claude 2.1.277 equivalence: 6/6 byte-equal (comment-40d74217).\n- In-memory drills M1-M6 were red on their targets.\n- Lines: spawner 548 (<551), contract 448, wrapper-main 552, tail 239, liveness 192, probe 216.\nReview: comment-7d0743af. Follow-ups: comment-fd98f540.",
   "commits": [
@@ -266,6 +267,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "49eb32dbf0ec3d4b256988d081a29e3ff3a2f281",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T01:00:57Z",
+      "paths": [
+        ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json",
+        ".moe/tasks/task-815f803db7c94aa1a291c5db779e8ed6.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T01:11:11.451Z",
+      "treeId": "66bee37eb5b3b6283d583aca4fca9e8f1e89b474",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -278,14 +295,15 @@
     "apps/daemon/src/orchestrator/seat-liveness.ts",
     "docs/agent-stack-runbook.md",
     "apps/daemon/src/orchestrator/seat-output-tail.test.ts",
-    "apps/daemon/src/orchestrator/agent-spawner.ts"
+    "apps/daemon/src/orchestrator/agent-spawner.ts",
+    "apps/daemon/qa-drill-task-815f803d-qa-09357cdf.config.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-69773bc1@2026-09-19T00:19:52Z",
-    "at": "2026-09-19T01:00:41.335Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-19T01:00:57Z",
+    "at": "2026-09-19T01:11:11.451Z"
   },
   "completedAt": "2026-09-19T01:10:34.272Z",
   "reviewCompletedAt": "2026-09-19T01:10:34.272Z",

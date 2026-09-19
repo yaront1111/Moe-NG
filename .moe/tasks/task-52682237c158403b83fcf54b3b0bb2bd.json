@@ -102,7 +102,7 @@
     }
   ],
   "planRevision": 13,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -118,11 +118,17 @@
       "author": "worker-952c612b",
       "content": "FOLLOW-UP (step-6 E, recorded as a comment per the plan, not as a new row): carry git's OWN words to the Publish card.\n\nToday the observation's `reason` is a closed vocabulary: ACCEPTED, REJECTED, INDETERMINATE or UNRECORDED, taken from task-78dea88b's transmission record. git's stderr (for example \"Permission denied (publickey)\") reaches only the transmit() return string, which goes into the UNKNOWN detail and the wrapper log line. Nothing durable holds it and nothing on the card shows it.\n\nWhat the follow-up needs:\n1. Source. `pushed.detail` is already built by gitFailureWords (apps/daemon/src/repository/git-publication-port.ts:39-40). It is whitespace-collapsed, bounded, and redacts `scheme://user:secret@host` userinfo.\n2. REDACTION AUDIT before it becomes durable and served on the wire. The regex covers URL userinfo only. It does NOT cover token-shaped strings git or a credential helper can echo outside URL form: `Authorization: Bearer ...`, `x-access-token:<tok>` or `ghp_...` in a message, or a proxy URL in an http.proxy error. The store and /runs/read would persist and serve whatever passes, so extend the redactor and pin it with hostile arms before storing any stderr.\n3. Shape. Add it as a NEW additive field on a NEW event version, or a separate event. NEVER add keys to moe-publication-transmission/1 or moe-publication-observation/1: both are exact-key decoders, and new keys would make every stored record read as malformed. Widen the wire at BOTH ends in one row, exactly as this row did (runs-read-contract.ts RunGoalPublish.observation, plus live-runs.ts publishOf's nested exact list).\n4. Cost as measured at planning: two more files (the publication port's push result and its test) beyond this row's ten. That is why it was deferred.\n\nOther adversarial notes for the sibling rows:\n- Each observation write bumps the `publish:<goalId>` aggregate version, just as the intent and transmission writes already do. Writes happen only while a publish is UNKNOWN and only on CHANGE. A resolve offer fenced on that aggregate's version (task-bbe7a5d2) can therefore go stale when the observed tip changes between its read and its submit. The next poll re-offers it.\n- readPublicationObservation does not check the event's principal. This matches remote-default-branch.ts. The content is validated, though: shas, a closed reason set, and exact keys. So a foreign event can never put free text on the card.",
       "timestamp": "2026-09-19T00:56:51.773Z"
+    },
+    {
+      "id": "comment-a6e065baf3fd493f9f879b59cb7ba293",
+      "author": "qa-09357cdf",
+      "content": "QA follow-ups (qa-09357cdf, 2026-09-19). Not rejection reasons; recorded here per the delivery-bias rail.\n\n1. UNPINNED GUARD. apps/daemon/src/http/run-goal-publication.ts:19 reads the observation only while `receipt === undefined`. An in-memory mutant that makes the read unconditional (`true ? readPublicationObservation(...)`) stays GREEN across publication-effect-ledger.test.ts and node-publisher.test.ts (27/27). No arm records an observation and THEN a receipt for the same decision. Today nothing on the card changes: observationLine hides the line for PUSHED/REFUSED, and that is pinned (goal-publish.test.tsx, drill C2 red). But once the sibling resolve service (task-21be6e90's resolve child) writes a receipt after an observation, this guard becomes the only thing keeping a stale observation off the wire. Whichever row writes that receipt should add the arm: observe (UNKNOWN), resolve (receipt), then assert `card().observation === null`.\n\n2. FOREIGN BOARD FILE IN THE COMPLETION COMMIT. dc15621b also carries .moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json, which holds governor plan amendments from 01:06Z. The wrapper's attribution swept up board state. No code is affected, so this is noted and not treated as a defect.",
+      "timestamp": "2026-09-19T01:25:18.297Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:14:17.738Z",
-  "updatedAt": "2026-09-19T01:07:24.064Z",
+  "updatedAt": "2026-09-19T01:25:38.392Z",
   "dependsOn": [
     "task-0416061566de49939e91bbd6351be79e"
   ],
@@ -130,7 +136,9 @@
     "firstClaimAt": "2026-09-18T19:34:08.343Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-19T01:25:38.392Z",
+    "wallClockMs": 21090049
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -150,7 +158,8 @@
   },
   "planApprovedAt": "2026-09-18T19:37:17.602Z",
   "contextFetchedBy": [
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-19T00:37:42.570Z",
   "declaredFiles": [
@@ -228,5 +237,8 @@
     "kind": "completion",
     "sessionId": "worker-952c612b@2026-09-19T00:37:30Z",
     "at": "2026-09-19T01:07:24.064Z"
-  }
+  },
+  "completedAt": "2026-09-19T01:25:38.392Z",
+  "reviewCompletedAt": "2026-09-19T01:25:38.392Z",
+  "reviewSummary": "Reviewed completion commit dc15621b (pushed). The row paths in the tree are byte-equal to it.\nDoD1: a separate observation event, written only on change (3 identical passes write 1; a moved tip writes a 2nd).\nDoD2: RunGoalPublish.observation is always sent. publishOf checks a 9-key exact list plus a nested 4-key list; extra-key arms refuse with RUNS_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_RUNS; the cross-end arm decodes the real daemon body.\nDoD3: cr.publish.observed text is asserted by value; no line shows when there is no observation or the publish is resolved.\nDoD4: the HAZARD arm shows intent and transmission bytes unchanged.\nDoD5, re-run by me:\n(A) 5-file leg: Test Files 5 passed, Tests 106 passed.\n(B) control-room: Test Files 195 passed, Tests 2597 passed.\n(C) daemon: 764/765 files, 12631 passed, 1 failed. The failure is release-read.test.ts, a peer's in-flight test (absent at HEAD, written mid-run); alone it passes 12/12.\n(D) typecheck -r --no-bail: 18/19 Done. The one error is live-release.ts:167, in a peer-dirty hunk.\nNeither red touches an owned path.\nDrills: 15 in-memory mutants (11 daemon, 4 control-room), all red, each generated once; controls green (27/27, 85/85). One probe survived: an unconditional read at run-goal-publication.ts:19. The card gates on outcome, so nothing visible changes (follow-up comment-a6e065ba).\nNo new .ts files; the largest file is 324 lines; nothing secret goes on the wire."
 }
