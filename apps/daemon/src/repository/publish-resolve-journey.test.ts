@@ -12,8 +12,10 @@ import { handleAsyncCommandRequest } from "../http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { readRunGoalPublication } from "../http/run-goal-publication.js";
 import { isDurableHumanPrincipal } from "../identity/human-approver.js";
+import { credentialSha256Of } from "../identity/session-authenticator.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
+import { MCP_EXCLUDED_COMMAND_KINDS, MCP_NEVER_DELEGATED_KINDS } from "../mcp-tool-allowlist.js";
 import { createNodePublisher } from "../orchestrator/node-publisher.js";
 import { createRepositoryDeliveryRuntime } from "../orchestrator/repository-delivery-runtime.js";
 import { landingEnvironment, nodeGitRunner, type GitRunResult } from "./git-landing-port.js";
@@ -142,22 +144,42 @@ it("LIVE: a push whose answer was lost stays UNKNOWN and holds every delivery; t
     observation: { observedSha: null, expectedSha: sha, reason: "INDETERMINATE", observedAt: NOW }, outcome: "UNKNOWN",
     remoteUrl: REMOTE_URL, requestedAt: NOW, sha, url: null });
 
-  // A NON-operator is refused by the resolve's own entry fence. This one is the owner's browser: a session minted by the
-  // production pairing seam, a durable HUMAN holding ADMIN. The kind is not among the registry's paired-human widenings
-  // (task-4f16c331 asks the owner to rule on one), so its entry answers, not the registry's sync fence, whose detail would
-  // name a paired session. Nothing is written.
+  // (4) Owner ruling comment-00ce6540 on task-4f16c331: a paired durable HUMAN holding ADMIN may
+  // resolve. The kind stays MCP-excluded and never-delegated. A paired human without ADMIN is
+  // refused at the ingress capability gate; an agent session with ADMIN is refused at the entry.
+  const noAdmin = createOperatorSessionHandshakePort({ capabilities: [CAPABILITIES.GOAL], clock: Date.now, operatorPrincipalId: OPERATOR,
+    projectId: PROJECT, reservedPrincipalIds: [OPERATOR], sessionTtlMs: 3_600_000, store }).mint();
+  if (!noAdmin.ok) throw new Error(noAdmin.code);
+  expect(await resolveAs(noAdmin.credential, "resolve-by-paired-no-admin", first)).toMatchObject({
+    httpStatus: 403, outcome: "REFUSED", stage: "AUTHORIZE", error: { code: "CAPABILITY_DENIED" } });
+  expect(readPublishLedger(store, PROJECT).get(GOAL)?.receipts.size).toBe(0);
+
+  const agentCredential = "publish-resolve-journey-agent";
+  const agentSession = "session-publish-resolve-agent";
+  expect(await handleAsyncCommandRequest(deps, {
+    body: encoder.encode(JSON.stringify({ commandId: "open-agent", commandKind: "session.open",
+      correlationId: "publish-resolve-journey", expectedVersion: 0,
+      payload: { capabilities: [CAPABILITIES.ADMIN], credentialSha256: credentialSha256Of(agentCredential),
+        expiresAt: "2027-01-01T00:00:00.000Z", sessionId: agentSession },
+      requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: OPERATOR_CREDENTIAL, targetAggregateId: agentSession })),
+    credential: OPERATOR_CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION }, "HTTP_LISTENER"))
+    .toMatchObject({ outcome: "ACCEPTED" });
+  expect(isDurableHumanPrincipal(store, agentSession)).toBe(false);
+  expect(await resolveAs(agentCredential, "resolve-by-agent", first)).toMatchObject({
+    outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 403,
+    refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION",
+      detail: "this command requires the configured operator principal" } });
+  expect(readPublishLedger(store, PROJECT).get(GOAL)?.receipts.size).toBe(0);
+
   const paired = createOperatorSessionHandshakePort({ capabilities: [CAPABILITIES.ADMIN], clock: Date.now, operatorPrincipalId: OPERATOR,
     projectId: PROJECT, reservedPrincipalIds: [OPERATOR], sessionTtlMs: 3_600_000, store }).mint();
   if (!paired.ok) throw new Error(paired.code);
   expect(isDurableHumanPrincipal(store, paired.principalId)).toBe(true);
-  expect(await resolveAs(paired.credential, "resolve-by-paired-browser", first)).toMatchObject({ outcome: "PORT_REFUSED", stage: "DISPATCH",
-    httpStatus: 403, refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION",
-      detail: "this command requires the configured operator principal" } });
-  expect(readPublishLedger(store, PROJECT).get(GOAL)?.receipts.size).toBe(0);
-
-  // (5) The OPERATOR resolves it NOT_TRANSMITTED through the production registry.
-  expect(await resolveAs(OPERATOR_CREDENTIAL, "resolve-by-operator", first)).toMatchObject({ outcome: "ACCEPTED", httpStatus: 200,
-    decision: { commandId: "resolve-by-operator", disposition: "DECIDED", resultCode: "PUBLISH_RESOLVED_NOT_TRANSMITTED" } });
+  expect(await resolveAs(paired.credential, "resolve-by-paired-browser", first)).toMatchObject({
+    outcome: "ACCEPTED", httpStatus: 200,
+    decision: { commandId: "resolve-by-paired-browser", disposition: "DECIDED",
+      resultCode: "PUBLISH_RESOLVED_NOT_TRANSMITTED" } });
   // (6) One REFUSED receipt for that decision, carrying the observation; the card says REFUSED at once. The hold is not the
   // command's to give back, so until the publisher's next pass the delivery is still turned away by the same holder.
   const detail = `the operator resolved this publish as NOT_TRANSMITTED; last observation ${NOW}: remote tip absent, expected ${sha}, push INDETERMINATE`;
@@ -192,3 +214,8 @@ it("LIVE: a push whose answer was lost stays UNKNOWN and holds every delivery; t
   expect(readPublishLedger(store, PROJECT).get(GOAL)?.receipts.size).toBe(2);
   // About 60 real git processes: seconds on an idle host, minutes when process spawns crawl under a loaded one.
 }, 600_000);
+
+it("keeps repository.publish_resolve MCP-excluded and never-delegated", () => {
+  expect(MCP_EXCLUDED_COMMAND_KINDS).toContain(PUBLISH_RESOLVE_COMMAND_KIND);
+  expect(MCP_NEVER_DELEGATED_KINDS).toContain(PUBLISH_RESOLVE_COMMAND_KIND);
+});
