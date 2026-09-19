@@ -12,12 +12,12 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor re-park, per the blocking seat's own request (comment-eaa1af5e): DoD 1 is unsatisfiable as written — the red did not reproduce on the unchanged 592-file suite (EXIT 0, 10572 tests) and the 592 trigger count no longer exists on disk (596 today). Owner answered \"NEXT TASK\" to two seats asking for an approach, so this row waits for human triage in BACKLOG instead of sitting BLOCKED with nothing that can clear it. Before it is offered again the owner should rewrite DoD 1-3 around the measured risk: the 60s margin at foundation-attempt-windows.test.ts (240_000 launch timeout inside the per-case 300_000) against provider latency (100s/122s recorded), not daemon test-file count.",
+  "reopenReason": "NOT REPRODUCIBLE — archived on the owner's instruction 2026-09-18, after sitting BLOCKED 13885m and then BACKLOG. Two independent measurements killed its DoD: architect-f362f7a6 ran the unchanged 592-file suite to EXIT 0 (592 passed, 10572 tests, 370.34s), and the stated trigger count no longer exists on disk (596 daemon test files), so \"reproduce the red at 592 files\" cannot be attempted without deleting four peer-owned files. DoD 3 (EXIT 0 at count and count+1) was already met in passing by those four additions. The one real risk the investigation surfaced is NOT this row's subject and is not lost by archiving it: foundation-attempt-windows.test.ts:861 has a 60s margin between its 240_000 launch timeout and recorded PROVIDER latencies of 100s and 122s. If that margin ever bites, file it as its own row against provider latency, not against daemon test-file count.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -50,7 +50,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:51:40.083Z",
-  "updatedAt": "2026-09-18T06:22:37.298Z",
+  "updatedAt": "2026-09-18T12:00:01.098Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T21:37:23.330Z"
   },

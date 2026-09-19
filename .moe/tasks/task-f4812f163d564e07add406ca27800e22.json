@@ -93,7 +93,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-19T03:26:53.454Z",
-  "updatedAt": "2026-09-19T08:47:12.866Z",
+  "updatedAt": "2026-09-19T08:47:42.690Z",
   "metrics": {
     "firstClaimAt": "2026-09-19T08:17:04.263Z",
     "plannedStepCount": 4,
@@ -150,7 +150,8 @@
     "apps/daemon/src/http/run-goal-publication.ts",
     "apps/daemon/src/http/runs-read.ts",
     "apps/daemon/src/http/affordance-read.ts",
-    ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json"
+    ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json",
+    ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json"
   ],
   "completionSummary": "Fresh publish in-flight (intent, no receipt, no observation, now < PUBLISH_IN_FLIGHT_BOUND_MS) reads PENDING/code null; affordance mint offers no repository.publish_resolve. Bound=4*60s+60s=300_000 (observe, push, measureDefaultBranch, observe after intent). Stuck-by-age, observation, and legacy-no-transmission still UNKNOWN+Resolve. Clock only from runs-read and affordance-read. DoD pinned on production read+offer; journey test green. Plan suite: Test Files 9 passed, 240 passed. Also goal-deployment-read+release-read 11/258. typecheck exit 0. Drills M1/M2/M3 red :1576/:1607/:1584. Follow-ups comment-80a5e9b5.",
   "commits": [
@@ -173,14 +174,30 @@
       "treeId": "06103c68e8158198bc23429ab49cc1ec3e1e91db",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "ddbb1b2d48ed4aa4416710de861b3e7429ef0566",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-6e60f228@2026-09-19T08:38:00Z",
+      "paths": [
+        ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json",
+        ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json"
+      ],
+      "recordedBy": "qa-6e60f228",
+      "recordedAt": "2026-09-19T08:47:42.690Z",
+      "treeId": "f1efb1f971f3a857771d4dc3b29b6292550efb39",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-07e6de2a@2026-09-19T08:21:31Z",
-    "at": "2026-09-19T08:36:39.869Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-6e60f228@2026-09-19T08:38:00Z",
+    "at": "2026-09-19T08:47:42.690Z"
   },
   "completedAt": "2026-09-19T08:47:12.866Z",
   "reviewCompletedAt": "2026-09-19T08:47:12.866Z",
