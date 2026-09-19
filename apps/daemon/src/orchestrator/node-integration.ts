@@ -20,8 +20,10 @@ import { INTEGRATION_REF_PREFIX } from "../repository/repository-workflow-ref.js
  * inferring it from Git, and a merge already taken is never taken twice. A conflict is only ever
  * paths Git could not join: a merge it stopped for a reason of its own (a lock, an untracked file
  * in the way, a commit it cannot reach) records nothing and is tried again on the next pass, as is
- * a conflict some earlier pass recorded with no paths. A recorded conflict is answered by the node
- * landing again; the same commit is never tried twice.
+ * a conflict some earlier pass recorded with no paths. A recorded conflict withdraws its node's
+ * acceptance (node-delivery-withdrawal.ts): the node returns to a seat and leaves the candidates,
+ * so the halt lasts one pass, and the conflict is answered by the node landing again. The same
+ * commit is never tried twice.
  */
 const MERGED = "NodeBranchMerged";
 const CONFLICTED = "NodeBranchConflicted";

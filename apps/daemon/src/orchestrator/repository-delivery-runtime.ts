@@ -22,6 +22,7 @@ import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
 import { landingVerificationClass } from "./node-lander-verification.js";
 import { createNodeIntegration } from "./node-integration.js";
+import { createDeliveryWithdrawal } from "./node-delivery-withdrawal.js";
 import { landedNodeBranches } from "./node-landed-branches.js";
 import { createNodePublisher, pendingPublication } from "./node-publisher.js";
 import type { ReleasePublisher } from "../release/release-decide-service.js";
@@ -207,7 +208,9 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     clock: () => new Date().toISOString(),
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
     projectId, repository, store, storeId, workspace: config.compiledWorkspace });
-  const close = (): Promise<void> => { closed = true; return criteria.close(); };
+  const withdrawal = createDeliveryWithdrawal({ log: config.log, nodes: config.nodes,
+    projectWorkspace: config.compiledWorkspace, repository, verifier: config.verifier });
+  const close =(): Promise<void> => { closed = true; return criteria.close(); };
   const start: (spawn: AgentSpawnStart) => AgentSpawnStart = (spawn) => async (request) => {
     if (closed) return deliveryRefusal("REPOSITORY_DELIVERY_CLOSED");
     if (request.kind === "node.deliver" && !config.landingOn) return deliveryRefusal("REPOSITORY_DELIVERY_LANDING_REQUIRED");
@@ -215,6 +218,10 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   };
   const advance = async (): Promise<void> => {
     if (closed) return;
+    // FIRST, so a node whose delivery failed is READY before this same pass staffs and integrates:
+    // withdrawn, it is out of the integrator's candidates below and the branches that waited
+    // behind its conflict merge now rather than a pass later (UnAI 2026-09-19).
+    withdrawal.scanOnce();
     await coordinator.advance();
     if (closed) return;
     await criteria.advance();

@@ -11,7 +11,6 @@ import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
 import { withAttributedFindings } from "./wrapper-attributed-findings.js";
-import { withIntegrationConflict } from "./wrapper-integration-conflict.js";
 import { createNodeTreeMissions, keepNodeTreeMissions } from "./wrapper-node-trees.js";
 
 export interface WrapperReviewContext {
@@ -128,9 +127,11 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
     nodeMission: (nodeRef: string): NodeMission | null => {
       const brief = source.nodeMission(nodeRef);
       const placed = intoTree(brief, nodeRef);
-      // A merge the integrator could not take is the owning node's next piece of work.
-      return withIntegrationConflict(config, nodeRef,
-        withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed)));
+      // A merge the integrator could not take reaches its node as a verifier failure like any
+      // other: the withdrawal (node-delivery-withdrawal.ts) records it as the node's latest round.
+      // The brief-side text it replaces was only ever added for a node that was accepted AND
+      // landed, which is never staffed again, so no seat ever read it (UnAI 2026-09-19).
+      return withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed));
     },
   });
 }
