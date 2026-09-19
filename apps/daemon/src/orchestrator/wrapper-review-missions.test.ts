@@ -10,7 +10,7 @@ import { calibration, policyInput } from "../review/review-test-fixtures.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "../review/verifier-receipt-contracts.js";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
 import { createDeliveryWithdrawal } from "./node-delivery-withdrawal.js";
-import { createNodeIntegration } from "./node-integration.js";
+import { createNodeIntegration, runGit } from "./node-integration.js";
 import { NODE_TREES_DIRECTORY, ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
 import { MARKER, OPERATOR, reviewWorld } from "./wrapper-review-test-fixtures.js";
 import { createReviewAwareNodeMissions, withLatestVerifierFailure } from "./wrapper-review-missions.js";
@@ -136,7 +136,11 @@ it.each([20, 64])("hands a %i-path integration conflict to the node's next seat 
   expect(w.missions.nodeMission(w.nodeRef)?.instructions).not.toContain("INTEGRATION_CONFLICT");
 
   const logs: string[] = [];
+  // The landed sha is the fixture's own, so real Git answers 128 ("not a commit") about it, which
+  // proves neither answer and withdraws nothing. The ancestry probe gets the integrator's stand-in
+  // answer above (1, not an ancestor); every other question, the branch name too, goes to real Git.
   createDeliveryWithdrawal({ log: (line) => logs.push(line), nodes: w.compiled.nodes, projectWorkspace: w.workspace, repository,
+    git: (cwd, args) => args[0] === "merge-base" ? { code: 1, stdout: "" } : runGit(cwd, args),
     verifier: { ...w.host, nodeMission: w.missions.nodeMission, verificationAuthority: () => {
       const restored = verifyStoredPackageItems(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).rounds.at(-1)!);
       return restored.ok ? { calibration: calibration(), packageItems: restored.items.filter((item) => item.kind !== "DAEMON_RECEIPT"),

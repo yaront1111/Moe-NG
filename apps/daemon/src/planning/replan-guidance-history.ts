@@ -25,9 +25,16 @@ function consumedSubmission(store: SqliteEventStore, projectId: string, nodeRef:
   if (result === null) return invalid();
   if (!Object.hasOwn(result, "verifierFailureSource")) return latest;
   const prior = ledger.rounds.at(-2);
+  // A delivery withdrawal (UnAI 2026-09-19) is recorded AFTER the verifier receipt and the
+  // acceptance of the round it names, so it is never version-adjacent to that round: it sits at
+  // prior + 3. Asking adjacency of it made every human REPLAN of a withdrawn node throw here for
+  // ever, and its successor goal could never be planned. The fold already proved the acceptance it
+  // takes back and its place on the aggregate (review-read-model.ts), and an unreadable ledger is
+  // refused before this runs. Every other clause still binds it to the exact accepted round.
+  const withdrawal = Object.hasOwn(result, "withdrawsAcceptance");
   if (prior === undefined || !storedVerifierFailureSourceMatches(result["verifierFailureSource"]!, prior)
     || latest.routing.route === "ACCEPT" || latest.round !== prior.round + 1
-    || decision.previousVersion !== prior.aggregateVersion || latest.aggregateVersion !== prior.aggregateVersion + 1
+    || (!withdrawal && (decision.previousVersion !== prior.aggregateVersion || latest.aggregateVersion !== prior.aggregateVersion + 1))
     || readReviewGuidanceSource(store, projectId, nodeRef, prior) === null) return invalid();
   return prior;
 }

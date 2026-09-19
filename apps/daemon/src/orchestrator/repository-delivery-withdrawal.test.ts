@@ -140,6 +140,8 @@ it("returns a conflicted node to a seat, merges the branch that waited behind it
   const finding = readReviewLedger(f.store, f.projectId, "b").rounds.at(-1)?.lineage.records.at(-1)?.finding.detail ?? "";
   expect(finding).toContain(`Your accepted work is safe on ${f.trees.get("b")!.branch} at ${conflictedSha}`);
   expect(finding).toContain("Git could not join 1 path(s):\nshared.txt\n");
+  // c merged in this very pass, so the seat is not told that later branches wait for it.
+  expect(finding).not.toContain("No later branch");
   const recipe = /^1\. Run: git (.+)$/mu.exec(finding)?.[1]?.split(" ");
   expect(recipe?.at(-1)).toBe("main");
   // Nothing more is withdrawn or merged while the seat has not answered.
@@ -176,10 +178,15 @@ it("returns a node whose landing was refused over an edited runtime file to a se
   const f = await fixture();
   context.onTestFailed(() => { console.error(f.logs.join("\n")); });
   const launcher = join(f.workspace, ".moe-next", "start.ps1");
+  // The launcher is ALREADY dirty when m is first staffed, so Gate A checkpoints it for m before
+  // the seat edits it again. That success was remembered per node and path, with no content in the
+  // key: m's re-admission below met "already attempted ... not retried" and was refused for good.
+  writeFileSync(launcher, "# edited before the seat\n");
   await f.seat("m", (root) => {
     writeFileSync(join(root, "m.txt"), "m\n"); writeFileSync(join(root, "shared.txt"), "m edits the shared line\n");
     writeFileSync(launcher, "# edited under the seat\n");
   });
+  expect(linesOf(f, "m")[0]).toContain("[lander] m: RUNTIME_METADATA_CHECKPOINTED");
 
   await f.runtime.advance();
 

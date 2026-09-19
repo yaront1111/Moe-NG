@@ -99,11 +99,15 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     ...(reservationHandle === undefined ? {} : { reservationHandle }),
   });
   let closed = false;
-  // `baseline` is retried on the wrapper's timer, so one checkpoint is attempted per node per
-  // UNCHANGED dirty set: re-running a failing commit against the operator's repository every few
-  // seconds would turn one bug into a write storm. The key is the dirty set itself, so the attempt
-  // re-arms as soon as that set changes. The prior outcome is kept so every later pass still shows
-  // the operator the DISTINCT actionable code instead of an opaque repeating refusal.
+  // `baseline` is retried on the wrapper's timer, so a FAILED checkpoint is attempted once per node
+  // per unchanged set of dirty paths: re-running a failing commit against the operator's repository
+  // every few seconds would turn one bug into a write storm. The key is the path names, so the
+  // attempt re-arms when that set changes. The prior outcome is kept so every later pass still
+  // shows the operator the DISTINCT actionable code instead of an opaque repeating refusal.
+  // A checkpoint that WORKED is never remembered. The key holds no content, so the same file
+  // edited again is the same key: a node withdrawn after TRACKED_RUNTIME_METADATA_DIRTY (UnAI
+  // 2026-09-19) comes back through this gate on the same path, and a remembered success refused
+  // it REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE on every pass under a line that said CHECKPOINTED.
   const metadataCheckpoints = new Map<string, { attempt: string; outcome: string }>();
   const checkpointMetadata = async (nodeRef: string, workspace: string, paths: readonly string[]): Promise<boolean> => {
     const attempt = paths.join("\0");
@@ -113,7 +117,8 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       return false;
     }
     const report = await checkpointRuntimeMetadata({ git, nodeRef, paths, workspace });
-    metadataCheckpoints.set(nodeRef, { attempt, outcome: report.outcome });
+    if (report.ok) metadataCheckpoints.delete(nodeRef);
+    else metadataCheckpoints.set(nodeRef, { attempt, outcome: report.outcome });
     config.log(`[lander] ${nodeRef}: ${report.outcome} (${report.detail})`);
     return report.ok;
   };

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,7 +11,10 @@ import { readReviewLedger } from "../review/review-read-model.js";
 import { readReviewImplementationGuidance } from "../review/review-implementation-guidance.js";
 import { MARKER } from "../orchestrator/wrapper-review-test-fixtures.js";
 import { replanGuidanceHistory } from "./replan-guidance-history.js";
-import { envelope as reviewEnvelope, send as sendReview } from "../review/review-test-fixtures.js";
+import { calibration, envelope as reviewEnvelope, policyInput, send as sendReview } from "../review/review-test-fixtures.js";
+import { verifyStoredPackageItems } from "../review/review-package-restore.js";
+import { NODE_VERIFIER_PRINCIPAL_ID } from "../review/verifier-receipt-contracts.js";
+import { recordNodeVerifierFailure } from "../orchestrator/node-verifier-failure-record.js";
 
 /**
  * Every arm here builds a REAL durable world — a store, a review ledger, a terminal verifier
@@ -236,6 +239,43 @@ it("does not reach past the diagnosed submission to an unrelated older guided ap
   expect(JSON.stringify(context.completeLatestFindings)).toContain(MARKER);
   expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).continuation).toBeUndefined();
 });
+
+// UnAI 2026-09-19: a delivery withdrawal is recorded after the verifier receipt and the acceptance
+// of the round it names, so it sits three versions past that round. The adjacency clause threw for
+// every REPLAN of a withdrawn node, guided or not, and its successor goal could never be planned.
+it.each([["the guided", "Use server sessions. Withdrawn delivery lineage."], ["an unguided", undefined]])(
+  "hands off a REPLAN after a delivery withdrawal, naming %s accepted round", async (_which, guidance) => {
+    const w = await failedWorld();
+    decide(w, "ALLOW_MORE_ATTEMPTS", guidance);
+    expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+    writeFileSync(join(w.workspace, "app.mjs"), "export const answer = 42;\n");
+    expect(await w.submitSeat(w.requests.at(-1)!)).toMatchObject({ ok: true });
+    await w.finishSeat();
+    expect(await w.verifier.verifyOnce()).toMatchObject([{ outcome: "ACCEPTED" }]);
+    const accepted = readReviewLedger(w.store, PROJECT_ID, w.nodeRef);
+    const submitted = accepted.rounds.at(-1)!;
+    expect(submitted.continuation).toBeDefined();
+    const restored = verifyStoredPackageItems(submitted);
+    if (!restored.ok) throw new Error("the accepted round's package must restore");
+    const output = "INTEGRATION_CONFLICT: nothing was tested.";
+    // The host seam exactly as the delivery withdrawal drives it (node-delivery-withdrawal.ts).
+    expect(recordNodeVerifierFailure(w.host, w.nodeRef, submitted,
+      { byteCount: Buffer.byteLength(output), exitCode: null, output, sha256: createHash("sha256").update(output).digest("hex") },
+      { calibration: calibration(), packageItems: restored.items.filter((item) => item.kind !== "DAEMON_RECEIPT"),
+        policy: policyInput({ actor: NODE_VERIFIER_PRINCIPAL_ID }) }, accepted.accepted!.verifierReceiptId)).toMatchObject({ ok: true });
+    const withdrawn = readReviewLedger(w.store, PROJECT_ID, w.nodeRef);
+    expect(withdrawn).toMatchObject({ accepted: undefined, unreadable: false });
+    const withdrawal = withdrawn.rounds.at(-1)!;
+    expect(withdrawal).toMatchObject({ aggregateVersion: submitted.aggregateVersion + 3, routing: { route: "ESCALATE" } });
+
+    decide(w);
+
+    const context = contextOf(successor(w)());
+    expect(context.reviewDecisionId).toBe(withdrawal.decisionId);
+    expect(JSON.stringify(context.completeLatestFindings)).toContain(output);
+    expect(context.historicalImplementationGuidance).toEqual(guidance === undefined ? null : expect.objectContaining({
+      text: guidance, consumedByReviewDecisionId: submitted.decisionId, status: "HISTORICAL_CONTEXT_ONLY" }));
+  });
 
 it.each(["different PRD", "different node", "not replanned", "created before replan", "wrong pin", "malformed header",
   "foreign decision between"])(

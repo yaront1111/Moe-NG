@@ -57,7 +57,9 @@ export const runGit: IntegrationGit = (cwd, args) => {
     return { code: 0, stdout };
   } catch (error: unknown) {
     const failure = error as { status?: number; stderr?: string; stdout?: string };
-    return { code: typeof failure.status === "number" ? failure.status : 1, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
+    // A timeout or a spawn failure has no status: Git never answered. 1 is `merge-base
+    // --is-ancestor`'s own "no", which the withdrawal and the adoption probe act on, so it is 128.
+    return { code: typeof failure.status === "number" ? failure.status : 128, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
   }
 };
 

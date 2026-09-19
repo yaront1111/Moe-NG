@@ -12,6 +12,7 @@ import { recoveryEvidenceFixture } from "../repository/repository-recovery-test-
 import type { VerifiedWorkspaceBinding } from "../repository/verified-workspace-contracts.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import { closeStores, hex64 } from "../review/review-test-fixtures.js";
+import { runGit } from "./node-integration.js";
 import type { IntegrationGit } from "./node-integration.js";
 import { adoptedSeatCommit } from "./node-lander-adopt.js";
 import { createNodeLander } from "./node-lander.js";
@@ -200,6 +201,14 @@ describe("adoptedSeatCommit", () => {
     for (const code of [0, 2, 128, 129]) {
       expect(adoptedSeatCommit(answering(code, "a.ts\0"), "D:/ws/project", binding, "message\n")).toBeNull();
     }
+  });
+
+  // A timeout or a spawn failure carries no exit status. runGit reported that as 1, which is
+  // `merge-base --is-ancestor`'s own "no": a Git that never answered read as "not merged".
+  it("reads a Git that never answered as 128, never as merge-base's own 1", () => {
+    const missing = join(tmpdir(), "moe-adopt-no-such-directory");
+    expect(runGit(missing, ["merge-base", "--is-ancestor", SHA, "HEAD"]).code).toBe(128);
+    expect(adoptedSeatCommit(runGit, missing, binding, "m")).toBeNull();
   });
 
   it("adopts nothing for an empty diff, a failed diff, an unborn HEAD, a foreign branch or no project", () => {

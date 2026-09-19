@@ -42,6 +42,7 @@ import { ownNodeTree } from "./wrapper-node-trees.js";
  * a seat worked: the landing was refused TRACKED_RUNTIME_METADATA_DIRTY, a terminal receipt that
  * is never retried, and the accepted files sat uncommitted in the project's checkout. That dirt
  * then kept the integrator on SKIPPED, so one refusal stopped every other node's merge as well.
+ * Only that code proves the work is still there; the table below says what the other one proves.
  *
  * Rule DELIVERED_NOTHING: the landing recorded NOTHING_TO_COMMIT with no intent, which is credited
  * as "this node owed no bytes", while the node's own tree still holds work the project lacks. A
@@ -54,11 +55,14 @@ import { ownNodeTree } from "./wrapper-node-trees.js";
  * node is re-staffed in an empty tree of its own while its work sits where the landing was
  * refused; without the own-dirt baseline its own uncommitted work refuses it admission.
  *
- * It never withdraws what it cannot prove or could not finish: an unreadable ledger, a landing
- * that is not the current acceptance's, a refusal that journaled an intent or whose intents cannot
- * be read, a node with fewer than two rounds left under the ceiling (the withdrawal is one, the
- * seat's answer is the other), a workspace the node still holds, or no verifier authority. Each
- * of those is said once and tried again on the next pass.
+ * It never withdraws what it cannot prove or could not finish. Three cases are passed over in
+ * silence, because they are not this scan's to answer: an unreadable ledger, a landing that is not
+ * the current acceptance's (every newly accepted node, until its lander writes), and a refusal that
+ * journaled an intent, which may have had a Git effect. The rest are said once per unchanged
+ * reason and tried again on the next pass: intents that cannot be read, an ancestry probe Git did
+ * not answer, a workspace the node still holds, no spec brief or verifier authority, a refused
+ * withdrawal round. A node with fewer than two rounds left under the ceiling (the withdrawal is
+ * one, the seat's answer is the other) is said once too, and stays unwithdrawn: rounds only grow.
  */
 const MAX_PATHS = 20;
 const MAX_PATH_CHARACTERS = 120;
@@ -69,14 +73,19 @@ export const WITHDRAWAL_OUTPUT_MAX_CHARACTERS = 3_800;
 
 /**
  * THE CLOSED TABLE of landing refusals a new review round answers. Each is decided BEFORE a landing
- * intent is journaled, so no Git effect waits to be reconciled, and each leaves the accepted work
- * uncommitted in the workspace the receipt names: a tracked runtime file was edited under the
- * seat, or the tree changed after it was verified. The accepted binding pins HEAD, tree and dirt
- * together, so the same acceptance can never land; a new round binds what is there now. A code
- * outside the table (LANDING_BASELINE_MISSING, a binding that is gone, a path that is no
- * repository) is not something a seat answers by testing again, and stays terminal.
+ * intent is journaled, so no Git effect waits to be reconciled. TRACKED_RUNTIME_METADATA_DIRTY (a
+ * tracked runtime file was edited under the seat) is decided at observe and touches no work: the
+ * accepted work is still uncommitted in the workspace the receipt names.
+ * LANDING_VERIFIED_WORKSPACE_CHANGED says only that the tree differs from what was verified, so
+ * the work may be there, altered, or undone: its documented main cause is verified bytes restored
+ * before landing (node-lander.ts), and the seat is told to look rather than that nothing is lost.
+ * The accepted binding pins HEAD, tree and dirt together, so the same acceptance can never land; a
+ * new round binds what is there now. A code outside the table (LANDING_BASELINE_MISSING, a binding
+ * that is gone, a path that is no repository) is not something a seat answers by testing again,
+ * and stays terminal.
  */
-export const RECOVERABLE_LANDING_REFUSALS: readonly string[] = Object.freeze([TRACKED_RUNTIME_METADATA_DIRTY, "LANDING_VERIFIED_WORKSPACE_CHANGED"]);
+const LANDING_VERIFIED_WORKSPACE_CHANGED = "LANDING_VERIFIED_WORKSPACE_CHANGED";
+export const RECOVERABLE_LANDING_REFUSALS: readonly string[] = Object.freeze([TRACKED_RUNTIME_METADATA_DIRTY, LANDING_VERIFIED_WORKSPACE_CHANGED]);
 
 type WithdrawalRule = "INTEGRATION_CONFLICT" | "LANDING_REFUSED" | "DELIVERED_NOTHING";
 
@@ -87,19 +96,25 @@ const refusedBeforeIntent = (receipt: LandingReceiptV1 | undefined, intents: Rea
 const real = (path: string): string => { try { return realpathSync.native(path); } catch { return resolve(path); } };
 
 /**
- * THE PIN: where a node whose landing was recoverably refused is staffed again, or null. Its work
- * is uncommitted in the receipt's workspace. A node keeps the project's checkout only while it
- * HOLDS it (wrapper-node-trees.ts) and that hold ended with the refusal, so unpinned it moves to
- * an empty tree of its own while the project's checkout stays dirty and the integrator stays on
- * SKIPPED. A new landing receipt ends the pin. It reads; it never throws.
+ * THE PIN: where a node whose landing was recoverably refused is staffed again, or null. Whatever
+ * is left of its work is in the receipt's workspace and nowhere else. A node keeps the project's
+ * checkout only while it HOLDS it (wrapper-node-trees.ts) and that hold ended with the refusal, so
+ * unpinned it moves to an empty tree of its own while the project's checkout stays dirty and the
+ * integrator stays on SKIPPED. A new landing receipt, or a PROVEN landing intent, ends the pin.
+ * Unreadable intents (null) prove nothing, and everywhere else in this file nothing acts on them;
+ * here "not pinned" IS an action (the node moves), so they keep the pin: one undecodable intent
+ * row in the project would otherwise move every refused node off the workspace holding its work.
+ * `ownsDirtIn` still reads them as unproven, so the node waits in place rather than being
+ * admitted. It reads; it never throws: a raw throw out of the mission resolver is recorded as a
+ * staffing failure that nothing clears (agent-wrapper.ts).
  */
 export function refusedLandingWorkspace(store: SqliteEventStore, projectId: string, nodeRef: string): string | null {
   try {
     const reviews = readReviewLedgers(store, projectId, new Set([nodeRef]));
     const receipt = reviews.landings.get(nodeRef);
-    const code = refusedBeforeIntent(receipt, reviews.landingIntents);
-    return receipt !== undefined && code !== null && RECOVERABLE_LANDING_REFUSALS.includes(code) && existsSync(receipt.workspace)
-      ? receipt.workspace : null;
+    if (receipt === undefined || receipt.outcome !== "REFUSED" || receipt.refusal === null
+      || !RECOVERABLE_LANDING_REFUSALS.includes(receipt.refusal.code) || !existsSync(receipt.workspace)) return null;
+    return reviews.landingIntents?.has(landingIntentKey(receipt.subjectRef, receipt.verifierReceiptId)) === true ? null : receipt.workspace;
   } catch { return null; }
 }
 
@@ -135,7 +150,7 @@ export interface IntegrationConflictFacts {
 export function integrationConflictOutput(conflict: IntegrationConflictFacts): string {
   const render = (shown: number): string => [
     `INTEGRATION_CONFLICT: nothing was tested. Your accepted work is safe on ${conflict.branch} at ${conflict.sha}: it is committed and is not lost.`,
-    `It could not be merged into the project's branch ${conflict.projectBranch}, so the acceptance was withdrawn. No later branch merges until this is answered.`,
+    `It could not be merged into the project's branch ${conflict.projectBranch}, so the acceptance was withdrawn. Your branch is left out of integration until you land again.`,
     `Git could not join ${String(conflict.paths.length)} path(s):`,
     ...conflict.paths.slice(0, shown).map((path) => path.slice(0, MAX_PATH_CHARACTERS)),
     ...(conflict.paths.length > shown ? [`[${String(conflict.paths.length - shown)} more not shown; Git names every one when you merge]`] : []),
@@ -154,13 +169,20 @@ export function integrationConflictOutput(conflict: IntegrationConflictFacts): s
 // Whatever a receipt or a path holds is cut before it is quoted, so the steps below it always arrive.
 const cut = (text: string, most: number): string => text.length <= most ? text : `${text.slice(0, most - 1)}…`;
 
+// Only TRACKED_RUNTIME_METADATA_DIRTY proves the work untouched. CHANGED's main cause is verified
+// bytes restored before landing (node-lander.ts): "nothing is lost, keep your changes" would send
+// that seat to re-run a test over files that are gone, with nothing saying why it now fails.
 const landingRefusedOutput = (code: string, detail: string, workspace: string): string => [
   `LANDING_REFUSED: nothing was tested. Your accepted work was not committed: the landing was refused ${code}.`,
   cut(detail, 600),
-  `Nothing is lost: your changes are still uncommitted in ${cut(workspace, 400)}, and you are staffed there again.`,
+  code === LANDING_VERIFIED_WORKSPACE_CHANGED
+    ? `The workspace no longer matches what was verified: something in ${cut(workspace, 400)} changed after the test passed. Your changes may still be there or may have been undone; you are staffed there again.`
+    : `Nothing is lost: your changes are still uncommitted in ${cut(workspace, 400)}, and you are staffed there again.`,
   "The acceptance was withdrawn, because a refused landing is never retried: only a new review round can land.",
   "Answer it in that workspace:",
-  "1. Keep your changes as they are. Do not stash, reset, clean or revert anything.",
+  code === LANDING_VERIFIED_WORKSPACE_CHANGED
+    ? "1. Check that your changes are still in place. Keep what is there; make again only what is missing. Do not stash, reset or clean anything."
+    : "1. Keep your changes as they are. Do not stash, reset, clean or revert anything.",
   "2. Leave Moe's own files under .moe/ and .moe-next/ alone; Moe checkpoints a tracked one itself before you start.",
   "3. Re-run the test, then submit the review again.",
 ].join("\n");
@@ -229,8 +251,16 @@ export function createDeliveryWithdrawal(config: DeliveryWithdrawalConfig) {
 
   const withdrawConflict = (workspace: string, conflict: LandedBranch & { readonly paths: readonly string[] },
     ledger: ReviewLedger, receipt: LandingReceiptV1): void => {
-    // The integrator's own test for "still pending": whatever it holds the halt for is withdrawn.
-    if (git(workspace, ["merge-base", "--is-ancestor", conflict.sha, "HEAD"]).code === 0) return;
+    // EXACTLY 1 is Git's "not an ancestor" (node-lander-adopt.ts). 0 is merged; anything else proves
+    // nothing, and this rule writes a durable round where the integrator's `!== 0` only costs a pass.
+    // A conflict an operator merged by hand stays recorded, so this probe runs on every pass for
+    // good: one timeout read as "no" would withdraw a node whose work is already in the project.
+    const ancestry = git(workspace, ["merge-base", "--is-ancestor", conflict.sha, "HEAD"]).code;
+    if (ancestry === 0) return;
+    if (ancestry !== 1) {
+      return waiting(conflict.nodeRef, "INTEGRATION_CONFLICT", "WITHDRAWAL_ANCESTRY_UNPROVED",
+        `merge-base --is-ancestor exited ${String(ancestry)}, which proves neither answer`);
+    }
     withdraw("INTEGRATION_CONFLICT", ledger, receipt, () => {
       // A detached project checkout has no branch name; its commit merges the same.
       const named = git(workspace, ["symbolic-ref", "--short", "-q", "HEAD"]);

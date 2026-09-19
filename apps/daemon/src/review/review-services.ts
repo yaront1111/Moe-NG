@@ -145,7 +145,8 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   const { lineage, routing } = recorded.value;
   const result = {
     // The stored source stays the exact 3-key triple the fold matches; a withdrawal travels
-    // beside it, and the fold (review-read-model.ts) is its only reader.
+    // beside it. It has two readers: the fold (review-read-model.ts), which alone acts on it, and
+    // the replan history (planning/replan-guidance-history.ts), which only excuses its version gap.
     ...(verifierFailure && source !== undefined ? {
       verifierFailureSource: {
         aggregateVersion: source.aggregateVersion, decisionId: source.decisionId, resultSha256: source.resultSha256,

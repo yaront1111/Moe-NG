@@ -170,8 +170,10 @@ function fold(
       && round.aggregateVersion === priorVersion + 1 && round.routing.route !== "ACCEPT";
     if (failureSource !== undefined && !hostFailure) acc.unreadable = true;
     // A host-recorded failed round may take back the one acceptance it names: accepted work that
-    // then failed to deliver (UnAI 2026-09-19) goes back to a seat as an ordinary charged round,
-    // so no reader meets a new state. Any other shape fails closed and un-accepts nothing.
+    // then failed to deliver (UnAI 2026-09-19) goes back to a seat as an ordinary charged round.
+    // One reader does meet a new shape: this round is NOT version-adjacent to the round it names
+    // (the receipt and the acceptance sit between), which planning/replan-guidance-history.ts
+    // allows for by this same key. Any other shape fails closed and un-accepts nothing.
     const withdrawn = isPlainJsonObject(result) ? result["withdrawsAcceptance"] : undefined;
     if (withdrawn !== undefined) {
       if (hostFailure && typeof withdrawn === "string" && acc.accepted?.verifierReceiptId === withdrawn) {

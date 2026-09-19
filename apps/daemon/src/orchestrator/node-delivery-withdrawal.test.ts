@@ -203,6 +203,21 @@ describe("withdrawing an acceptance whose branch could not be merged", () => {
     expect(w.logs).toEqual([]);
   });
 
+  // A conflict an operator merged by hand stays recorded, so the probe runs on every pass for good.
+  // Only Git's own 1 says "not an ancestor": a 128, or a timeout (runGit's 128), proves nothing,
+  // and reading it as "no" withdrew a node whose work the project already held.
+  it("does not fire when the ancestry probe itself fails, and says so once", () => {
+    const w = world({ git: (_cwd, args) => args[0] === "merge-base" ? { code: 128, stdout: "" } : { code: 0, stdout: "trunk\n" } });
+    const receiptId = acceptedAndLanded(w);
+    conflicted(w, ["src/shared.ts"]);
+    const writes = w.writes();
+
+    w.withdrawal.scanOnce(); w.withdrawal.scanOnce();
+
+    untouched(w, receiptId, writes);
+    expect(w.logs).toEqual([expect.stringMatching(/^\[withdrawal\] node-run-1: WITHDRAWAL_ANCESTRY_UNPROVED \(merge-base --is-ancestor exited 128, which proves neither answer; INTEGRATION_CONFLICT is not withdrawn yet/u)]);
+  });
+
   it("does not fire for a node that landed on the project's own branch, or without a project checkout", () => {
     const onProject = world(); const first = acceptedAndLanded(onProject, NODE, "master");
     conflicted(onProject, ["src/shared.ts"], NODE, "master");
@@ -316,7 +331,7 @@ describe("withdrawing an acceptance whose branch could not be merged", () => {
 // UnAI 2026-09-19: a tracked .moe-next/start.ps1 edited under a seat refused the landing for good,
 // and the accepted files sat uncommitted in the project's checkout with no seat ever sent back.
 describe("withdrawing an acceptance whose landing was refused before any intent", () => {
-  it.each(RECOVERABLE_LANDING_REFUSALS)("withdraws %s exactly once and tells the seat where its work still is", (code) => {
+  it.each(RECOVERABLE_LANDING_REFUSALS)("withdraws %s exactly once and tells the seat what that refusal proves about its work", (code) => {
     const w = world({ git: noGit }); const receiptId = acceptedAndRefused(w, code);
     const before = w.ledger(); const writes = w.writes();
 
@@ -326,7 +341,18 @@ describe("withdrawing an acceptance whose landing was refused before any intent"
     expect(w.ledger().rounds.at(-1)?.routing.route).not.toBe("ACCEPT");
     expect(w.writes()).toBe(writes + 1);
     expect(findingOf(w)).toContain(`LANDING_REFUSED: nothing was tested. Your accepted work was not committed: the landing was refused ${code}.\nrefused for the fixture\n`);
-    expect(findingOf(w)).toContain("your changes are still uncommitted in /project, and you are staffed there again.");
+    // Only the metadata refusal proves the work untouched. CHANGED's main cause is verified bytes
+    // restored before landing (node-lander.ts), so that seat is told to look, never "nothing is lost".
+    if (code === "TRACKED_RUNTIME_METADATA_DIRTY") {
+      expect(findingOf(w)).toContain("\nNothing is lost: your changes are still uncommitted in /project, and you are staffed there again.\n");
+      expect(findingOf(w)).toContain("\n1. Keep your changes as they are. Do not stash, reset, clean or revert anything.\n");
+    } else {
+      expect(code).toBe("LANDING_VERIFIED_WORKSPACE_CHANGED");
+      expect(findingOf(w)).toContain("\nThe workspace no longer matches what was verified: something in /project changed after the test passed. Your changes may still be there or may have been undone; you are staffed there again.\n");
+      expect(findingOf(w)).toContain("\n1. Check that your changes are still in place. Keep what is there; make again only what is missing. Do not stash, reset or clean anything.\n");
+      expect(findingOf(w)).not.toContain("Nothing is lost");
+      expect(findingOf(w)).not.toContain("Keep your changes as they are");
+    }
     expect(findingOf(w).endsWith("3. Re-run the test, then submit the review again.")).toBe(true);
     expect((JSON.parse(new TextDecoder().decode(decisionsOf(w.store, 200).at(-1)!.resultBytes)) as Record<string, unknown>)["withdrawsAcceptance"]).toBe(receiptId);
     expect(w.logs).toEqual([`[withdrawal] node-run-1: LANDING_REFUSED (${code} in /project, before any landing intent; the acceptance was withdrawn and the node returns to a seat)`]);
@@ -490,6 +516,22 @@ describe("where a withdrawn node is staffed again, and whose dirt it finds there
     expect(ownsDirtIn(w.store, PROJECT_ID, NODE, project)).toBe(false);
   });
 
+  // One undecodable intent row turns the project's `landingIntents` to null for EVERY node. Null
+  // proves nothing, and "not pinned" is an action: it moved the withdrawn node to an empty tree of
+  // its own while its accepted files sat in the project's checkout. It stays, and waits in place.
+  it("keeps the pin while the landing intents cannot be read, and admits no dirt meanwhile", () => {
+    const { project } = projectWithTree();
+    const w = world({ git: noGit, projectWorkspace: project }); acceptedAndRefused(w, RECOVERABLE_LANDING_REFUSALS[0]!, project);
+    w.withdrawal.scanOnce();
+    expect(w.ledger().accepted).toBeUndefined();
+    expect(ownsDirtIn(w.store, PROJECT_ID, NODE, project)).toBe(true);
+
+    plantUnreadableIntent(w);
+
+    expect(refusedLandingWorkspace(w.store, PROJECT_ID, NODE)).toBe(project);
+    expect(ownsDirtIn(w.store, PROJECT_ID, NODE, project)).toBe(false);
+  });
+
   it("pins nothing for NOTHING_TO_COMMIT, and admits that node's dirt in its own tree only", () => {
     const { project, tree } = projectWithTree();
     const w = world({ git: treeGit("?? src/new.ts\0", true), projectWorkspace: project });
@@ -526,6 +568,10 @@ describe("the conflict text a seat is handed", () => {
     const text = integrationConflictOutput({ ...facts, paths });
     for (const path of paths) expect(text).toContain(`\n${path}\n`);
     expect(text).not.toContain("more not shown");
+    // The withdrawal ENDS the integrator's halt, so the text must not tell the seat that later
+    // branches wait for it: it said "No later branch merges until this is answered", which was false.
+    expect(text).toContain("so the acceptance was withdrawn. Your branch is left out of integration until you land again.\n");
+    expect(text).not.toContain("No later branch");
     expect(text).toContain(`1. Run: ${RECIPE}\n`);
     expect(text).toContain("3. COMMIT the merge. Leave no merge in progress and nothing uncommitted.");
   });
