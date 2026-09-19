@@ -109,7 +109,7 @@
     }
   ],
   "planRevision": 13,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -152,20 +152,29 @@
       "author": "worker-69773bc1",
       "content": "FOLLOW-UPS (comments, not rows; worker-69773bc1):\n1. The subscription usage-limit banner (\"You've hit your usage limit · resets …\") was never captured in stream-json. Its place is INFERRED from the measured invariant (text stdout == result.result + \"\\n\"), because the fake API under API-key auth only produces the 429 banner (comment-7c263f1c point 7). The first time a seat hits it live, add the real line to the fixtures.\n2. apps/daemon/src/orchestrator/governor-seat.ts:228 still spawns `[\"-p\", prompt]` in TEXT mode on its own path. It is not a wrapper seat, so this row's liveness rule does not reach it.\n3. Codex seats keep the CPU rule under the v0.1 scope freeze: streamJson false, streaming false, raw pass-through, CPU growth counts.\n4. A result event with no string `result` (error subtypes such as error_during_execution or error_max_turns) forwards nothing. What text mode prints for those is UNMEASURED; if it prints a line on stdout, SEAT_EXIT.lastLine for such a seat is now null where it was that line. The classifier roster has no entry for them either way.\n5. Seen, out of scope: apps/daemon/src/work/launch-template-producer.ts:131 builds its own text-mode claude argv for the foundation launch path, a separate runtime.\n6. A foreign red was found in the root lane and filed as task-e3490ca9264b4d8b80c13dd4b9245fd9. tests/integration/distribution/pack-artifact-sweep.test.ts flags the production apps/daemon/src/node-spec-loader.{ts,js}, from f5d5f4ee, which is an ancestor of this row's start HEAD 451e5d20. The cause is that \"spec\" matches TEST_VOCABULARY. This row's diff adds no file, so it is not caused here.",
       "timestamp": "2026-09-19T00:59:10.651Z"
+    },
+    {
+      "id": "comment-b2ae1c7d8d184d0da664872d863af997",
+      "author": "qa-09357cdf",
+      "content": "QA RE-MEASURE (qa-09357cdf) of the real-CLI equivalence, claude 2.1.277, at delivered tree df609615 (owned paths clean vs HEAD). fake-api.mjs verbatim from comment-53f413ea, in %TEMP%/moe-task-815f803d-qa-09357cdf.\n\nQA ADDITION: a PRODUCTION-ARGV capture. The mission goes over stdin, with every flag the spawner passes: --disable-slash-commands, --mcp-config, --tools, --allowedTools. The recorded probe covered only the argument-prompt shape.\n\ncapture.sh (full source):\ncd \"$(dirname \"$0\")\" || exit 2\nprintf '{\"mcpServers\":{}}' > empty-mcp.json\n: > winpids.txt\nfor m in ok 429; do\n  p=$((18200 + RANDOM % 700))\n  MODE=$m PORT=$p node fake-api.mjs &\n  pid=$!\n  echo \"$m $pid $(cat /proc/$pid/winpid 2>/dev/null)\" >> winpids.txt\n  until curl -s -o /dev/null -X GET \"http://127.0.0.1:$p/ready\"; do :; done\n  export ANTHROPIC_BASE_URL=\"http://127.0.0.1:$p\" ANTHROPIC_API_KEY=dummy-key CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1\n  claude -p --setting-sources \"\" --no-session-persistence --strict-mcp-config \"say hi\" < /dev/null > \"text-$m.out\" 2> \"text-$m.err\"; echo \"text-$m exit=$?\"\n  claude -p --output-format stream-json --verbose --include-partial-messages --setting-sources \"\" --no-session-persistence --strict-mcp-config \"say hi\" < /dev/null > \"sj-$m.out\" 2> \"sj-$m.err\"; echo \"sj-$m exit=$?\"\n  echo \"say hi\" | claude -p --setting-sources \"\" --disable-slash-commands --no-session-persistence --strict-mcp-config --mcp-config empty-mcp.json --tools \"Read\" --allowedTools \"Read\" > \"ptext-$m.out\" 2> \"ptext-$m.err\"; echo \"ptext-$m exit=$?\"\n  echo \"say hi\" | claude -p --output-format stream-json --verbose --include-partial-messages --setting-sources \"\" --disable-slash-commands --no-session-persistence --strict-mcp-config --mcp-config empty-mcp.json --tools \"Read\" --allowedTools \"Read\" > \"psj-$m.out\" 2> \"psj-$m.err\"; echo \"psj-$m exit=$?\"\n  kill \"$pid\"; wait \"$pid\" 2>/dev/null\ndone\n\nequivalence.mjs is comment-40d74217's driver, changed in three ways:\n- the pairs are [sj-ok,text-ok], [sj-429,text-429], [psj-ok,ptext-ok] and [psj-429,ptext-429];\n- `equal` also requires expected.length > 0;\n- the pass condition is cases === 12.\nIt imports the PRODUCTION createStreamJsonReport by file URL.\n\nOUTPUT:\n- Exit codes: text-ok 0, sj-ok 0, ptext-ok 0, psj-ok 0; text-429 1, sj-429 1, ptext-429 1, psj-429 1.\n- ok size=1/7/4096: sj=6102B, text=65B, decoded=65B, equal=true.\n- 429 size=1/7/4096: sj=4443B, text=114B, decoded=114B, equal=true.\n- psj-ok size=1/7/4096: sj=5090B, text=65B, decoded=65B, equal=true.\n- psj-429 size=1/7/4096: sj=3431B, text=114B, decoded=114B, equal=true.\n- EQUIVALENCE HOLDS (12 cases), driver exit 0.\n- stderr held only the claude.ai-connectors warning, in both modes.\n- Fake API windows pids 53720 and 2928: Get-CimInstance alive=0, and no node.exe with fake-api.mjs in its command line remains.\n\nIN-MEMORY DRILLS. One temp vitest config outside src, keyed by QA_DRILL. Each anchor throws when absent, and each run printed an APPLIED marker. The config was deleted afterwards (`ls` says No such file), and the owned files show no diff against df609615.\n- A, liveness ignores streaming: Q1 red, \"expected [] to deeply equal [ -4242 ]\".\n- B, onBytes counts decoded bytes, not raw: Q2 and U7 red.\n- C, the decoder forwards assistant text: U1, U2, U5, Q4 and Q5 red.\n- D, bound `>` changed to `>=`: U6 red.\n- E, codex seats marked streaming: both moved C4 codex arms red.\n- F, --include-partial-messages dropped: Q3 red.\n- G, a cut `{\"` line forwarded raw at flush: U4b and Q8 red.\n\nFOLLOW-UP NOTE, test lane only, not a defect of this row: tests/e2e/control-room/live-proof-seat.ts:53 still says \"every flag is here because the SHIPPED spawner passes it\". Its SEAT_ARGV has no stream-json flags, so that lane runs text-mode claude under a wrapper that now judges it as a streaming seat. It is bounded by PROVIDER_SEAT_BUDGET_MS (10 min), under the 20 min window. Worth one comment fix on the next row that touches the lane.",
+      "timestamp": "2026-09-19T01:10:15.632Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:57:15.088Z",
-  "updatedAt": "2026-09-19T01:00:27.480Z",
+  "updatedAt": "2026-09-19T01:10:34.272Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:07:42.405Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-19T01:10:34.272Z",
+    "wallClockMs": 10971867
   },
   "contextFetchedBy": [
     "architect-0f009933",
-    "worker-69773bc1"
+    "worker-69773bc1",
+    "qa-09357cdf"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -218,7 +227,67 @@
     "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
     "apps/daemon/src/orchestrator/seat-liveness-probe.ts",
     "apps/daemon/CLAUDE.md",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+    ".moe/tasks/task-815f803db7c94aa1a291c5db779e8ed6.json",
+    ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json"
   ],
-  "completionSummary": "Claude seats now stream: argv `-p --output-format stream-json --verbose --include-partial-messages` (Q3). Every raw byte is liveness output. The pure seat-output-tail.ts (createStreamJsonReport, createSeatOutput) decodes stdout back to exactly what text mode printed: each result's text plus \"\\n\", non-event lines verbatim. So the console, the tail, SEAT_EXIT (outputSeen, lastLine) and the classifier keep their meaning. For a streaming seat CPU is reported, never counted: no event and no tool child for MOE_AGENT_SILENCE_MS kills it (Q1 kill line pinned). Codex seats keep the CPU rule (the moved C4 arms).\nDeviation, from the adversarial pass: at end of stream a `{\"…` line that does not parse (cut mid-write by a kill) yields nothing, so it cannot park the provider (U4b, Q7, Q8).\nEvidence, all fresh:\n- Focused 6 files: Test Files 6 passed (6), Tests 170 passed | 1 skipped.\n- Daemon: 765 passed, 12627 tests.\n- e2e: 33 passed | 1 skipped. Security: 12 passed, 1009 tests.\n- Root: 1 FOREIGN red, pack-artifact-sweep via node-spec-loader from f5d5f4ee (an ancestor of the start HEAD); filed as task-e3490ca9.\n- typecheck: 0.\n- Real claude 2.1.277 equivalence: 6/6 byte-equal (comment-40d74217).\n- In-memory drills M1-M6 were red on their targets.\n- Lines: spawner 548 (<551), contract 448, wrapper-main 552, tail 239, liveness 192, probe 216.\nReview: comment-7d0743af. Follow-ups: comment-fd98f540."
+  "completionSummary": "Claude seats now stream: argv `-p --output-format stream-json --verbose --include-partial-messages` (Q3). Every raw byte is liveness output. The pure seat-output-tail.ts (createStreamJsonReport, createSeatOutput) decodes stdout back to exactly what text mode printed: each result's text plus \"\\n\", non-event lines verbatim. So the console, the tail, SEAT_EXIT (outputSeen, lastLine) and the classifier keep their meaning. For a streaming seat CPU is reported, never counted: no event and no tool child for MOE_AGENT_SILENCE_MS kills it (Q1 kill line pinned). Codex seats keep the CPU rule (the moved C4 arms).\nDeviation, from the adversarial pass: at end of stream a `{\"…` line that does not parse (cut mid-write by a kill) yields nothing, so it cannot park the provider (U4b, Q7, Q8).\nEvidence, all fresh:\n- Focused 6 files: Test Files 6 passed (6), Tests 170 passed | 1 skipped.\n- Daemon: 765 passed, 12627 tests.\n- e2e: 33 passed | 1 skipped. Security: 12 passed, 1009 tests.\n- Root: 1 FOREIGN red, pack-artifact-sweep via node-spec-loader from f5d5f4ee (an ancestor of the start HEAD); filed as task-e3490ca9.\n- typecheck: 0.\n- Real claude 2.1.277 equivalence: 6/6 byte-equal (comment-40d74217).\n- In-memory drills M1-M6 were red on their targets.\n- Lines: spawner 548 (<551), contract 448, wrapper-main 552, tail 239, liveness 192, probe 216.\nReview: comment-7d0743af. Follow-ups: comment-fd98f540.",
+  "commits": [
+    {
+      "sha": "df609615bfb50e1114b4004024e8f64803c88724",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-19T00:19:52Z",
+      "paths": [
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+        ".moe/tasks/task-815f803db7c94aa1a291c5db779e8ed6.json",
+        ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json",
+        "apps/daemon/CLAUDE.md",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-spawner-quiet.test.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/seat-liveness.ts",
+        "apps/daemon/src/orchestrator/seat-liveness-probe.ts",
+        "apps/daemon/src/orchestrator/seat-output-tail.test.ts",
+        "apps/daemon/src/orchestrator/seat-output-tail.ts",
+        "docs/agent-stack-runbook.md"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-19T01:00:41.335Z",
+      "treeId": "5960ee80a733918f4ea82291bdeb75395221ea00",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-21be6e9055984413a651ce6ee331e2c8"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/orchestrator/agent-spawner-quiet.test.ts",
+    "apps/daemon/src/orchestrator/seat-liveness-probe.ts",
+    "apps/daemon/CLAUDE.md",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+    "apps/daemon/src/orchestrator/seat-output-tail.ts",
+    "apps/daemon/src/orchestrator/seat-liveness.ts",
+    "docs/agent-stack-runbook.md",
+    "apps/daemon/src/orchestrator/seat-output-tail.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-69773bc1@2026-09-19T00:19:52Z",
+    "at": "2026-09-19T01:00:41.335Z"
+  },
+  "completedAt": "2026-09-19T01:10:34.272Z",
+  "reviewCompletedAt": "2026-09-19T01:10:34.272Z",
+  "reviewSummary": "APPROVED at completion df609615 (moe/work-2026-09-18 = HEAD, pushed). All 10 owned paths are in the commit and clean vs HEAD. The Moe-Contested file CLAUDE.md is in the stat. Two other task JSONs are board metadata only.\nDoD:\n1. The argv `-p --output-format stream-json --verbose --include-partial-messages` is pinned by value (Q3). Host 2.1.277 accepts the full production flag set.\n2. Q2 shows no \"seat quiet\" line; the positive control is at :299. The report comes from `result` by value (U1, U2, Q4 sink).\n3. Q4 gives PROVIDER_LIMIT/claude/rate-limit-429. Q5 (model-authored banner) gives FAILED/null.\n4. Q1 kills at 20m with CPU growing, and the kill line is pinned. The C4 arms were moved to codex and keep the CPU rule.\n5. Gates, re-run by me:\n- Focused: Test Files 6 passed (6), 170 passed | 1 skipped.\n- typecheck: exit 0.\nRegression, under the full-suite-gate lease (released):\n- daemon src/orchestrator: 98 files, 1317 passed;\n- src/environment + src/projects: 41 files, 505 passed;\n- test:e2e: 33 passed | 1 skipped;\n- test:security: 12 files, 1009 passed.\nDrills: 7 in-memory mutants (A-G), each anchor throws when absent. All went red on their target arms. The config was deleted and the restore is clean.\nReal CLI: 12/12 byte-equal through the production decoder, including a stdin mission with the production argv (comment-b2ae1c7d).\nC1 census at the commit: clean. Line caps: tail 239, liveness 192, probe 216. The spawner went 551 -> 548; contract and wrapper-main net 0.\nNot re-run by me: root `pnpm test` (the worker disclosed foreign red task-e3490ca9) and the browser lane (its seat doubles use no stdout).\nFollow-ups: comment-fd98f540, plus the stale live-proof-seat.ts:53 argv comment."
 }

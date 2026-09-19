@@ -122,7 +122,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:14:17.738Z",
-  "updatedAt": "2026-09-19T01:07:12.035Z",
+  "updatedAt": "2026-09-19T01:07:24.064Z",
   "dependsOn": [
     "task-0416061566de49939e91bbd6351be79e"
   ],
@@ -183,7 +183,50 @@
     "apps/control-room/src/live/live-runs.ts",
     "apps/control-room/src/live/live-runs.test.ts",
     "apps/control-room/src/v2/goals/goal-publish.tsx",
-    "apps/control-room/src/v2/goals/goal-publish.test.tsx"
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+    ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json"
   ],
-  "completionSummary": "Delivers task-21be6e90's DoD 1: the Publish card shows where the remote is, where it should be, and why.\n\nDoD 1, the record: an unresolved publish records a SEPARATE additive record on publish:<goal> (kind internal.repository.publication_observation, event RepositoryPublicationObserved, moe-publication-observation/1). It has its own exact keys, and its reason is ACCEPTED/REJECTED/INDETERMINATE from task-78dea88b's transmission, or UNRECORDED. It is written only when (tip, expected sha, reason) CHANGES: 3 identical UNKNOWN passes write 1, and a moved tip writes a 2nd. The fenced version is in the key, so A, B, A writes 3. Undecodable bytes and blind reads never write. notePublicationObservation swallows every failure, so the publish outcome is byte-identical, proven by a Proxy-faulted commit arm (failed=2).\n\nDoD 2, the wire: RunGoalPublish.observation is ALWAYS emitted, null when absent, read only for a receipt-less decision. The control-room's exact list at live-runs.ts:206 is now 9 keys, and the nested object is checked with its own 4-key exact list. 9 drift arms refuse at RUNS_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_RUNS, among them an extra body key, an extra observation key, and a missing observation key. A cross-end arm decodes the REAL daemon runs-read body with toStrictEqual.\n\nDoD 3, the card: goal-publish.tsx observationLine plus cr.publish.observed, e.g. \"On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · git refused the push\", or \"main does not exist\". It shows only for PENDING/UNKNOWN; with no observation there is no line.\n\nDoD 4, no widening: the intent and transmission decode unchanged, with identical stored bytes, beside an observation.\n\nDoD 5, the gates: see the verification record.\n\n14 in-memory mutants, all red at their intended arms.\n\nAdversarial answers and the git-stderr follow-up: step-6 note and comment-e28f3d32.\n\nThe control-room view field is optional, following the deployments? precedent, so the 8-key view literals in board-screen/runs"
+  "completionSummary": "Delivers task-21be6e90's DoD 1: the Publish card shows where the remote is, where it should be, and why.\n\nDoD 1, the record: an unresolved publish records a SEPARATE additive record on publish:<goal> (kind internal.repository.publication_observation, event RepositoryPublicationObserved, moe-publication-observation/1). It has its own exact keys, and its reason is ACCEPTED/REJECTED/INDETERMINATE from task-78dea88b's transmission, or UNRECORDED. It is written only when (tip, expected sha, reason) CHANGES: 3 identical UNKNOWN passes write 1, and a moved tip writes a 2nd. The fenced version is in the key, so A, B, A writes 3. Undecodable bytes and blind reads never write. notePublicationObservation swallows every failure, so the publish outcome is byte-identical, proven by a Proxy-faulted commit arm (failed=2).\n\nDoD 2, the wire: RunGoalPublish.observation is ALWAYS emitted, null when absent, read only for a receipt-less decision. The control-room's exact list at live-runs.ts:206 is now 9 keys, and the nested object is checked with its own 4-key exact list. 9 drift arms refuse at RUNS_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_RUNS, among them an extra body key, an extra observation key, and a missing observation key. A cross-end arm decodes the REAL daemon runs-read body with toStrictEqual.\n\nDoD 3, the card: goal-publish.tsx observationLine plus cr.publish.observed, e.g. \"On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · git refused the push\", or \"main does not exist\". It shows only for PENDING/UNKNOWN; with no observation there is no line.\n\nDoD 4, no widening: the intent and transmission decode unchanged, with identical stored bytes, beside an observation.\n\nDoD 5, the gates: see the verification record.\n\n14 in-memory mutants, all red at their intended arms.\n\nAdversarial answers and the git-stderr follow-up: step-6 note and comment-e28f3d32.\n\nThe control-room view field is optional, following the deployments? precedent, so the 8-key view literals in board-screen/runs",
+  "commits": [
+    {
+      "sha": "dc15621bc900ba3635f8b62d0feb021bb62b6db9",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-19T00:37:30Z",
+      "paths": [
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+        ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json",
+        "apps/control-room/src/live/live-runs.test.ts",
+        "apps/control-room/src/live/live-runs.ts",
+        "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+        "apps/control-room/src/v2/goals/goal-publish.tsx",
+        "apps/daemon/src/http/run-goal-publication.ts",
+        "apps/daemon/src/http/runs-read-contract.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts",
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/repository/publication-effect-ledger.test.ts",
+        "apps/daemon/src/repository/publication-effect-ledger.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-19T01:07:24.064Z",
+      "treeId": "5dc0353ab1645aca27a2b14e8313f6ff349e5c7b",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/run-goal-publication.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-952c612b@2026-09-19T00:37:30Z",
+    "at": "2026-09-19T01:07:24.064Z"
+  }
 }
