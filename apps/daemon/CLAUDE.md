@@ -114,6 +114,11 @@ its own: a caller that injects no dependency provider is refused, never served a
   writes `NodeBranchMerged` with `mergeSha: null` for a landed sha that `merge-base --is-ancestor` answers
   EXACTLY 0 for and no record names (a store write that failed, the owner's own merge), before every early
   return and from ONE `readIntegrationRecords` walk; the dependency gate and the publication credit wait on it.
+  Only for a landing made in a node's tree (`LandedBranch.fromTree`, set by `landedNodeBranches` from the
+  receipt's workspace): nothing waits on any other, and a project branch spelled `moe/` would earn a record
+  per in-place landing. The walk is PAGED (`readAggregateEvents`), since the aggregate is never compacted and
+  `readEvents` refuses it whole at the 1001st record. A merge that exits 0 with HEAD unmoved ("Already up
+  to date" after an is-ancestor that answered 128) goes the same way: `mergeSha: null`, never HEAD's name.
 - **An acceptance can be WITHDRAWN, by the host alone.** `node-delivery-withdrawal.ts` scans once
   per `advance()` and records one failed `review.submit` round carrying `withdrawsAcceptance`
   (never on the wire: `SUBMIT_PAYLOAD_KEYS` is unchanged; the fold in `review-read-model.ts` and

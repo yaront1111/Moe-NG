@@ -1,97 +1,14 @@
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { SqliteEventStore } from "@moe/store";
-import type { RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
-import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { nodeCommitMerged, readRepositoryIntegration } from "../repository/repository-integration-read.js";
-import { ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
-import { createNodeIntegration } from "./node-integration.js";
-import type { IntegrationGit, LandedBranch } from "./node-integration.js";
+import type { LandedBranch } from "./node-integration.js";
+import { closeWorlds, git, realGit, world } from "./node-integration-test-fixtures.js";
+import type { World } from "./node-integration-test-fixtures.js";
 
-const roots: string[] = [];
-const stores: SqliteEventStore[] = [];
-afterEach(() => {
-  forgetNodeTrees();
-  for (const store of stores.splice(0)) store.close();
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
-const git = (cwd: string, ...args: string[]): string =>
-  execFileSync("git", args, { cwd, encoding: "utf8", windowsHide: true }).trim();
-/** The real Git, in the integrator's own shape, for a test that fails one call of it. */
-const realGit: IntegrationGit = (cwd, args) => {
-  try {
-    return { code: 0, stdout: execFileSync("git", [...args], { cwd, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }) };
-  } catch (error: unknown) {
-    const failure = error as { status?: number; stdout?: string; stderr?: string };
-    return { code: failure.status ?? 1, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
-  }
-};
-
-function world(runner?: IntegrationGit) {
-  const workspace = realpathSync(mkdtempSync(join(tmpdir(), "moe-integration-"))); roots.push(workspace);
-  git(workspace, "init", "--quiet");
-  git(workspace, "config", "user.email", "integration@example.test");
-  git(workspace, "config", "user.name", "Integration Fixture");
-  // Line endings are pinned so a checkout reads the same bytes on every host.
-  git(workspace, "config", "core.autocrlf", "false");
-  writeFileSync(join(workspace, "shared.txt"), "base\n", "utf8");
-  git(workspace, "add", "shared.txt");
-  git(workspace, "commit", "--quiet", "-m", "base");
-  const store = SqliteEventStore.openForProject(join(realpathSync(mkdtempSync(join(tmpdir(), "moe-integration-store-"))), "store.sqlite"), "project-a");
-  stores.push(store);
-  const port = createRepositoryExecutionPort();
-  let acquisitions = 0;
-  const repository: RepositoryExecutionPort = { ...port, acquire: (...args) => { acquisitions += 1; return port.acquire(...args); } };
-  const landed: LandedBranch[] = [];
-  /** The integrator's store counts its calls and refuses `refusals[method]` more of them. The instance is sealed, so no spy lies on it. */
-  const refusals: Record<string, number> = {};
-  const calls: Record<string, number> = {};
-  const refusing = new Proxy(store, { get(target, property): unknown {
-    const held: unknown = Reflect.get(target, property, target);
-    if (typeof held !== "function") return held;
-    return (...args: unknown[]): unknown => {
-      calls[String(property)] = (calls[String(property)] ?? 0) + 1;
-      if ((refusals[String(property)] ?? 0) > 0) { refusals[String(property)]! -= 1; throw new Error("the store is busy"); }
-      return (held as (...inner: unknown[]) => unknown).apply(target, args);
-    };
-  } });
-  const integration = createNodeIntegration({
-    candidates: () => landed, clock: () => "2026-09-16T10:00:00.000Z",
-    controller: { controllerId: "controller-a", controllerPid: 101 },
-    ...(runner === undefined ? {} : { git: runner }),
-    projectId: "project-a", repository, store: refusing, storeId: "store-a", workspace,
-  });
-  /** A node that coded in its own tree and landed one commit on its own branch (its latest landing counts). */
-  const landedNode = (nodeRef: string, file: string, body: string): LandedBranch => {
-    const tree = ensureNodeTree({ nodeRef, projectRoot: workspace });
-    if (tree === null) throw new Error("expected a tree");
-    writeFileSync(join(tree.path, file), body, "utf8");
-    git(tree.path, "add", file);
-    git(tree.path, "commit", "--quiet", "-m", `${nodeRef} work`);
-    const entry = { branch: tree.branch, nodeRef, sha: git(tree.path, "rev-parse", "HEAD") };
-    const known = landed.findIndex((candidate) => candidate.nodeRef === nodeRef);
-    if (known === -1) landed.push(entry); else landed.splice(known, 1, entry);
-    return entry;
-  };
-  const aggregateId = `repository-integration/${createHash("sha256").update("project-a", "utf8").digest("hex")}`;
-  const events = (): readonly { type: string; facts: Record<string, unknown> }[] => {
-    const rows = store.readEvents(aggregateId);
-    return rows.map((row) => ({ facts: JSON.parse(new TextDecoder().decode(row.payload)) as Record<string, unknown>, type: row.eventType }));
-  };
-  /** A record in the integrator's own shape, as an earlier pass of this daemon or of one before it left it. */
-  const recorded = (eventType: string, facts: Record<string, unknown>): void => {
-    const version = store.getAggregateVersion(aggregateId);
-    const commandId = `rin-fixture-${String(version)}`;
-    store.commit({ aggregateId, commandBytes: new TextEncoder().encode(JSON.stringify({ eventType })), commandId,
-      committedAt: "2026-09-16T09:00:00.000Z", expectedVersion: version,
-      events: [{ eventId: `${commandId}-e1`, eventType, payload: new TextEncoder().encode(JSON.stringify({ ...facts, version: "moe-repository-integration/1" })) }] });
-  };
-  return { acquisitions: () => acquisitions, calls, events, integration, landed, landedNode, port, recorded, refusals, store, workspace };
-}
+// The world itself (real checkout, real trees, real store, the production integrator) is in
+// node-integration-test-fixtures.ts: this file had reached the size this repository splits at.
+afterEach(closeWorlds);
 
 /** Where parallel nodes meet again (owner decision 2026-09-16). */
 describe("integrating the nodes' branches", () => {
@@ -197,9 +114,10 @@ describe("integrating the nodes' branches", () => {
   }, 120_000);
 
   it("asks Git for the merge commit's name a second time before it gives the name up", async () => {
-    let withheld = 0;
+    let reads = 0;
     const w = world((cwd, args) => {
-      if (args[0] === "rev-parse" && args[1] === "HEAD" && withheld === 0) { withheld += 1; return { code: 1, stdout: "" }; }
+      // The first read is the HEAD the merge starts from; the SECOND is the first ask for the merge's name.
+      if (args[0] === "rev-parse" && args[1] === "HEAD" && (reads += 1) === 2) return { code: 1, stdout: "" };
       return realGit(cwd, args);
     });
     w.landedNode("node:v1:alpha", "alpha.txt", "alpha\n");
@@ -310,14 +228,17 @@ describe("integrating the nodes' branches", () => {
 describe("reconciling a merge that has no record", () => {
   const reconciledLine = (entry: LandedBranch) => ({ nodeRef: entry.nodeRef, outcome: "MERGED",
     detail: `${entry.branch} ${entry.sha.slice(0, 10)} was already on the project branch; its missing record was written` });
-  const mergedByHand = (w: ReturnType<typeof world>, nodeRef: string): LandedBranch => {
+  const mergedByHand = (w: World, nodeRef: string): LandedBranch => {
     const entry = w.landedNode(nodeRef, `${nodeRef.slice(8)}.txt`, `${nodeRef}\n`);
     git(w.workspace, "merge", "--no-ff", "--no-edit", entry.sha);
     return entry;
   };
-  const heldByAnother = (w: ReturnType<typeof world>): void => {
-    expect(w.port.acquire(w.workspace, { projectId: "project-a", nodeRef: "node-holder", ownershipToken: "c".repeat(64),
-      storeId: "store-a" }, { controllerId: "controller-b", controllerPid: 102 }).ok).toBe(true);
+  /** Another owner takes the checkout; the answer gives it back. */
+  const heldByAnother = (w: World): (() => void) => {
+    const owner = { projectId: "project-a", nodeRef: "node-holder", ownershipToken: "c".repeat(64), storeId: "store-a" };
+    const held = w.port.acquire(w.workspace, owner, { controllerId: "controller-b", controllerPid: 102 });
+    if (!held.ok) throw new Error(held.code);
+    return () => { expect(w.port.release(w.workspace, owner, held.handle.reservation.revision, "YIELDED", "controller-b").ok).toBe(true); };
   };
 
   it("says a real merge lost its record, retries in silence while the store refuses, and writes it once", async () => {
@@ -344,7 +265,12 @@ describe("reconciling a merge that has no record", () => {
   }, 120_000);
 
   it("records a branch the owner merged by hand, behind every state that stops a merge", async () => {
-    const w = world();
+    const asked: string[] = [];
+    let unreadable = false;
+    const w = world((cwd, args) => {
+      asked.push(args[0] ?? "");
+      return unreadable && args[0] === "status" ? { code: 128, stderr: "fatal: the checkout could not be read", stdout: "" } : realGit(cwd, args);
+    });
     // Nothing pending.
     const alpha = mergedByHand(w, "node:v1:alpha");
     expect(await w.integration.integrateOnce()).toEqual([reconciledLine(alpha)]);
@@ -353,6 +279,12 @@ describe("reconciling a merge that has no record", () => {
     const gamma = mergedByHand(w, "node:v1:gamma");
     heldByAnother(w);
     expect(await w.integration.integrateOnce()).toEqual([reconciledLine(gamma)]);
+    // The project checkout cannot be read: the line for the record just written is said once, here or never.
+    const zeta = mergedByHand(w, "node:v1:zeta");
+    unreadable = true;
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(zeta),
+      { nodeRef: beta.nodeRef, outcome: "UNAVAILABLE", detail: "the project checkout could not be read" }]);
+    unreadable = false;
     // The checkout holds uncommitted work.
     const delta = mergedByHand(w, "node:v1:delta");
     writeFileSync(join(w.workspace, "shared.txt"), "the operator is editing this\n", "utf8");
@@ -361,30 +293,67 @@ describe("reconciling a merge that has no record", () => {
     const epsilon = mergedByHand(w, "node:v1:epsilon");
     w.recorded("NodeBranchConflicted", { at: "2026-09-16T09:00:00.000Z", branch: beta.branch, nodeRef: beta.nodeRef, paths: ["beta.txt"], projectId: "project-a", sha: beta.sha });
     w.recorded("NodeBranchConflicted", { at: "2026-09-16T09:00:00.000Z", branch: epsilon.branch, nodeRef: epsilon.nodeRef, paths: ["epsilon.txt"], projectId: "project-a", sha: epsilon.sha });
-    const reads = w.calls["readEvents"] ?? 0;
+    const reads = w.calls["readAggregateEvents"] ?? 0;
+    const probes = asked.filter((verb) => verb === "merge-base").length;
     expect(await w.integration.integrateOnce()).toEqual([reconciledLine(epsilon)]);
-    // Four contained branches and a pending one cost the pass ONE walk of the aggregate, not one each.
-    expect((w.calls["readEvents"] ?? 0) - reads).toBe(1);
+    // Five contained branches and a pending one cost the pass ONE walk of the aggregate (one page), not one each,
+    expect((w.calls["readAggregateEvents"] ?? 0) - reads).toBe(1);
+    // and ONE is-ancestor each: those spawns are what a pass costs, on every pass, for every landed node.
+    expect(asked.filter((verb) => verb === "merge-base").length - probes).toBe(6);
     expect(w.events().filter((event) => event.type === "NodeBranchMerged").map((event) => [event.facts["nodeRef"], event.facts["mergeSha"]]))
-      .toEqual([alpha, gamma, delta, epsilon].map((entry) => [entry.nodeRef, null]));
+      .toEqual([alpha, gamma, zeta, delta, epsilon].map((entry) => [entry.nodeRef, null]));
     expect(nodeCommitMerged(w.store, "project-a", epsilon.nodeRef, epsilon.sha)).toBe(true);
     // One refused try at the held checkout in all of it, and the pending branch is still unmerged.
     expect(w.acquisitions()).toBe(1);
     expect(existsSync(join(w.workspace, "beta.txt"))).toBe(false);
   }, 120_000);
 
-  it("takes only Git's exact yes for evidence: an is-ancestor that never answered records nothing", async () => {
+  it("takes only Git's exact yes for evidence, and invents no merge for a sha the branch held all along", async () => {
     let answers = false;
     const w = world((cwd, args) => args[0] === "merge-base" && !answers ? { code: 128, stderr: "fatal: Git never answered", stdout: "" } : realGit(cwd, args));
-    mergedByHand(w, "node:v1:alpha");
-    // The pass ends at the hold, so no merge of its own is there to record.
-    heldByAnother(w);
+    const alpha = mergedByHand(w, "node:v1:alpha");
+    // The pass ends at the hold, so no merge of its own is there to record: an is-ancestor that never answered records nothing.
+    const release = heldByAnother(w);
     expect(await w.integration.integrateOnce()).toEqual([]);
     expect(w.events()).toEqual([]);
     // THE CONTROL: the same world, once Git answers.
     answers = true;
-    expect((await w.integration.integrateOnce()).map((report) => report.outcome)).toEqual(["MERGED"]);
-    expect(w.events()).toHaveLength(1);
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(alpha)]);
+    // The checkout is free and is-ancestor is silent again, so the pass falls through to the merge. Git
+    // says "Already up to date" (exit 0) and HEAD does not move: this used to be reported "merged" and
+    // recorded with HEAD, an unrelated commit, as its merge commit, once more on every such pass.
+    const beta = mergedByHand(w, "node:v1:beta");
+    const head = git(w.workspace, "rev-parse", "HEAD");
+    answers = false;
+    release();
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(beta)]);
+    expect(git(w.workspace, "rev-parse", "HEAD")).toBe(head);
+    // alpha went the same way in that pass and already had its record: nothing is written twice.
+    expect(w.events().map((event) => [event.facts["nodeRef"], event.facts["mergeSha"]])).toEqual([[alpha.nodeRef, null], [beta.nodeRef, null]]);
+    expect(await w.integration.integrateOnce()).toEqual([]);
+    expect(w.events()).toHaveLength(2);
+  }, 120_000);
+
+  // moe-next's own project branch is `moe/work-<date>`: every in-place landing there is a candidate by
+  // its spelling and already contained. Both gates are satisfied where it landed, so nothing reads a record.
+  it("leaves a landing made in the project's own checkout alone: no record, no line, no walk of the aggregate", async () => {
+    const w = world();
+    git(w.workspace, "switch", "--quiet", "-c", "moe/work-2026-09-18");
+    writeFileSync(join(w.workspace, "in-place.txt"), "landed in place\n", "utf8");
+    git(w.workspace, "add", "in-place.txt");
+    git(w.workspace, "commit", "--quiet", "-m", "landed in place");
+    const inPlace = { branch: "moe/work-2026-09-18", fromTree: false, nodeRef: "node:v1:in-place", sha: git(w.workspace, "rev-parse", "HEAD") };
+    w.landed.push(inPlace);
+    expect(await w.integration.integrateOnce()).toEqual([]);
+    expect(w.events()).toEqual([]);
+    expect(w.calls["readAggregateEvents"] ?? 0).toBe(0);
+    // Beside a tree's branch the pass has a merge to take, and still writes nothing for the in-place landing.
+    const alpha = w.landedNode("node:v1:alpha", "alpha.txt", "alpha\n");
+    expect((await w.integration.integrateOnce()).map((report) => [report.nodeRef, report.outcome])).toEqual([[alpha.nodeRef, "MERGED"]]);
+    expect(w.events().map((event) => event.facts["nodeRef"])).toEqual([alpha.nodeRef]);
+    // THE CONTROL: the same commit, had it been landed from a node's tree, is a record a gate waits on.
+    w.landed.splice(0, 1, { ...inPlace, fromTree: true });
+    expect(await w.integration.integrateOnce()).toEqual([reconciledLine(inPlace)]);
   }, 120_000);
 
   it("writes nothing over records it could not read: 'no record' is never inferred from 'unreadable'", async () => {
@@ -392,9 +361,9 @@ describe("reconciling a merge that has no record", () => {
     const entry = mergedByHand(w, "node:v1:alpha");
     expect(await w.integration.integrateOnce()).toEqual([reconciledLine(entry)]);
     // A read that fails hides the record just written; the write itself would still succeed, every pass.
-    w.refusals["readEvents"] = 1;
+    w.refusals["readAggregateEvents"] = 1;
     expect(await w.integration.integrateOnce()).toEqual([]);
-    expect(w.refusals["readEvents"]).toBe(0);
+    expect(w.refusals["readAggregateEvents"]).toBe(0);
     expect(w.events()).toHaveLength(1);
   }, 120_000);
 });

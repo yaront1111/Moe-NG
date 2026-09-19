@@ -121,7 +121,7 @@ it.each([20, 64])("hands a %i-path integration conflict to the node's next seat 
   expect(await w.submitSeat(w.requests[0]!)).toMatchObject({ ok: true });
   await w.finishSeat();
   expect(await w.verifier.verifyOnce()).toMatchObject([{ outcome: "ACCEPTED" }]);
-  const landed = { branch: "moe/node-slice-1234abcd", nodeRef: w.nodeRef, sha: "1".repeat(40) };
+  const landed = { branch: "moe/node-slice-1234abcd", fromTree: false, nodeRef: w.nodeRef, sha: "1".repeat(40) };
   expect(recordLandingReceipt(w.store, { commit: { branch: landed.branch, files: ["app.mjs"], message: "Land", parentSha: "b".repeat(40), sha: landed.sha },
     decidedAt: new Date().toISOString(), projectId: PROJECT_ID, refusal: null, subjectRef: w.nodeRef,
     verifierReceiptId: readReviewLedger(w.store, PROJECT_ID, w.nodeRef).accepted!.verifierReceiptId, workspace: w.workspace }).ok).toBe(true);

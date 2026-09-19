@@ -145,7 +145,7 @@ describe("the lander adopts a seat-authored commit", () => {
     const projectId = w.f.handle.owner.projectId;
     // The PRODUCTION candidates: what the integrator is offered is what the dependency gate waits on.
     const candidates = () => landedNodeBranches(w.f.store, projectId, [{ nodeRef: w.nodeRef }]);
-    expect(candidates()).toEqual([{ branch: "wip", nodeRef: w.nodeRef, sha: seat }]);
+    expect(candidates()).toEqual([{ branch: "wip", fromTree: true, nodeRef: w.nodeRef, sha: seat }]);
     expect(dependencySatisfied(w.f.store, projectId, w.nodeRef)).toBe(false);
     const integration = createNodeIntegration({ candidates, clock: () => "2026-09-19T12:00:00.000Z",
       controller: { controllerId: "controller-adopt", controllerPid: process.pid }, projectId,

@@ -22,6 +22,10 @@ export const integratorMerges = (workspace: string, branch: string): boolean =>
  * not landed, landed nothing, or landed on the project's own branch offers nothing here — the
  * last of those is the single-tree layout, where the work is already on the branch.
  *
+ * A project branch that is itself spelled `moe/` (moe-next's own is `moe/work-<date>`) passes the
+ * prefix from the project's checkout, so each entry says WHERE it landed (`fromTree`, the receipt's
+ * workspace): the integrator writes a missing merge record only for a landing a gate waits on.
+ *
  * Unreadable review or landing evidence yields no branch: an unproved commit is never merged.
  */
 export function landedNodeBranches(
@@ -37,7 +41,7 @@ export function landedNodeBranches(
       if (!receipt.ok || receipt.receipt.outcome !== "COMMITTED" || receipt.receipt.commit === null) continue;
       const { branch, sha } = receipt.receipt.commit;
       if (!integratorMerges(receipt.receipt.workspace, branch)) continue;
-      landed.push(Object.freeze({ branch, nodeRef, sha }));
+      landed.push(Object.freeze({ branch, fromTree: landedFromTree(receipt.receipt.workspace), nodeRef, sha }));
     } catch { /* one unreadable node never costs the others their merge */ }
   }
   return Object.freeze(landed);

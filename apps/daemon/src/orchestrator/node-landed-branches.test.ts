@@ -91,8 +91,10 @@ it("offers only the branches accepted, landed nodes own", () => {
 
   const nodes = [{ nodeRef: w.apiRef }, { nodeRef: w.uiRef }];
 
+  // Landed in /fixture-workspace, which is no node's tree: offered by its `moe/` spelling, and marked
+  // as a landing no gate waits on a merge record for.
   expect(landedNodeBranches(w.store, PROJECT_ID, nodes))
-    .toEqual([{ branch: "moe/node-api-tree", nodeRef: w.apiRef, sha: landedSha }]);
+    .toEqual([{ branch: "moe/node-api-tree", fromTree: false, nodeRef: w.apiRef, sha: landedSha }]);
 });
 
 it("offers nothing for work that landed on the project's own branch", () => {
@@ -132,7 +134,7 @@ it("offers nothing for a withdrawn node, and its NEW sha once it is accepted and
   land(w.store, w.apiRef, second, "moe/node-api-tree", "3".repeat(40));
 
   expect(landedNodeBranches(w.store, PROJECT_ID, [{ nodeRef: w.apiRef }]))
-    .toEqual([{ branch: "moe/node-api-tree", nodeRef: w.apiRef, sha: "3".repeat(40) }]);
+    .toEqual([{ branch: "moe/node-api-tree", fromTree: false, nodeRef: w.apiRef, sha: "3".repeat(40) }]);
 });
 
 it("offers nothing for an accepted node that has not landed, or an unknown node", () => {

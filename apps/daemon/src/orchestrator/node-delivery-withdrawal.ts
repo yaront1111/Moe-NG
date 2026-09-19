@@ -8,11 +8,12 @@ import { LANDING_NOTHING_TO_COMMIT } from "../repository/landing-receipt-contrac
 import type { LandingReceiptV1 } from "../repository/landing-receipt-contracts.js";
 import type { RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 import { readRepositoryIntegration } from "../repository/repository-integration-read.js";
+import type { LandedSha } from "../repository/repository-integration-read.js";
 import { landingIntentKey } from "../repository/repository-landing-intent.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import type { ReviewLedger } from "../review/review-read-model.js";
 import { runGit } from "./node-integration.js";
-import type { IntegrationGit, LandedBranch } from "./node-integration.js";
+import type { IntegrationGit } from "./node-integration.js";
 import { integratorMerges } from "./node-landed-branches.js";
 import { adoptedSeatCommit, realPathOf } from "./node-lander-adopt.js";
 import { recordNodeVerifierFailure } from "./node-verifier-failure-record.js";
@@ -261,7 +262,7 @@ export function createDeliveryWithdrawal(config: DeliveryWithdrawalConfig) {
     config.log(`[withdrawal] ${nodeRef}: ${rule} (${summary}; the acceptance was withdrawn and the node returns to a seat)`);
   };
 
-  const withdrawConflict = (workspace: string, conflict: LandedBranch & { readonly paths: readonly string[] },
+  const withdrawConflict = (workspace: string, conflict: LandedSha & { readonly paths: readonly string[] },
     ledger: ReviewLedger, receipt: LandingReceiptV1): void => {
     // EXACTLY 1 is Git's "not an ancestor" (node-lander-adopt.ts). 0 is merged; anything else proves
     // nothing, and this rule writes a durable round where the integrator's `!== 0` only costs a pass.
@@ -346,7 +347,7 @@ export function createDeliveryWithdrawal(config: DeliveryWithdrawalConfig) {
     };
     try {
       const reviews = readReviewLedgers(store, projectId, new Set(config.nodes().map(({ nodeRef }) => nodeRef)));
-      const landed: LandedBranch[] = [];
+      const landed: LandedSha[] = [];
       for (const [nodeRef, ledger] of reviews.ledgers) {
         const receipt = reviews.landings.get(nodeRef);
         if (ledger.unreadable || ledger.accepted === undefined || receipt === undefined

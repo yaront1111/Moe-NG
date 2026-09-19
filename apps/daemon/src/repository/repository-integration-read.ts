@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { MAX_PAGE_SIZE } from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 import type { LandedBranch } from "../orchestrator/node-integration.js";
 
@@ -34,6 +35,9 @@ export interface RepositoryIntegrationView {
   readonly version: typeof REPOSITORY_INTEGRATION_READ_VERSION;
 }
 
+/** What this read joins on. WHERE a branch landed (`fromTree`) is the integrator's question, never the reader's. */
+export type LandedSha = Omit<LandedBranch, "fromTree">;
+
 interface Outcome { readonly mergeSha: string | null; readonly paths: readonly string[]; readonly state: "MERGED" | "CONFLICTED" }
 
 /** NUL joins the pair: neither a node ref nor a sha can hold one, so no two pairs share a key. */
@@ -43,7 +47,7 @@ const keyOf = (nodeRef: string, sha: string): string => `${nodeRef}\0${sha}`;
 export interface IntegrationRecords {
   /** Whether the integrator recorded this node's exact commit MERGED, named or not. */
   readonly merged: (nodeRef: string, sha: string) => boolean;
-  readonly view: (landed: readonly LandedBranch[]) => RepositoryIntegrationView;
+  readonly view: (landed: readonly LandedSha[]) => RepositoryIntegrationView;
   /**
    * False when a record could not be read. What was folded before it still answers, as it always
    * did; but a caller that WRITES on "no record" must never take "could not read" for it, or it
@@ -57,21 +61,31 @@ export function readIntegrationRecords(store: SqliteEventStore, projectId: strin
   let whole = true;
   try {
     const aggregateId = `repository-integration/${createHash("sha256").update(projectId, "utf8").digest("hex")}`;
-    for (const event of [...store.readEvents(aggregateId)].sort((left, right) => left.aggregateSequence - right.aggregateSequence)) {
-      if (event.eventType !== MERGED && event.eventType !== CONFLICTED) continue;
-      const value: unknown = JSON.parse(decoder.decode(event.payload));
-      if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
-      const facts = value as Record<string, unknown>;
-      const nodeRef = facts["nodeRef"]; const sha = facts["sha"]; const mergeSha = facts["mergeSha"];
-      if (typeof nodeRef !== "string" || typeof sha !== "string") continue;
-      const paths = Array.isArray(facts["paths"]) ? facts["paths"].filter((path): path is string => typeof path === "string") : [];
-      // The latest record for a node's exact commit wins: a conflict answered and merged reads MERGED.
-      outcomes.set(keyOf(nodeRef, sha), event.eventType === MERGED
-        ? { mergeSha: typeof mergeSha === "string" && mergeSha !== "" ? mergeSha : null, paths: [], state: "MERGED" }
-        : { mergeSha: null, paths: Object.freeze(paths.slice(0, 64)), state: "CONFLICTED" });
+    // PAGED, in sequence order. The aggregate gains an event per merge, conflict and reconciliation
+    // and is never compacted, and `readEvents` refuses a whole aggregate past one page: at the
+    // 1001st record every merge read as unrecorded, every dependent BLOCKED, and nothing said why.
+    for (let cursor = 0; ;) {
+      const page = store.readAggregateEvents(aggregateId, cursor, MAX_PAGE_SIZE);
+      for (const event of page.items) {
+        if (event.eventType !== MERGED && event.eventType !== CONFLICTED) continue;
+        const value: unknown = JSON.parse(decoder.decode(event.payload));
+        if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
+        const facts = value as Record<string, unknown>;
+        const nodeRef = facts["nodeRef"]; const sha = facts["sha"]; const mergeSha = facts["mergeSha"];
+        if (typeof nodeRef !== "string" || typeof sha !== "string") continue;
+        const paths = Array.isArray(facts["paths"]) ? facts["paths"].filter((path): path is string => typeof path === "string") : [];
+        // The latest record for a node's exact commit wins: a conflict answered and merged reads MERGED.
+        outcomes.set(keyOf(nodeRef, sha), event.eventType === MERGED
+          ? { mergeSha: typeof mergeSha === "string" && mergeSha !== "" ? mergeSha : null, paths: [], state: "MERGED" }
+          : { mergeSha: null, paths: Object.freeze(paths.slice(0, 64)), state: "CONFLICTED" });
+      }
+      if (!page.hasMore) break;
+      // A page that says "more" and does not move on is a read that failed, never the end of the records.
+      if (page.nextCursor === null || page.nextCursor <= cursor) throw new Error("the integration aggregate's page did not advance");
+      cursor = page.nextCursor;
     }
   } catch { whole = false; /* an unreadable record leaves its branch WAITING, never a guessed outcome */ }
-  const view = (landed: readonly LandedBranch[]): RepositoryIntegrationView => {
+  const view = (landed: readonly LandedSha[]): RepositoryIntegrationView => {
     const branches = landed.flatMap((entry) => {
       const outcome = outcomes.get(keyOf(entry.nodeRef, entry.sha));
       // A merge with no name is one this cannot vouch for: served as MERGED it would fail the whole read.
@@ -103,7 +117,7 @@ export function nodeCommitMerged(store: SqliteEventStore, projectId: string, nod
 }
 
 export function readRepositoryIntegration(
-  store: SqliteEventStore, projectId: string, landed: readonly LandedBranch[],
+  store: SqliteEventStore, projectId: string, landed: readonly LandedSha[],
 ): RepositoryIntegrationView {
   return readIntegrationRecords(store, projectId).view(landed);
 }

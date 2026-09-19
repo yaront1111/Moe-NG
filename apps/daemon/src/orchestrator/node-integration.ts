@@ -34,6 +34,12 @@ const encoder = new TextEncoder();
 
 export interface LandedBranch {
   readonly branch: string;
+  /**
+   * Whether the landing was made in a node's own tree (the receipt's workspace, `landedFromTree`).
+   * Only such a landing has a gate waiting on its merge record; one made in the project's own
+   * checkout is satisfied where it landed, so no record is ever written for it.
+   */
+  readonly fromTree: boolean;
   readonly nodeRef: string;
   readonly sha: string;
 }
@@ -107,9 +113,14 @@ export function createNodeIntegration(config: NodeIntegrationConfig) {
    * dependency gate and the publication credit both wait on the record, forever. Git's own "this is
    * contained" is the positive evidence; the merge commit is unknown and never invented. No Git
    * effect and no hold. Reported only once written: a store that keeps refusing is retried in silence.
+   *
+   * ONLY a landing made in a node's tree: both gates that wait on the record short-circuit on any
+   * other (`landedFromTree`, http/dependency-integration.ts). A project whose own branch is spelled
+   * `moe/work-<date>` offers every in-place landing here by that spelling, already contained; a
+   * record and a line for each would be noise nothing reads, and growth nothing compacts.
    */
-  const reconcile = (contained: ReadonlySet<LandedBranch>, records: IntegrationRecords): IntegrationReport[] =>
-    !records.whole ? [] : [...contained].filter((entry) => !records.merged(entry.nodeRef, entry.sha)).flatMap((entry) =>
+  const reconcile = (contained: Iterable<LandedBranch>, records: IntegrationRecords): IntegrationReport[] =>
+    !records.whole ? [] : [...contained].filter((entry) => entry.fromTree && !records.merged(entry.nodeRef, entry.sha)).flatMap((entry) =>
       record(MERGED, { at: config.clock(), branch: entry.branch, mergeSha: null,
         nodeRef: entry.nodeRef, projectId: config.projectId, sha: entry.sha })
         ? [report(entry.nodeRef, "MERGED", `${entry.branch} ${entry.sha.slice(0, 10)} was already on the project branch; its missing record was written`)]
@@ -136,6 +147,8 @@ export function createNodeIntegration(config: NodeIntegrationConfig) {
     const contained = new Set(landed.filter((entry) => git(workspace, ["merge-base", "--is-ancestor", entry.sha, "HEAD"]).code === 0));
     // Only branches the project's own branch does not already contain.
     const pending = landed.filter((entry) => !contained.has(entry));
+    // Nothing to merge and no record anything waits on: a project whose nodes share its checkout never sees this act.
+    if (pending.length === 0 && ![...contained].some((entry) => entry.fromTree)) return [];
     // ONE walk of the aggregate per pass serves the reconciliation and the conflict check below.
     const records = readIntegrationRecords(config.store, config.projectId);
     // BEFORE every early return: nothing pending, a parked conflict, a dirty checkout and a held
@@ -163,10 +176,18 @@ export function createNodeIntegration(config: NodeIntegrationConfig) {
     const reports: IntegrationReport[] = [...reconciled];
     try {
       for (const entry of pending) {
+        const before = git(workspace, ["rev-parse", "HEAD"]);
         const merged = git(workspace, ["merge", "--no-ff", "--no-edit", entry.sha]);
         if (merged.code === 0) {
           // A merge whose commit cannot be named is still a merge; its name stays unknown, never empty.
           const mergeSha = mergeNameOf(workspace);
+          // `--no-ff` always makes a commit, so a HEAD that did not move is Git's "Already up to date":
+          // the sha was on the branch all along and only its is-ancestor went unanswered (128). That is
+          // no merge of this pass and HEAD is no merge commit of it: it is reconciled, by the one rule.
+          if (mergeSha !== null && before.code === 0 && before.stdout.trim() === mergeSha) {
+            reports.push(...reconcile([entry], records));
+            continue;
+          }
           const written = record(MERGED, { at: config.clock(), branch: entry.branch, mergeSha,
             nodeRef: entry.nodeRef, projectId: config.projectId, sha: entry.sha });
           reports.push(report(entry.nodeRef, "MERGED",

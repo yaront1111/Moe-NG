@@ -46,7 +46,7 @@ function world() {
     writeFileSync(join(tree.path, file), body, "utf8");
     git(tree.path, "add", file);
     git(tree.path, "commit", "--quiet", "-m", `${nodeRef} work`);
-    const entry = { branch: tree.branch, nodeRef, sha: git(tree.path, "rev-parse", "HEAD") };
+    const entry = { branch: tree.branch, fromTree: true, nodeRef, sha: git(tree.path, "rev-parse", "HEAD") };
     landed.push(entry);
     return entry;
   };
@@ -125,6 +125,35 @@ describe("reading the integration of the nodes' branches", () => {
     // The conflict is superseded, and a merge with no name is still served as nothing.
     expect(records.view(w.landed).branches.map((branch) => [branch.nodeRef, branch.state])).toEqual([["node:v1:one", "MERGED"]]);
     expect(records.view(w.landed)).toEqual(readRepositoryIntegration(w.store, "project-a", w.landed));
+  }, 120_000);
+
+  // The aggregate gains a record per merge, conflict and reconciliation and is never compacted. At the
+  // 1001st the one-page read refused the whole walk: every merge read as unrecorded, for good, in silence.
+  it("reads past the store's one-page ceiling: the 1001st record answers, and the walk is whole", () => {
+    const w = world();
+    const aggregateId = `repository-integration/${createHash("sha256").update("project-a", "utf8").digest("hex")}`;
+    const encoder = new TextEncoder();
+    const nodeOf = (index: number): string => `node:v1:n${String(index)}`;
+    const shaOf = (index: number): string => String(index).padStart(40, "0");
+    for (let from = 0; from < 1001; from += 250) {
+      w.store.commit({ aggregateId, commandBytes: encoder.encode(JSON.stringify({ eventType: "NodeBranchMerged" })), commandId: `rin-bulk-${String(from)}`,
+        committedAt: "2026-09-16T10:00:00.000Z", expectedVersion: w.store.getAggregateVersion(aggregateId),
+        events: Array.from({ length: Math.min(250, 1001 - from) }, (_unused, offset) => ({ eventId: `rin-bulk-${String(from + offset)}-e1`, eventType: "NodeBranchMerged",
+          payload: encoder.encode(JSON.stringify({ at: "2026-09-16T10:00:00.000Z", branch: `moe/n${String(from + offset)}`, mergeSha: null, nodeRef: nodeOf(from + offset),
+            projectId: "project-a", sha: shaOf(from + offset), version: "moe-repository-integration/1" })) })) });
+    }
+    // THE MEASURED CEILING: the store refuses this aggregate as one page.
+    expect(() => w.store.readEvents(aggregateId)).toThrow();
+
+    const records = readIntegrationRecords(w.store, "project-a");
+
+    expect(records.whole).toBe(true);
+    expect([0, 999, 1000].map((index) => records.merged(nodeOf(index), shaOf(index)))).toEqual([true, true, true]);
+    expect(records.merged(nodeOf(1001), shaOf(1001))).toBe(false);
+    expect(nodeCommitMerged(w.store, "project-a", nodeOf(1000), shaOf(1000))).toBe(true);
+    // A page that says "more" and does not move on is a read that failed, never the end of the records.
+    const stuck = { readAggregateEvents: () => ({ hasMore: true, items: [], nextCursor: null }) } as unknown as SqliteEventStore;
+    expect(readIntegrationRecords(stuck, "project-a").whole).toBe(false);
   }, 120_000);
 
   it("reads nothing for a project whose nodes landed nothing", () => {
