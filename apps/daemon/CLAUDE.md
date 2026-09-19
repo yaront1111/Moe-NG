@@ -142,9 +142,20 @@ its own: a caller that injects no dependency provider is refused, never served a
   non-zero exit, `PUBLISH_PUSH_REJECTED`) and whose remote tip is still that pre-push tip is
   released automatically: a REFUSED `PUBLISH_NOT_LANDED` receipt, then the hold goes back as
   `PUBLISH_NOT_TRANSMITTED`. Both halves are required, because git can exit non-zero after the
-  ref moved, and a push that landed and was force-pushed back leaves the tip unchanged too. A push
-  that succeeded, timed out, threw, or lost its answer is never auto-resolved and waits for an
-  operator. So does a publish stuck before this rule existed: it has no evidence to resolve on.
+  ref moved, and a push that landed and was force-pushed back leaves the tip unchanged too. Any
+  other UNKNOWN publish waits for the operator: a push that succeeded, timed out, threw or lost its
+  answer, and any publish stuck before these rules existed, which has no evidence to resolve on.
+  Each UNKNOWN pass records what it saw (`internal.repository.publication_observation`: the remote
+  tip, the expected sha, git's answer; written only when that changes) and the Publish card shows
+  it. The operator decides on it with `repository.publish_resolve` (`NOT_TRANSMITTED` or `ABANDON`,
+  `repository/publish-resolve-service.ts`): ONE REFUSED receipt, `PUBLISH_RESOLVED_<resolution>`,
+  carrying that observation, and never a push. The command cannot release the hold, which only its
+  owning controller may (`REPOSITORY_EXECUTION_CONTROLLER_MISMATCH`), so the publisher gives it back
+  as `PUBLISH_RESOLVED` on its next pass; deliveries stay BUSY until then, and a fresh decision then
+  pushes once. The kind is human-only: its async entry fences to the configured operator principal,
+  and it is on no MCP roster (excluded through `OPERATOR_PRINCIPAL_KINDS`, and never delegated to
+  `moe mcp --as-operator`); a paired browser session is refused today (task-4f16c331).
+  `repository/publish-resolve-journey.test.ts` drives the whole exit on real git.
 
 - **The publisher names its outcome.** `orchestrator/node-publisher.ts` reports `WAITING`
   (the single repository reservation is held by a seat, a landing or a criterion check; nothing

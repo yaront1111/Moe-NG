@@ -1,0 +1,30 @@
+{
+  "id": "task-f4812f163d564e07add406ca27800e22",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: every fresh publish reads UNKNOWN, and is offered the operator's Resolve, while its one push is still in flight",
+  "description": "Found by worker-952c612b during task-21be6e9055984413a651ce6ee331e2c8's adversarial review. Evidence is code only: no probe was run.\n\nWHY THE WINDOW EXISTS. node-publisher.ts:186-189 journals the intent BEFORE its one push (:202). run-goal-publication.ts:13 calls any intent with no receipt UNKNOWN. affordance-read answers `unknownPublishDecision` from that same read, so affordance-planning-offers.ts:255 mints repository.publish_resolve. Result: for the seconds between the intent commit and the post-push receipt, the Publish card shows UNKNOWN and the Resolve buttons.\n\nWHAT A CLICK IN THAT WINDOW DOES.\n1. The operator's NOT_TRANSMITTED or ABANDON records the REFUSED receipt first. recordPublishReceipt keeps the first writer: publish-ledger.ts:203-204.\n2. If the push lands, the publisher's PUSHED write gets that REFUSED receipt back. It reports UNKNOWN \"remote holds the sha but the recorded receipt does not match the candidate\" (:217-219).\n3. On the next pass it gives the hold back as PUBLISH_RESOLVED.\n4. The card then says REFUSED while the remote holds the commit.\nThe cost is bounded: a later decision's push of the same sha is a git no-op, and a remote that has moved on is refused PUBLISH_REMOTE_DIVERGED by the pre-flight. So the effect is not transmitted twice, but the record is wrong.\n\nHINT FOR THE FIX, left to the architect. A live controller does NOT tell in-flight from stuck: a stuck publish's hold is also owned by the live wrapper. The fix must also keep a publish that was stuck before task-78dea88b resolvable; such a publish has no transmission record. publish-resolve-journey.test.ts's step (4) pins the card at UNKNOWN for a stuck publish.",
+  "definitionOfDone": [
+    "While a fresh publish's single push is in flight (intent journaled, no receipt), the card does not say UNKNOWN and the affordance read offers no repository.publish_resolve. A test pins this against the production read and the production offer mint.",
+    "A stuck UNKNOWN publish is still offered the resolve. This includes one stuck before task-78dea88b, which has no transmission record. publish-resolve-journey.test.ts stays green."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-21be6e9055984413a651ce6ee331e2c8"
+  ],
+  "priority": "MEDIUM",
+  "order": 1030.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-19T03:26:53.454Z",
+  "updatedAt": "2026-09-19T03:26:53.454Z"
+}

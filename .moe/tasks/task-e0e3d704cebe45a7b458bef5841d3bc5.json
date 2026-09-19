@@ -117,7 +117,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:47:15.589Z",
-  "updatedAt": "2026-09-19T03:16:33.750Z",
+  "updatedAt": "2026-09-19T03:16:59.918Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:11:11.476Z",
     "plannedStepCount": 5,
@@ -182,7 +182,9 @@
     "apps/daemon/src/daemon-v2-command-registry.test.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
     "apps/daemon/CLAUDE.md",
-    ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json"
+    ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json",
+    ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json",
+    ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json"
   ],
   "completionSummary": "The daemon suite now keeps ONE hand census per fact. daemon-command-vocabulary.test.ts holds ROWS (wired kinds, ordered) and OPERATOR_ONLY, and asserts OPERATOR_ONLY two-way against OPERATOR_PRINCIPAL_KINDS with sorted toEqual, no counts. Every other whole-set site derives from production:\n- allowlist.test: expectedExcluded and all count objects gone; the relation arms are kept.\n- mcp-main and http-host: EXCLUSION_CASES = production, with a >0 guard.\n- human-approver: its hand list is gone.\n- registry.test: OPERATOR_ONLY aliases production; REGISTRATION_ORDER = Object.keys(PAYLOAD_KEYS); sizes became set equality vs ROWS.\n- v2 and store-deps: set equality vs PAYLOAD_KEYS-derived sets.\nPlus one apps/daemon/CLAUDE.md gotcha line, which had said the vocabulary test pins counts.\nDoD1: a git grep census of two operator literals finds only the census, ROWS rows, single-kind arms, and preview-start's HUMAN_ONLY_STEPS census (a different fact).\nDoD2, drill M1 in memory (policy.validate made operator-only and never-delegated): 1 file / 1 test red after, the vocabulary census, \"+ \\\"policy.validate\\\"\". The same mutant on the pre-row test blobs reds 6 files / 8 tests; the no-mutant control is 8/8 green.\nDoD3, drill M2 (escalation.decide dropped): the census is red with \"- \\\"escalation.decide\\\"\". M3 (registry filled out of order) reds the derived order arm.\nDoD4: `pnpm typecheck` 19/19 Done, 0 errors. Full daemon suite under the lease: 766/766 files, 12662 passed | 22 skipped, exit 0, with hashes unchanged across the run.\nDeviations:\n- Deleted the n*2 transport-product pins as tautologies instead of re-forming them.\n- Deleted {delegable,never}, as the plan said. RESIDUAL: a single move between the two production lists is now caught only for publish_resolve. See comment-6a24fa8a.\nDrill details and the per-pin review are in the step-5 note.",
   "commits": [
@@ -215,6 +217,23 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "2392fdd84288ad2c88338d58f38856a0a4ed005b",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T03:03:42Z",
+      "paths": [
+        ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json",
+        ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json",
+        ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T03:16:59.918Z",
+      "treeId": "3c887aeb8c28b0b697ed3baa840b3bdd44bb4a60",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -231,9 +250,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-952c612b@2026-09-19T02:16:14Z",
-    "at": "2026-09-19T02:53:42.916Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-19T03:03:42Z",
+    "at": "2026-09-19T03:16:59.918Z"
   },
   "completedAt": "2026-09-19T03:16:33.750Z",
   "reviewCompletedAt": "2026-09-19T03:16:33.750Z",
