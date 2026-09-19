@@ -9,10 +9,12 @@ import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { readLandingReceipt, readLatestLandingBaseline } from "../repository/landing-ledger.js";
 import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
+import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { calibration, envelope, packageItems, policyInput, send, submitPayload } from "../review/review-test-fixtures.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "../review/verifier-receipt-ledger.js";
+import { NodeBriefUnreadableError } from "./agent-spawn-contract.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 import { ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
 import { createRepositoryDeliveryRuntime, readRepositoryDeliveryFacts } from "./repository-delivery-runtime.js";
@@ -70,11 +72,13 @@ async function fixture() {
   // in for the mission resolver (wrapper-review-missions.test.ts holds that resolver's own arms).
   const placed = new Map<string, string>([...[...trees].map(([nodeRef, tree]) => [nodeRef, tree.path] as const),
     ...SHARED.map((nodeRef) => [nodeRef as string, workspace] as const)]);
+  /** How many of the next brief reads meet a store fault, as compiled-node-source.ts throws one. */
+  const briefs = { unreadable: 0 };
   const runtime = createRepositoryDeliveryRuntime({ compiledWorkspace: workspace, landingOn: true, nodes: () => [...placed.keys()].map((nodeRef) => ({ nodeRef })),
     log: (line) => logs.push(line), storePath,
     fence: { admit: () => ({ ok: true }), recordLiveChild: () => [], retireLiveChild: () => [] },
     verifier: { deps: provider.provide(), mintId: randomUUID, operatorCredential: credential, projectId, store,
-      nodeMission: (nodeRef) => placed.has(nodeRef) ? { instructions: "implement", test: "test-fixture", title: `Node ${nodeRef}`, workspace: placed.get(nodeRef)! } : null,
+      nodeMission: (nodeRef) => { if (briefs.unreadable > 0) { briefs.unreadable -= 1; throw new NodeBriefUnreadableError(`compiled graph ${nodeRef}`); } return placed.has(nodeRef) ? { instructions: "implement", test: "test-fixture", title: `Node ${nodeRef}`, workspace: placed.get(nodeRef)! } : null; },
       verificationAuthority: () => ({ calibration: calibration(), packageItems: packageItems().filter((item) => item.kind !== "DAEMON_RECEIPT"),
         policy: policyInput({ actor: NODE_VERIFIER_PRINCIPAL_ID }) }),
       runTest: async () => ({ byteCount: 2, exitCode: 0, output: "ok", sha256: createHash("sha256").update("ok").digest("hex") }),
@@ -107,7 +111,7 @@ async function fixture() {
   const merged = (sha: string): boolean => {
     try { git(workspace, "merge-base", "--is-ancestor", sha, "HEAD"); return true; } catch { return false; }
   };
-  return { facts: (nodeRef: string) => readRepositoryDeliveryFacts(store, projectId, nodeRef), landedCommit,
+  return { briefs, facts: (nodeRef: string) => readRepositoryDeliveryFacts(store, projectId, nodeRef), landedCommit,
     landedSha: (nodeRef: string): string => landedCommit(nodeRef).sha, logs, merged, missions, placed, projectId, runtime, seat, start, store, trees, workspace };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -314,4 +318,21 @@ it("returns a node credited with nothing to a seat in the tree that holds its wo
   expect({ branch: landed.branch, files: [...landed.files].sort() }).toEqual({ branch: tree.branch, files: ["c.txt", "shared.txt"] });
   expect(linesOf(f, "c").at(-1)).toContain("[integration] c: MERGED");
   expect(readFileSync(join(f.workspace, "c.txt"), "utf8")).toBe("c\n");
+}, 600_000);
+
+// The sync's brief read is the FIRST the staffing chain makes. Thrown past the sync it lands in the
+// coordinator's catch: the hold goes BLOCKED and start() rejects, a staffing failure only a restart clears.
+it("staffs the seat without its head start when the node's brief cannot be read during the sync", async (context) => {
+  const f = await fixture();
+  context.onTestFailed(() => { console.error(f.logs.join("\n")); });
+  f.briefs.unreadable = 1;
+
+  const started = await f.start("c");
+
+  expect(f.briefs.unreadable).toBe(0);
+  expect(started).toMatchObject({ ok: true });
+  expect(linesOf(f, "c")).toEqual(["[trees] c: SYNC_FAILED (the node's brief could not be read)",
+    "[lander] c: BASELINE_RECORDED (0 dirty path(s) before the seat)"]);
+  expect(f.missions.get("c")).toBe("implement");
+  expect(createRepositoryExecutionPort().inspect(f.trees.get("c")!.path)).toMatchObject({ ok: true, reservation: { nodeRef: "c", phase: "EXECUTING" } });
 }, 600_000);

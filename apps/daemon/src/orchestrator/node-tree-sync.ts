@@ -63,13 +63,14 @@ export function syncNodeTree(input: { readonly git?: IntegrationGit; readonly pr
   const facts = { from, project, to: from };
   // `.git` in a linked worktree is a FILE, so no path under it proves a merge in progress: Git is asked.
   if (sha(input.tree, "MERGE_HEAD") !== null) return report("SYNC_SKIPPED", "merge in progress", facts);
-  const status = git(input.tree, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]);
-  if (status.code !== 0) return report("SYNC_FAILED", `the tree could not be read: ${reasonOf(status.stderr)}`, facts);
   // Moe's own runtime files are nobody's uncommitted work (the integrator's and the lander's own
   // reading): read as dirt, one edited launcher would skip every sync for good.
-  if (status.stdout.split("\0").some((entry) => entry.length > 3 && !isMoeMetadata(entry.slice(3)))) {
-    return report("SYNC_SKIPPED", "dirty", facts);
-  }
+  const readStatus = () => git(input.tree, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]);
+  const clean = (status: ReturnType<IntegrationGit>): boolean =>
+    status.code === 0 && !status.stdout.split("\0").some((entry) => entry.length > 3 && !isMoeMetadata(entry.slice(3)));
+  const status = readStatus();
+  if (status.code !== 0) return report("SYNC_FAILED", `the tree could not be read: ${reasonOf(status.stderr)}`, facts);
+  if (!clean(status)) return report("SYNC_SKIPPED", "dirty", facts);
   // The sha, not the branch: the branch may move between this read and the merge. Moe's identity,
   // because a merge commit in an operator checkout with no user.email dies without one.
   const merged = git(input.tree, [...LANDER_IDENTITY, "merge", "--no-edit", head]);
@@ -80,8 +81,18 @@ export function syncNodeTree(input: { readonly git?: IntegrationGit; readonly pr
   const conflicts = git(input.tree, ["diff", "--name-only", "--diff-filter=U"]);
   const paths = conflicts.stdout.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== "").slice(0, MAX_CONFLICT_PATHS);
   // Whole, as the integrator aborts. A merge Git refused before it began left no MERGE_HEAD, and
-  // then the abort touches nothing.
+  // then the abort touches nothing. The abort is CHECKED: an index.lock held by a straggler, or a
+  // Git killed mid-merge, leaves MERGE_HEAD or half-applied paths behind, and a seat briefed that
+  // "the tree was left exactly as it was" would then be staffed on a tree the baseline reads as
+  // dirty. The tree held nothing uncommitted but Moe metadata (proved above), so `reset --hard`
+  // to the HEAD it started from loses nobody's work.
   git(input.tree, ["merge", "--abort"]);
+  if (sha(input.tree, "MERGE_HEAD") !== null || !clean(readStatus())) {
+    const reset = git(input.tree, ["reset", "--hard", from]);
+    if (reset.code !== 0 || sha(input.tree, "MERGE_HEAD") !== null || !clean(readStatus())) {
+      return report("SYNC_FAILED", `the conflicting merge could not be undone: ${reasonOf(reset.stderr)}`, facts);
+    }
+  }
   return paths.length === 0
     ? report("SYNC_FAILED", reasonOf(merged.stderr), facts)
     : report("SYNC_CONFLICT", `${String(paths.length)} path(s)`, { ...facts, conflictPaths: paths });

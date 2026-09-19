@@ -19,6 +19,7 @@ import { describeRepositoryHolder } from "./repository-holder-words.js";
 import { createRepositoryContainmentLedger } from "./repository-containment-witness.js";
 import type { BrokerImageProbe } from "./repository-containment-witness.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
+import type { NodeMission } from "./agent-wrapper-config.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
 import { landingVerificationClass } from "./node-lander-verification.js";
@@ -162,7 +163,14 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     // Before `baseline`, in the coordinator's order; the merge leaves a clean tree, so the baseline
     // that follows records no entries and the merge is never the seat's delivery.
     sync: async (nodeRef, root) => {
-      const brief = missionIn(root)(nodeRef);
+      // Never throws (the sync module's own contract): a brief that cannot be read here would
+      // otherwise land in start()'s catch, BLOCK the hold and record a staffing failure nothing
+      // clears until a restart. The seat only loses its head start.
+      let brief: NodeMission | null;
+      try { brief = missionIn(root)(nodeRef); } catch {
+        config.log(`[trees] ${nodeRef}: SYNC_FAILED (the node's brief could not be read)`);
+        return null;
+      }
       return brief === null ? null
         : syncTreeBeforeSeat({ log: config.log, nodeRef, projectRoot: config.compiledWorkspace, workspace: brief.workspace });
     },

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { runGit } from "./node-integration.js";
 import type { IntegrationGit } from "./node-integration.js";
 import { syncNodeTree, syncTreeBeforeSeat } from "./node-tree-sync.js";
 import { ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
@@ -131,6 +132,37 @@ describe("bringing the project's branch into a node's tree", () => {
     expect(syncNodeTree({ git: answering({ code, stderr }), projectRoot: "/project", tree: "/tree" }))
       .toMatchObject({ conflictPaths: [], detail, outcome: "SYNC_FAILED" });
   });
+
+  // Real Git, except the named verbs never run and answer as Git does under a straggler's
+  // index.lock: an abort that did nothing leaves MERGE_HEAD and the half-applied paths behind.
+  const LOCKED = "fatal: Unable to create 'index.lock': File exists.";
+  const lockedOn = (...verbs: string[]): IntegrationGit => (cwd, args) =>
+    verbs.some((verb) => args.join(" ").startsWith(verb)) ? { code: 128, stderr: `${LOCKED}\n`, stdout: "" } : runGit(cwd, args);
+  const conflicted = () => {
+    const f = fixture();
+    const own = commit(f.tree, "shared.txt", "the tree's line\n");
+    commit(f.project, "shared.txt", "the project's line\n");
+    return { ...f, own };
+  };
+
+  it("resets a conflicting merge its abort left behind, and reports the conflict over a clean tree", () => {
+    const f = conflicted();
+
+    const report = syncNodeTree({ git: lockedOn("merge --abort"), projectRoot: f.project, tree: f.tree });
+
+    expect(report).toEqual({ conflictPaths: ["shared.txt"], detail: "1 path(s)", from: f.own, outcome: "SYNC_CONFLICT", project: "main", to: f.own });
+    expect(stateOf(f.tree)).toEqual({ head: f.own, merging: false, shared: "the tree's line\n", status: "" });
+  }, 120_000);
+
+  it("reports a conflicting merge neither the abort nor the reset could undo as a failure, never as a conflict", () => {
+    const f = conflicted();
+
+    const report = syncNodeTree({ git: lockedOn("merge --abort", "reset --hard"), projectRoot: f.project, tree: f.tree });
+
+    // No conflict brief may tell a seat "your tree was left exactly as it was" over this tree.
+    expect(report).toEqual({ conflictPaths: [], detail: `the conflicting merge could not be undone: ${LOCKED}`, from: f.own, outcome: "SYNC_FAILED", project: "main", to: f.own });
+    expect(stateOf(f.tree)).toMatchObject({ head: f.own, merging: true, status: "UU shared.txt" });
+  }, 120_000);
 });
 
 describe("the sync the staffing path runs", () => {
