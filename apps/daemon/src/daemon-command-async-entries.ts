@@ -364,7 +364,7 @@ export function createAsyncCommandEntries(
       payloadKeys: PAYLOAD_KEYS[RELEASE_DECIDE_COMMAND_KIND], requiredCapability: CAPABILITIES.GOAL,
     }),
     [PUBLISH_RESOLVE_COMMAND_KIND]: createPublishResolveCommandEntry({
-      operatorPrincipalId: options.operatorPrincipalId,
+      operatorPrincipalId: options.operatorPrincipalId, projectId, store,
     }),
     [REPOSITORY_BOOTSTRAP_COMMAND_KIND]: Object.freeze({
       asyncHandler: bootstrapRepositoryCommand, handler: foundationSyncHandler,

@@ -22,6 +22,10 @@ import {
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import { PUBLISH_RESOLVE_COMMAND_KIND } from "./repository/publish-resolve-contracts.js";
+import { publicationRepositoryId } from "./repository/publication-approval-contracts.js";
+import { recordPublicationIntent } from "./repository/publication-effect-ledger.js";
+import { readPublishLedger } from "./repository/publish-ledger.js";
+import { REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId } from "./repository/publish-receipt-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
@@ -370,11 +374,12 @@ const ROWS: readonly Row[] = [
   { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_INPUT_INVALID", kind: "repository.recover", asyncOnly: true,
     nonOperatorRefusal: { code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", layer: "REPOSITORY_RECOVERY" },
     layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason", "expectedReviewVersion", "expectedReviewDigest"] },
-  // task-2c3f878b. REGISTERED AND REFUSING until task-a47babf8 lands the resolve service: the
-  // operator gets past the entry's own fence and is refused under row 2's vocabulary, whatever
-  // the payload. ADMIN fences reach; OPERATOR_ONLY fences the act.
+  // task-2c3f878b, served since task-a47babf8: the operator gets past the entry's own fence and the
+  // resolve service refuses a decision id that names no publish under row 2's vocabulary. ADMIN
+  // fences reach; OPERATOR_ONLY fences the act.
   { agent: null, asyncOnly: true, capability: ADMIN, code: "PUBLISH_RESOLVE_DECISION_NOT_FOUND",
-    kind: "repository.publish_resolve", layer: PREREQ_LAYER, payloadKeys: ["decisionId", "resolution"] },
+    kind: "repository.publish_resolve", layer: PREREQ_LAYER, payloadKeys: ["decisionId", "resolution"],
+    payload: { decisionId: "decision-unknown-publish", resolution: "ABANDON" } },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
@@ -708,10 +713,10 @@ describe("release.decide operator-only async wiring", () => {
 });
 
 /**
- * task-2c3f878b. `repository.publish_resolve` is wired, fenced to the operator, and REFUSING until
- * task-a47babf8 lands the resolve service. Two layers can refuse this dispatch, the entry's
- * operator fence and then the stub, so every arm pins code AND layer: an outcome-only arm would
- * stay green if the fence fell away and the stub answered first.
+ * task-2c3f878b. `repository.publish_resolve` is wired and fenced to the operator; since task-a47babf8
+ * the resolve service answers behind the fence. Three layers can refuse this dispatch, the entry's
+ * operator fence, the command seam's payload check and then the service, so every arm pins code AND
+ * layer: an outcome-only arm would stay green if the fence fell away and a later layer answered first.
  */
 describe("repository.publish_resolve operator-only async wiring", () => {
   const payload = { decisionId: "decision-unknown-publish", resolution: "NOT_TRANSMITTED" };
@@ -758,17 +763,71 @@ describe("repository.publish_resolve operator-only async wiring", () => {
     expect(operatorDelegateMcpToolKinds()).not.toContain(PUBLISH_RESOLVE_COMMAND_KIND);
   });
 
-  it("DoD 3: refuses the operator with the stub's stable code and no durable writes", async () => {
+  // task-a47babf8 RE-AIMED this arm: it pinned the stub's refusal, which the resolve service replaced.
+  it("DoD 3: resolves the operator's UNKNOWN publish with ONE REFUSED receipt, then refuses it as no longer UNKNOWN without writes", async () => {
+    const decisionId = seedUnknownPublish();
+    expect(await sendAsync("cmd-publish-resolve-operator", PUBLISH_RESOLVE_COMMAND_KIND,
+      { decisionId, resolution: "ABANDON" }, CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      outcome: "ACCEPTED", httpStatus: 200,
+      decision: { commandId: "cmd-publish-resolve-operator", disposition: "DECIDED", resultCode: "PUBLISH_RESOLVED_ABANDON" },
+    });
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const state = readPublishLedger(reader, PROJECT).get(PUBLISH_GOAL);
+      expect(state?.receipts.size).toBe(1);
+      expect(state?.receipts.get(decisionId)).toMatchObject({ outcome: "REFUSED", decisionId, refusal: {
+        code: "PUBLISH_RESOLVED_ABANDON",
+        detail: "the operator resolved this publish as ABANDON; no observation of the remote was recorded" } });
+    } finally { reader.close(); }
     const before = snapshot();
-    expect(await sendAsync("cmd-publish-resolve-operator", PUBLISH_RESOLVE_COMMAND_KIND, payload,
-      CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+    expect(await sendAsync("cmd-publish-resolve-again", PUBLISH_RESOLVE_COMMAND_KIND,
+      { decisionId, resolution: "NOT_TRANSMITTED" }, CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
       outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
-      refusal: { code: "PUBLISH_RESOLVE_DECISION_NOT_FOUND", layer: "DAEMON_PREREQUISITE",
-        detail: "no publish-resolve service is composed for this daemon: nothing was recorded" },
+      refusal: { code: "PUBLISH_RESOLVE_NOT_UNKNOWN", layer: "DAEMON_PREREQUISITE",
+        detail: "the publish already has a REFUSED receipt" },
     });
     expect(snapshot()).toEqual(before);
   });
+
+  it("refuses the operator's malformed payload at the command seam before the service reads anything", async () => {
+    const cases = [{}, { decisionId: "", resolution: "ABANDON" }, { decisionId: "decision-x", resolution: "PUSHED" }];
+    for (const [index, malformed] of cases.entries()) {
+      const before = snapshot();
+      expect(await sendAsync(`cmd-publish-resolve-malformed-${String(index)}`, PUBLISH_RESOLVE_COMMAND_KIND, malformed,
+        CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+        outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+        refusal: { code: "INPUT_INVALID", layer: "DAEMON_COMMAND_SEAM",
+          detail: "repository.publish_resolve takes exactly {decisionId, resolution: NOT_TRANSMITTED | ABANDON}" },
+      });
+      expect(snapshot()).toEqual(before);
+    }
+    expect(cases).toHaveLength(3);
+  });
 });
+
+const PUBLISH_GOAL = "goal-publish-resolve-registry";
+/** An UNKNOWN publish in the served store: approved, its intent journaled, no receipt. */
+function seedUnknownPublish(): string {
+  const encoder = new TextEncoder();
+  const writer = SqliteEventStore.openForProject(storePath, PROJECT);
+  try {
+    const identity = { root: "D:/ws", gitDirectory: "D:/ws/.git" };
+    const candidate = { identity, approval: { branch: "approved-branch", sha: "a".repeat(40),
+      remoteUrl: "https://github.com/o/r.git", repositoryId: publicationRepositoryId(identity) } };
+    const aggregateId = publishAggregateId(PUBLISH_GOAL);
+    const decisionId = writer.commitExpectedVersionDecision({ commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
+      committedResultBytes: encoder.encode(JSON.stringify({ candidate, goalId: PUBLISH_GOAL, remoteUrl: candidate.approval.remoteUrl })),
+      correlationId: "corr-publish-resolve", decidedAt: DECIDED_AT,
+      events: [{ eventId: "publish-resolve-requested", eventType: "RepositoryPublishRequested", payload: encoder.encode("{}") }],
+      expectedVersion: writer.getAggregateVersion(aggregateId),
+      key: { commandId: "cmd-publish-resolve-publish", principalId: "operator-local", projectId: PROJECT },
+      requestBytes: encoder.encode("{}"), targetAggregateId: aggregateId }).decision.decisionId;
+    recordPublicationIntent(writer, { version: "moe-publication-intent/1", candidate, decisionId, goalId: PUBLISH_GOAL,
+      projectId: PROJECT, ownerDigest: "d".repeat(64), reservationRevision: 1, controllerId: "wrapper-controller",
+      intendedAt: DECIDED_AT });
+    return decisionId;
+  } finally { writer.close(); }
+}
 
 function transportRequest(
   commandId: string,

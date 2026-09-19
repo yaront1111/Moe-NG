@@ -256,25 +256,31 @@ const ROUTES: Readonly<Record<RepositoryExecutionPhase, Route>> = {
   PUBLISHING: { into: [{ phase: "PUBLISHING" }], out: [], reason: "PUBLISH_NOT_TRANSMITTED" },
   CRITERION_VERIFYING: { into: [{ phase: "CRITERION_VERIFYING", baselineId: "baseline-original", sessionId: "session-a" }], out: [], reason: "CRITERIA_COMPLETED" },
 };
-it("releases PUBLISH_NOT_TRANSMITTED only from PUBLISHING, and refuses it from every other phase by the transition guard", () => {
+// PUBLISH_RESOLVED is the operator's resolve, released by the hold's OWN controller once the receipt exists: the
+// daemon that records the resolve runs under another controller, and the mismatch refusal is what keeps it off the hold.
+it.each(["PUBLISH_NOT_TRANSMITTED", "PUBLISH_RESOLVED"] as const)(
+  "releases %s only from PUBLISHING and only by its owning controller, and refuses it from every other phase by the transition guard", (reason) => {
   const refused = { ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID", detail: "REPOSITORY_EXECUTION_TRANSITION_INVALID" };
+  const foreign = { ok: false, code: "REPOSITORY_EXECUTION_CONTROLLER_MISMATCH", detail: "REPOSITORY_EXECUTION_CONTROLLER_MISMATCH" };
   // One repository for every phase: each spawn of git costs seconds on a loaded host, so each phase leaves by its own release.
   const root = repository(); const port = createRepositoryExecutionPort(); let visited = 0;
   const walk = (from: RepositoryExecutionHandle, steps: Route["into"]) => steps.reduce((handle, step) => {
     const moved = change(port, root, handle, step); if (!moved.ok) throw new Error(moved.code); return moved.handle;
   }, from);
-  const release = (handle: RepositoryExecutionHandle, reason: RepositoryExecutionReleaseReason) =>
-    port.release(root, owner, handle.reservation.revision, reason, controller.controllerId);
+  const release = (handle: RepositoryExecutionHandle, why: RepositoryExecutionReleaseReason) =>
+    port.release(root, owner, handle.reservation.revision, why, controller.controllerId);
   for (const phase of REPOSITORY_EXECUTION_PHASES) {
     const handle = walk(held(port, root), ROUTES[phase].into);
     expect(handle.reservation.phase).toBe(phase);
     // An unlisted reason still falls through the whole chain to a refusal: the guard fails closed.
     expect(release(handle, "NOT_A_REASON" as unknown as RepositoryExecutionReleaseReason)).toEqual(refused);
     if (phase === "PUBLISHING") {
-      expect(release(handle, "PUBLISH_NOT_TRANSMITTED")).toEqual({ ok: true, released: true });
+      expect(port.release(root, owner, handle.reservation.revision, reason, "daemon-controller")).toEqual(foreign);
+      expect(port.inspect(root)).toMatchObject({ ok: true, reservation: { phase, revision: handle.reservation.revision } });
+      expect(release(handle, reason)).toEqual({ ok: true, released: true });
       expect(port.inspect(root)).toEqual({ ok: true, reservation: null });
     } else {
-      expect(release(handle, "PUBLISH_NOT_TRANSMITTED")).toEqual(refused);
+      expect(release(handle, reason)).toEqual(refused);
       expect(port.inspect(root)).toMatchObject({ ok: true, reservation: { phase, revision: handle.reservation.revision } });
       expect(release(walk(handle, ROUTES[phase].out), ROUTES[phase].reason)).toEqual({ ok: true, released: true });
     }

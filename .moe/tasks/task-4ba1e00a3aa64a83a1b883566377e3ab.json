@@ -195,7 +195,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:08:47.382Z",
-  "updatedAt": "2026-09-19T01:48:15.866Z",
+  "updatedAt": "2026-09-19T01:48:55.878Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:09:47.523Z",
     "plannedStepCount": 7,
@@ -301,6 +301,21 @@
       "status": "REVIEW",
       "pushed": true,
       "message": "docs(task-4ba1e00a): land the trunk-workspace release bullet in apps/daemon/CLAUDE.md that completion 0d54df3c left out (contested by task-21be6e90, which has no commits)"
+    },
+    {
+      "sha": "31cd7f0129f3696bd304856479f1d309ae03da0e",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T01:35:15Z",
+      "paths": [
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T01:48:55.878Z",
+      "treeId": "f7c88b51f233a13e859bded7cb008b51283b8f86",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -323,9 +338,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
+    "kind": "checkpoint",
     "sessionId": "qa-09357cdf@2026-09-19T01:35:15Z",
-    "at": "2026-09-19T01:47:43.129Z"
+    "at": "2026-09-19T01:48:55.878Z"
   },
   "priorBlockedReason": "Step 1 census STOP — unnamed pin + false plan premise. No product files edited. Prerequisites baefab32 and 04160615 are DONE/merged with the expected contracts; that is not the block.\n\n1. UNNAMED PIN (step 1 stop rule: if a pin appears outside release-decide-contracts.test.ts, stop rather than take the path). apps/daemon/src/release/release-receipt-ledger.test.ts:67 `expect(RELEASE_DECIDE_CODES.length).toBe(3)` then writes a REFUSED receipt per code. Adding RELEASE_HEAD_IS_BASE reds this file. It is in no step's affectedFiles. Unique plan paths are already 10; adding it is 11 and submit_plan hard-rejects past 10. Split or swap; do not append. Comment comment-28a325e7 has the full census.\n\n2. Amend named-file step text so the worker is not graded as drift: contracts.test.ts:76 `expect(checked).toBe(3)` (step 2 missed it); service.test.ts:483-486 exact Object.keys list + toHaveLength(3) (step 3 owns the file).\n\n3. PLAN PREMISE FALSE: live-release.ts:149 evidenceOf uses effectRecord with an exact 8-key list (live-effect-read.ts:8-13 requires ownKeys.length === keys.length). Serving remoteDefaultBranch when measured would make the card RELEASE_RESPONSE_INVALID. Planning notes said there was no exact-key decoder. File is already in step 4; amend that step to accept 8-or-9 keys and omit the field when unmeasured. Decoder arms can stay in already-named tests.",
   "blockedOnTaskIds": null,

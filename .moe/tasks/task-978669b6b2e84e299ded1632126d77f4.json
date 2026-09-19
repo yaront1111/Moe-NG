@@ -1,0 +1,33 @@
+{
+  "id": "task-978669b6b2e84e299ded1632126d77f4",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: one version race on a publish receipt write poisons that decision's receipt key forever (PUBLISH_RECEIPT_INVALID)",
+  "description": "Found by worker-952c612b while on task-a47babf8291943efb08258a0c1f6cc78 (step 6). The row was pre-existing; this is not a regression from that row.\n\nWHERE: recordPublishReceipt (apps/daemon/src/repository/publish-ledger.ts:237) reads expectedVersion with store.getAggregateVersion OUTSIDE the store lock. If another writer commits to publish:<goal> in between (an intent, a transmission, an observation, or a second process's receipt), decision-ledger-transaction.ts decideUnderLock stores a REJECTED decision under the deterministic receipt key. From then on, every read of that key, and every retry, answers PUBLISH_RECEIPT_INVALID.\n\nREPRO (plain node, probe source in a comment on this row):\n- first write with a stale version: {\"code\":\"EXPECTED_VERSION_CONFLICT\"};\n- retry with a fresh version: {\"code\":\"PUBLISH_RECEIPT_INVALID\"};\n- the publisher's later PUSHED receipt: {\"code\":\"PUBLISH_RECEIPT_INVALID\"};\n- readPublishReceipt: PUBLISH_RECEIPT_INVALID.\n\nIMPACT: that decision can never be receipted again, whether PUSHED or resolved. Its card stays UNKNOWN and its PUBLISHING hold is never released. So every delivery stays REPOSITORY_EXECUTION_BUSY.\n\nEXPOSURE: task-a47babf8's repository.publish_resolve adds a CROSS-PROCESS writer of that key (the daemon), racing the wrapper's publisher. The window is sub-millisecond: it lies between the version read and BEGIN IMMEDIATE.\n\nFix direction: take the expected version under the lock, or retry the write when it reports EXPECTED_VERSION_CONFLICT. A repro test goes in publish-ledger.test.ts.",
+  "definitionOfDone": [
+    "Task completed as described"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Re-announce to wake a waiting architect: both architects have been IDLE for 10 minutes with this row unclaimed. Priority over task-e3490ca9 — a permanently poisoned receipt key on the publish path.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 1028.4,
+  "comments": [
+    {
+      "id": "comment-6e17af43e7c64575b31b527dc3949e2f",
+      "author": "worker-952c612b",
+      "content": "PROBE SOURCE (worker-952c612b, 2026-09-19).\n\nHow to run: from apps/daemon, as `node --input-type=module < probe.mjs`. It needs stdin so that \"@moe/store\" and ./src resolve against the cwd. It writes nothing to the repo. It was measured on moe/work-2026-09-18 plus task-a47babf8's uncommitted diff; publish-ledger.ts itself is unchanged by that row.\n\n```js\nimport { SqliteEventStore } from \"@moe/store\";\nimport { recordPublishReceipt, readPublishReceipt } from \"./src/repository/publish-ledger.js\";\nimport { publishAggregateId, publishReceiptId } from \"./src/repository/publish-receipt-contracts.js\";\nconst store = SqliteEventStore.openEphemeralForProjectTest(\"p1\");\nconst enc = new TextEncoder();\nconst agg = publishAggregateId(\"g1\");\n// Any peer write on the goal's publish aggregate (an observation, an intent, another receipt).\nstore.commitExpectedVersionDecision({ commandKind: \"internal.repository.publication_observation\", committedResultBytes: enc.encode(\"{}\"),\n  correlationId: \"peer\", decidedAt: \"2026-09-19T00:00:00.000Z\", events: [{ eventId: \"peer-1\", eventType: \"Peer\", payload: enc.encode(\"{}\") }],\n  expectedVersion: store.getAggregateVersion(agg), key: { commandId: \"peer-1\", principalId: \"daemon:node-publisher\", projectId: \"p1\" },\n  requestBytes: enc.encode(\"{}\"), targetAggregateId: agg });\nconst base = { branch: \"b\", decidedAt: \"2026-09-19T00:00:01.000Z\", decisionId: \"d1\", goalId: \"g1\", projectId: \"p1\",\n  remoteUrl: \"https://github.com/o/r.git\", sha: \"a\".repeat(40), url: null };\n// The receipt writer read the version BEFORE the peer write committed: emulate with a version one behind.\nconst stale = new Proxy(store, { get(t, k) {\n  if (k === \"getAggregateVersion\") return (id) => t.getAggregateVersion(id) - 1;\n  const v = Reflect.get(t, k, t); return typeof v === \"function\" ? v.bind(t) : v; } });\nconsole.log(\"first write (stale version):\", JSON.stringify(recordPublishReceipt(stale, { ...base, refusal: { code: \"PUBLISH_RESOLVED_ABANDON\", detail: \"x\" } })));\nconsole.log(\"retry, fresh version       :\", JSON.stringify(recordPublishReceipt(store, { ...base, refusal: { code: \"PUBLISH_RESOLVED_ABANDON\", detail: \"x\" } })));\nconsole.log(\"publisher PUSHED later     :\", JSON.stringify(recordPublishReceipt(store, { ...base, refusal: null })));\nconsole.log(\"read of the receipt key    :\", JSON.stringify(readPublishReceipt(store, \"p1\", publishReceiptId(\"p1\", \"g1\", \"d1\"))));\nstore.close();\n```\n\nOUTPUT:\n```\nfirst write (stale version): {\"code\":\"EXPECTED_VERSION_CONFLICT\",\"ok\":false}\nretry, fresh version       : {\"code\":\"PUBLISH_RECEIPT_INVALID\",\"ok\":false}\npublisher PUSHED later     : {\"code\":\"PUBLISH_RECEIPT_INVALID\",\"ok\":false}\nread of the receipt key    : {\"code\":\"PUBLISH_RECEIPT_INVALID\",\"ok\":false}\n```\n\nThe same class very likely affects the other deterministic-key writers in publication-effect-ledger.ts: recordPublicationIntent, which would throw PUBLISH_INTENT_INVALID, and recordPublicationTransmission. They were not probed.",
+      "timestamp": "2026-09-19T01:49:21.890Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-19T01:49:08.633Z",
+  "updatedAt": "2026-09-19T01:59:29.127Z"
+}

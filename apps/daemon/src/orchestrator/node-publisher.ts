@@ -4,11 +4,10 @@ import type { PublicationGitPort } from "../repository/publication-effect-contra
 import type { RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 import { readPublishLedger, recordPublishReceipt, type PublishRequest } from "../repository/publish-ledger.js";
 import { publishLinkFor, type PublishRefusal } from "../repository/publish-receipt-contracts.js";
-import { publicationRepositoryId, samePublicationApproval } from "../repository/publication-approval-contracts.js";
-import type { PublicationCandidate, PublicationRefusal } from "../repository/publication-approval-contracts.js";
+import { isPublishResolvedCode } from "../repository/publish-resolve-service.js";
+import { publicationRepositoryId, samePublicationApproval, type PublicationCandidate, type PublicationRefusal } from "../repository/publication-approval-contracts.js";
 import { PUBLICATION_TIP_UNREADABLE, notePublicationObservation, publicationOwnerDigest, readPublicationIntent, readPublicationTransmission,
-  recordPublicationIntent, recordPublicationTransmission } from "../repository/publication-effect-ledger.js";
-import type { PublicationPushOutcome } from "../repository/publication-effect-ledger.js";
+  recordPublicationIntent, recordPublicationTransmission, type PublicationPushOutcome } from "../repository/publication-effect-ledger.js";
 import { measureRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import { publicationReservation } from "./node-publisher-reservation.js";
 import { probeProcessAlive } from "./process-runner-lifecycle.js";
@@ -34,7 +33,7 @@ export interface NodePublisherConfig {
  *   or the git port's own code (`PUBLISH_REMOTE_UNREADABLE`, `PUBLISH_REPOSITORY_CHANGED`, …)
  *   with its detail when the remote or the candidate's repository could not be read. The
  *   operator decides again to retry. Also `PUBLISH_NOT_LANDED` AFTER an intent: git refused the
- *   push and the remote tip provably never moved, so the hold is given back.
+ *   push and the remote tip provably never moved; or the operator's resolve: the hold is given back.
  * - `WAITING`  — nothing was recorded or transmitted, and the next pass retries. ONLY the
  *   held-repository case (`node-publisher-reservation.ts`): the single repository reservation
  *   is held by another owner (a coding seat, a landing, a criterion check). A pre-flight
@@ -98,11 +97,12 @@ export function createNodePublisher(config: NodePublisherConfig) {
     await measureRemoteDefaultBranch(config.store, config.projectId, config.git, candidate, clock); // after the evidence, whatever git answered
     return transmission;
   };
-  /** Gives a PUBLISHING hold back once its PUBLISH_NOT_LANDED receipt exists; a refused release is named, and the next pass re-drives it. */
-  const giveBack = (goalId: string, workspace: string, handle: RepositoryExecutionHandle, detail: string): PublishReport => {
-    const released = config.repository.release(workspace, handle.owner, handle.reservation.revision, "PUBLISH_NOT_TRANSMITTED", config.controller.controllerId);
-    return released.ok ? report(goalId, "REFUSED", `${PUBLISH_NOT_LANDED}: ${detail}`) : report(goalId, "UNKNOWN",
-      `${PUBLISH_EFFECT_RECONCILIATION_REQUIRED}: ${PUBLISH_NOT_LANDED} receipted, but the reservation release was refused: ${released.code}`);
+  /** Gives back a PUBLISHING hold once a receipt settles it (its PUBLISH_NOT_LANDED, or the operator's resolve); a refused release is named, the next pass re-drives it. */
+  const giveBack = (goalId: string, workspace: string, handle: RepositoryExecutionHandle, settled: PublishRefusal): PublishReport => {
+    const reason = settled.code === PUBLISH_NOT_LANDED ? "PUBLISH_NOT_TRANSMITTED" : "PUBLISH_RESOLVED";
+    const released = config.repository.release(workspace, handle.owner, handle.reservation.revision, reason, config.controller.controllerId);
+    return released.ok ? report(goalId, "REFUSED", `${settled.code}: ${settled.detail}`) : report(goalId, "UNKNOWN",
+      `${PUBLISH_EFFECT_RECONCILIATION_REQUIRED}: ${settled.code} receipted, but the reservation release was refused: ${released.code}`);
   };
   // BOTH CONDITIONS, NEVER ONE, each read from the evidence journaled beside the intent:
   // (1) git REFUSED the push. Alone it is not enough: git can exit non-zero after the remote ref already moved.
@@ -120,7 +120,7 @@ export function createNodePublisher(config: NodePublisherConfig) {
       projectId: config.projectId, refusal: { code: PUBLISH_NOT_LANDED, detail }, remoteUrl: candidate.approval.remoteUrl,
       sha: candidate.approval.sha, url: null });
     return receipt.ok && receipt.receipt.refusal?.code === PUBLISH_NOT_LANDED
-      ? giveBack(goalId, workspace, handle, receipt.receipt.refusal.detail) : null;
+      ? giveBack(goalId, workspace, handle, receipt.receipt.refusal) : null;
   };
   // PRE-FLIGHT, BEFORE ANY INTENT. A non-fast-forward push is refused by the remote, and once
   // an intent is journaled this publisher may only observe: on UnAI (2026-09-18) an operator's
@@ -142,8 +142,8 @@ export function createNodePublisher(config: NodePublisherConfig) {
     return { code: PUBLISH_REMOTE_DIVERGED, detail: `remote ${candidate.approval.branch} is at ${short(tip.sha)}, which the approved `
       + `${short(candidate.approval.sha)} does not contain: fetch and merge (or rebase) it into the workspace branch, then decide again` };
   };
-  /** `settled` is the detail of this decision's PUBLISH_NOT_LANDED receipt when one was already recorded. */
-  const publish = async (request: PublishRequest, settled: string | null = null): Promise<PublishReport> => {
+  /** `settled` is the refusal of this decision's receipt when that receipt settles its hold (see giveBack). */
+  const publish = async (request: PublishRequest, settled: PublishRefusal | null = null): Promise<PublishReport> => {
     const { goalId, decisionId, candidate } = request;
     if (config.workspace === null) return report(goalId, "WORKSPACE_UNSET", "MOE_NODE_WORKSPACE is not set");
     if (candidate === null || candidate.approval.remoteUrl !== request.remoteUrl) {
@@ -231,7 +231,7 @@ export function createNodePublisher(config: NodePublisherConfig) {
       for (const [, state] of readPublishLedger(config.store, config.projectId)) {
         for (const request of state.requests) {
           const receipt = state.receipts.get(request.decisionId);
-          const settled = receipt?.refusal?.code === PUBLISH_NOT_LANDED ? receipt.refusal.detail : null;
+          const settled = receipt?.refusal != null && (receipt.refusal.code === PUBLISH_NOT_LANDED || isPublishResolvedCode(receipt.refusal.code)) ? receipt.refusal : null;
           if (receipt !== undefined) {
             // A crash after receipt commit but before release still needs remote reconciliation.
             if ((receipt.outcome !== "PUSHED" && settled === null) || config.workspace === null) continue;

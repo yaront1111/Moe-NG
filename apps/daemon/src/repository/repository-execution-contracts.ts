@@ -8,9 +8,11 @@ export type RepositoryExecutionPhase = typeof REPOSITORY_EXECUTION_PHASES[number
  * attempts, and a clean tree, so nothing can be lost; the node re-acquires with a fresh baseline.
  * PUBLISH_NOT_TRANSMITTED gives back a PUBLISHING hold whose push git refused while the remote tip
  * provably stayed where it was before the push: nothing landed, so a fresh decision may push again.
+ * PUBLISH_RESOLVED gives back a PUBLISHING hold the OPERATOR resolved (repository.publish_resolve): the
+ * operator asserted it, the daemon did not prove it, so the audit keeps the two reasons apart.
  */
 export type RepositoryExecutionReleaseReason = "ABORTED_BEFORE_EXECUTION" | "LANDED" | "LANDED_NOTHING" | "PUBLISHED"
-  | "PUBLISH_NOT_TRANSMITTED" | "CRITERIA_COMPLETED" | "YIELDED";
+  | "PUBLISH_NOT_TRANSMITTED" | "PUBLISH_RESOLVED" | "CRITERIA_COMPLETED" | "YIELDED";
 
 /** Daemon-only authority. Never serialize an owner or handle onto a public surface. */
 export interface RepositoryExecutionOwner {
