@@ -2,6 +2,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { exact, isObject, ref } from "../json-record-shape.js";
+import { commitFactDecision, findFactDecision } from "./decision-fact-slots.js";
 import { decodePublicationCandidate, samePublicationApproval, validPublicationSha } from "./publication-approval-contracts.js";
 import type { PublicationEffectIntent } from "./publication-effect-contracts.js";
 import type { RepositoryExecutionOwner } from "./repository-execution-contracts.js";
@@ -12,6 +13,8 @@ const VERSION = "moe-publication-intent/1";
 const encoder = new TextEncoder();
 const hash = (parts: readonly string[]) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 const intentId = (projectId: string, goalId: string, decisionId: string) => hash([VERSION, projectId, goalId, decisionId]);
+/** The intent and the transmission are facts on a shared aggregate: read and written through their slot chain. */
+const publisher = (projectId: string) => ({ principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId });
 export const publicationOwnerDigest = (owner: RepositoryExecutionOwner): string =>
   hash([owner.projectId, owner.nodeRef, owner.storeId, owner.ownershipToken]);
 const sameIntent = (left: PublicationEffectIntent, right: PublicationEffectIntent): boolean =>
@@ -23,7 +26,7 @@ const sameIntent = (left: PublicationEffectIntent, right: PublicationEffectInten
   && left.candidate.identity.gitDirectory === right.candidate.identity.gitDirectory;
 
 export function readPublicationIntent(store: SqliteEventStore, projectId: string, goalId: string, decisionId: string): PublicationEffectIntent | null {
-  const record = store.getCommandDecision({ projectId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, commandId: intentId(projectId, goalId, decisionId) });
+  const { record } = findFactDecision(store, publisher(projectId), intentId(projectId, goalId, decisionId), KIND);
   if (record === null) return null;
   const decoded = decodeBoundedJsonBytes(record.resultBytes);
   if (!decoded.ok || typeof decoded.value !== "object" || decoded.value === null || Array.isArray(decoded.value)) throw new Error("PUBLISH_INTENT_INVALID");
@@ -48,15 +51,11 @@ export function recordPublicationIntent(store: SqliteEventStore, input: Publicat
     if (!sameIntent(prior, input)) throw new Error("PUBLISH_INTENT_CONFLICT");
     return { intent: prior, replayed: true };
   }
-  const commandId = intentId(input.projectId, input.goalId, input.decisionId);
   const bytes = encoder.encode(JSON.stringify(input));
-  const aggregateId = publishAggregateId(input.goalId);
-  const written = store.commitExpectedVersionDecision({ commandKind: KIND, committedResultBytes: bytes,
-    correlationId: "publication-intent", decidedAt: input.intendedAt,
-    events: [{ eventId: `${commandId}-intended`, eventType: "RepositoryPublicationIntended", payload: encoder.encode(JSON.stringify({ decisionId: input.decisionId })) }],
-    expectedVersion: store.getAggregateVersion(aggregateId),
-    key: { commandId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId: input.projectId },
-    requestBytes: bytes, targetAggregateId: aggregateId });
+  const written = commitFactDecision(store, publisher(input.projectId), intentId(input.projectId, input.goalId, input.decisionId), KIND,
+    (commandId) => ({ commandKind: KIND, committedResultBytes: bytes, correlationId: "publication-intent", decidedAt: input.intendedAt,
+      events: [{ eventId: `${commandId}-intended`, eventType: "RepositoryPublicationIntended", payload: encoder.encode(JSON.stringify({ decisionId: input.decisionId })) }],
+      requestBytes: bytes, targetAggregateId: publishAggregateId(input.goalId) }));
   if (written.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("PUBLISH_INTENT_CONFLICT");
   const intent = readPublicationIntent(store, input.projectId, input.goalId, input.decisionId);
   if (intent === null) throw new Error("PUBLISH_INTENT_INVALID");
@@ -90,7 +89,7 @@ const knownOutcome = (value: unknown): value is PublicationPushOutcome => OUTCOM
 
 /** Absent, or malformed in any way, answers null: bad evidence must read exactly like no evidence. */
 export function readPublicationTransmission(store: SqliteEventStore, projectId: string, goalId: string, decisionId: string): PublicationTransmission | null {
-  const record = store.getCommandDecision({ projectId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, commandId: transmissionId(projectId, goalId, decisionId) });
+  const { record } = findFactDecision(store, publisher(projectId), transmissionId(projectId, goalId, decisionId), TRANSMISSION_KIND);
   if (record === null || record.commandKind !== TRANSMISSION_KIND || record.effectDisposition !== "EFFECTS_COMMITTED"
     || record.targetAggregateId !== publishAggregateId(goalId)) return null;
   const decoded = decodeBoundedJsonBytes(record.resultBytes);
@@ -104,17 +103,14 @@ export function readPublicationTransmission(store: SqliteEventStore, projectId: 
 
 /** Written once per decision: the key is deterministic, so a second, different record throws. */
 export function recordPublicationTransmission(store: SqliteEventStore, input: PublicationTransmission): void {
-  const commandId = transmissionId(input.projectId, input.goalId, input.decisionId);
   const bytes = encoder.encode(JSON.stringify({ version: TRANSMISSION_VERSION, projectId: input.projectId, goalId: input.goalId,
     decisionId: input.decisionId, tipBefore: input.tipBefore, outcome: input.outcome, transmittedAt: input.transmittedAt }));
-  const aggregateId = publishAggregateId(input.goalId);
-  const written = store.commitExpectedVersionDecision({ commandKind: TRANSMISSION_KIND, committedResultBytes: bytes,
-    correlationId: "publication-transmission", decidedAt: input.transmittedAt,
-    events: [{ eventId: `${commandId}-transmitted`, eventType: "RepositoryPublicationTransmitted",
-      payload: encoder.encode(JSON.stringify({ decisionId: input.decisionId, outcome: input.outcome })) }],
-    expectedVersion: store.getAggregateVersion(aggregateId),
-    key: { commandId, principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId: input.projectId },
-    requestBytes: bytes, targetAggregateId: aggregateId });
+  const written = commitFactDecision(store, publisher(input.projectId), transmissionId(input.projectId, input.goalId, input.decisionId),
+    TRANSMISSION_KIND, (commandId) => ({ commandKind: TRANSMISSION_KIND, committedResultBytes: bytes,
+      correlationId: "publication-transmission", decidedAt: input.transmittedAt,
+      events: [{ eventId: `${commandId}-transmitted`, eventType: "RepositoryPublicationTransmitted",
+        payload: encoder.encode(JSON.stringify({ decisionId: input.decisionId, outcome: input.outcome })) }],
+      requestBytes: bytes, targetAggregateId: publishAggregateId(input.goalId) }));
   if (written.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("PUBLISH_TRANSMISSION_CONFLICT");
 }
 

@@ -104,11 +104,17 @@
       "author": "qa-09357cdf",
       "content": "QA FOLLOW-UPS (non-blocking; complexity and wording only; fold into the epic-final hardening row):\n\n1. publish-resolve-command.ts:84, `options.store.readEvents(principal.principalId);`, is a discarded read. It reads the aggregate named by the BARE principal id, while the principal record lives at principalAggregateId(id) = `<v>/principal/<id>`. It exists only so drill M4 bites. Measured with in-memory mutants:\n   - M5 (probe deleted): command test + journey 8/8 GREEN.\n   - M6 (probe deleted AND catch -> return true): 8/8 GREEN.\n   isDurableHumanPrincipal already fails closed (readAllEvents catch -> UNKNOWN -> false), so the outer catch is dead defence in depth, exactly as in release.decide. The cleanup:\n   - delete the probe and its comment;\n   - record M4 as vacuous by construction.\n   The throwing-store arm stays green through the helper's own catch: the Proxy raises a private-member TypeError on readAggregateEvents.\n\n2. Wording only. The receipt detail still says \"the operator resolved this publish as ...\" when the owner's paired browser resolved it. The journey's it() title also still says \"the operator resolves it\".\n\n3. Re comment-e10f92e3: the production pairing seam mints OPERATOR_CAPABILITIES (daemon-store-foundation-composition.ts:629-630; daemon-command-vocabulary.ts:374-377 includes ADMIN). Production pairing therefore does not produce a paired browser without ADMIN today, so that follow-up is low priority.",
       "timestamp": "2026-09-19T08:28:59.862Z"
+    },
+    {
+      "id": "comment-c626c9c0bb8c4c87b591733502c6489e",
+      "author": "worker-69773bc1",
+      "content": "STRANDED DOC HUNK. Its bytes will ride task-978669b6's completion commit. From worker-69773bc1, 2026-09-19.\n\nThis row's completion commit 134d78ce WITHHELD apps/daemon/CLAUDE.md with the trailer `Moe-Contested: apps/daemon/CLAUDE.md (task-978669b6…)`. The contest came from that row's plan: its step 5 adds a Gotchas bullet to the same file.\n\nThis row's own CLAUDE.md hunk is still uncommitted in the shared checkout: `git diff HEAD -U0 -- apps/daemon/CLAUDE.md` shows @@ -150 +150,2 and @@ -155,3 +156,3. That is the \"operator, or the owner's paired browser holding ADMIN (owner ruling comment-00ce6540)\" wording.\n\nThis row is now DONE, so nothing contests the path any more. task-978669b6's wrapper commits the whole file, so its completion commit will carry BOTH hunks:\n- task-978669b6's +5-line bullet at :230-234;\n- this row's @150/@155 wording, unchanged.\nI did not edit, revert or restage this row's hunk. QA of either row: `git show <task-978669b6 completion sha> -- apps/daemon/CLAUDE.md` shows the split.",
+      "timestamp": "2026-09-19T08:30:26.548Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-19T03:16:33.626Z",
-  "updatedAt": "2026-09-19T08:29:09.844Z",
+  "updatedAt": "2026-09-19T08:30:26.548Z",
   "metrics": {
     "firstClaimAt": "2026-09-19T06:48:07.636Z",
     "plannedStepCount": 4,
@@ -184,14 +190,35 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "3a3547a0a5f0b0437312b499287d187c7adebe34",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T08:18:18Z",
+      "paths": [
+        ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T08:29:40.865Z",
+      "treeId": "285b41adb6c9c15754dc6d4a5fec6260dc6e8738",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-978669b6b2e84e299ded1632126d77f4"
+        }
+      ],
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-07e6de2a@2026-09-19T08:02:51Z",
-    "at": "2026-09-19T08:17:56.215Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-19T08:18:18Z",
+    "at": "2026-09-19T08:29:40.865Z"
   },
   "completedAt": "2026-09-19T08:29:09.844Z",
   "reviewCompletedAt": "2026-09-19T08:29:09.844Z",

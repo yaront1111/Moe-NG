@@ -6,6 +6,7 @@ import { PUBLICATION_TIP_UNREADABLE, readPublicationIntent, readPublicationObser
   recordPublicationObservation, recordPublicationTransmission } from "./publication-effect-ledger.js";
 import type { PublicationObservation, PublicationTransmission } from "./publication-effect-ledger.js";
 import type { PublicationEffectIntent } from "./publication-effect-contracts.js";
+import { NODE_PUBLISHER_PRINCIPAL_ID } from "./publish-receipt-contracts.js";
 afterEach(closeStores);
 const identity = { root: "D:/publication", gitDirectory: "D:/publication/.git" };
 const input: PublicationEffectIntent = { version: "moe-publication-intent/1", projectId: PROJECT_ID, goalId: "goal-1", decisionId: "decision-1",
@@ -172,4 +173,51 @@ it("never writes an observation it could not read back, and writes nothing when 
   expect(readPublicationObservation(blind, PROJECT_ID, "goal-1", "decision-1")).toBeNull();
   expect(() => recordPublicationObservation(blind, first)).toThrow("STORE_READ_LIMIT_EXCEEDED");
   expect(observations(store)).toBe(0);
+});
+
+/** The writer read publish:goal-1's version before a peer committed: one behind ONCE, honest after (task-978669b6). */
+const racingOnce = (store: SqliteEventStore): SqliteEventStore => {
+  let raced = false;
+  return new Proxy(store, { get(target, key) {
+    if (key === "getAggregateVersion") return (id: string) => {
+      const version = target.getAggregateVersion(id); if (raced) return version; raced = true; return version - 1;
+    };
+    const value: unknown = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value;
+  } });
+};
+const peerObserves = (store: SqliteEventStore): void => recordPublicationObservation(store, seen("decision-1", "c".repeat(40), "2026-09-06T00:00:02.000Z"));
+
+it("E1 an intent write that loses ONE version race lands at the next slot and reads back by value", () => {
+  const store = openStore(); peerObserves(store);
+  expect(recordPublicationIntent(racingOnce(store), input)).toEqual({ intent: input, replayed: false });
+  expect(readPublicationIntent(store, PROJECT_ID, "goal-1", "decision-1")).toEqual(input);
+  expect(onGoal(store).map((decision) => [decision.commandKind, decision.effectDisposition])).toEqual([
+    ["internal.repository.publication_observation", "EFFECTS_COMMITTED"], ["internal.repository.publication_intent", "NO_BUSINESS_EFFECT"],
+    ["internal.repository.publication_intent", "EFFECTS_COMMITTED"]]);
+});
+
+it("E2 heals an intent key the OLD code already burned: it reads as absent, and the next write commits", () => {
+  const scratch = openStore(); recordPublicationIntent(scratch, input);
+  const canonical = onGoal(scratch)[0]?.key.commandId ?? ""; // where every intent written before the fix lives
+  expect(canonical).toMatch(/^[0-9a-f]{64}$/u);
+  const store = openStore(); peerObserves(store); const bytes = encoder.encode(JSON.stringify(input));
+  // What the old recordPublicationIntent persisted when its version read lost the race.
+  store.commitExpectedVersionDecision({ commandKind: "internal.repository.publication_intent", committedResultBytes: bytes,
+    correlationId: "publication-intent", decidedAt: input.intendedAt,
+    events: [{ eventId: `${canonical}-intended`, eventType: "RepositoryPublicationIntended", payload: encoder.encode("{}") }],
+    expectedVersion: store.getAggregateVersion("publish:goal-1") - 1,
+    key: { commandId: canonical, principalId: NODE_PUBLISHER_PRINCIPAL_ID, projectId: PROJECT_ID }, requestBytes: bytes, targetAggregateId: "publish:goal-1" });
+  expect(onGoal(store).map((decision) => [decision.key.commandId, decision.effectDisposition]).at(-1)).toEqual([canonical, "NO_BUSINESS_EFFECT"]);
+  expect(readPublicationIntent(store, PROJECT_ID, "goal-1", "decision-1")).toBeNull();
+  expect(recordPublicationIntent(store, input)).toEqual({ intent: input, replayed: false });
+  expect(readPublicationIntent(store, PROJECT_ID, "goal-1", "decision-1")).toEqual(input);
+});
+
+it("E3 a transmission write that loses ONE version race lands at the next slot and reads back by value", () => {
+  const store = openStore(); recordPublicationIntent(store, input);
+  const recorded = sent("decision-1", "c".repeat(40), "REJECTED");
+  recordPublicationTransmission(racingOnce(store), recorded);
+  expect(readPublicationTransmission(store, PROJECT_ID, "goal-1", "decision-1")).toEqual(recorded);
+  expect(onGoal(store).map((decision) => [decision.commandKind, decision.effectDisposition]).slice(1)).toEqual([
+    ["internal.repository.publication_transmission", "NO_BUSINESS_EFFECT"], ["internal.repository.publication_transmission", "EFFECTS_COMMITTED"]]);
 });

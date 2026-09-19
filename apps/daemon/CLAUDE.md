@@ -147,14 +147,15 @@ its own: a caller that injects no dependency provider is refused, never served a
   answer, and any publish stuck before these rules existed, which has no evidence to resolve on.
   Each UNKNOWN pass records what it saw (`internal.repository.publication_observation`: the remote
   tip, the expected sha, git's answer; written only when that changes) and the Publish card shows
-  it. The operator decides on it with `repository.publish_resolve` (`NOT_TRANSMITTED` or `ABANDON`,
+  it. The operator, or the owner's paired browser holding ADMIN (owner ruling comment-00ce6540 on
+  task-4f16c331), decides on it with `repository.publish_resolve` (`NOT_TRANSMITTED` or `ABANDON`,
   `repository/publish-resolve-service.ts`): ONE REFUSED receipt, `PUBLISH_RESOLVED_<resolution>`,
   carrying that observation, and never a push. The command cannot release the hold, which only its
   owning controller may (`REPOSITORY_EXECUTION_CONTROLLER_MISMATCH`), so the publisher gives it back
   as `PUBLISH_RESOLVED` on its next pass; deliveries stay BUSY until then, and a fresh decision then
-  pushes once. The kind is human-only: its async entry fences to the configured operator principal,
-  and it is on no MCP roster (excluded through `OPERATOR_PRINCIPAL_KINDS`, and never delegated to
-  `moe mcp --as-operator`); a paired browser session is refused today (task-4f16c331).
+  pushes once. The kind is human-only: its async entry admits the configured operator or a paired
+  durable HUMAN holding ADMIN, and it is on no MCP roster (excluded through `OPERATOR_PRINCIPAL_KINDS`,
+  and never delegated to `moe mcp --as-operator`).
   `repository/publish-resolve-journey.test.ts` drives the whole exit on real git.
 
 - **The publisher names its outcome.** `orchestrator/node-publisher.ts` reports `WAITING`
@@ -226,6 +227,11 @@ its own: a caller that injects no dependency provider is refused, never served a
 - AGENTS.md's 250/400-line source rail bites here: `index.ts` packs export names several per
   line for that reason, and `daemon-entry.ts` re-exports the listener surface rather than
   adding another line to `index.ts`.
+- **A fact written once under a DETERMINISTIC decision key, on an aggregate other writers share,
+  goes through `repository/decision-fact-slots.ts`.** The store records a lost version race as a
+  `NO_BUSINESS_EFFECT` decision under the caller's key, replayed forever: one race burned the key
+  (task-978669b6: `PUBLISH_RECEIPT_INVALID`, every delivery `REPOSITORY_EXECUTION_BUSY`). Slot 0 is
+  the canonical key; only a lost race moves on. A versioned key (the observation's) needs none.
 
 ## Testing
 
