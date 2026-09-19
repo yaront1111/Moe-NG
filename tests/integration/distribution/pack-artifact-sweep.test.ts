@@ -33,11 +33,15 @@ const BUILD_OUTPUT = "target";
 
 /**
  * Exact production files whose domain vocabulary overlaps the sweep: Rust's
- * `mod spec` and the wrapper's node-spec reader plus its required runtime bridge.
- * Each entry must still be FOUND by the sweep and admitted by the packer, so an
- * exemption cannot quietly outlive the file it excuses.
+ * `mod spec`, the wrapper's node-spec listing and the daemon's file-authored spec
+ * loader, each of the two with its required `.js` runtime bridge. Each entry must
+ * still be FOUND by the sweep and admitted by the packer, so an exemption cannot
+ * quietly outlive the file it excuses, and each script must keep a production
+ * importer, so a test-only module cannot be excused here by hand.
  */
 const PRODUCTION_EXCEPTIONS = Object.freeze([
+  "apps/daemon/src/node-spec-loader.js",
+  "apps/daemon/src/node-spec-loader.ts",
   "apps/daemon/src/orchestrator/node-spec-listing.js",
   "apps/daemon/src/orchestrator/node-spec-listing.ts",
   "packages/runner/src/platform/windows/native/src/spec.rs",
@@ -59,6 +63,8 @@ function workspaceSources(): readonly string[] {
  * had shipped it.
  */
 const NAMED_TEST_DRIVER = "apps/daemon/src/identity/genesis-first-boot-worker.mjs";
+
+const SCRIPT_EXTENSIONS = Object.freeze([".ts", ".mts", ".js", ".mjs"]);
 
 const SWEPT = Object.freeze(workspaceSources().filter(
   (path) => !path.split("/").includes(BUILD_OUTPUT) && TEST_VOCABULARY.test(path),
@@ -98,6 +104,32 @@ describe("isTestArtifact, swept over the real workspace tree", () => {
     }
   });
 
+  it("every production exception has a production importer, which a test-only module never has", () => {
+    const scripts = workspaceSources()
+      .filter((path) => SCRIPT_EXTENSIONS.some((extension) => path.endsWith(extension)))
+      .map((path) => ({ path, text: readFileSync(join(REPO_ROOT, path), "utf8") }));
+    // An import specifier names the module; a comment that mentions it does not.
+    const importersOf = (target: string) => {
+      const specifier = `/${target.split("/").at(-1)}`;
+      return scripts
+        .filter(({ path, text }) => path !== target
+          && (text.includes(`${specifier}"`) || text.includes(`${specifier}'`)))
+        .map(({ path }) => path);
+    };
+    const hasProductionImporter = (target: string) =>
+      importersOf(target).some((importer) => !isTestArtifact(importer));
+
+    const scripted = PRODUCTION_EXCEPTIONS.filter((path) => /\.[jt]s$/u.test(path));
+    // Rust's `mod spec` has no TypeScript importer; nothing else may slip out of the check.
+    expect(PRODUCTION_EXCEPTIONS.filter((path) => !scripted.includes(path)))
+      .toEqual(PRODUCTION_EXCEPTIONS.filter((path) => path.endsWith(".rs")));
+    expect(scripted.length).toBeGreaterThan(0);
+    expect(scripted.filter((path) => !hasProductionImporter(path))).toEqual([]);
+    // Positive control: the same computation answers "none" for a module only tests import.
+    expect(importersOf(NAMED_TEST_DRIVER).length).toBeGreaterThan(0);
+    expect(hasProductionImporter(NAMED_TEST_DRIVER)).toBe(false);
+  });
+
   it("prunes the genesis first-boot worker, a test driver the vocabulary sweep cannot see", () => {
     expect(existsSync(join(REPO_ROOT, NAMED_TEST_DRIVER))).toBe(true);
     expect(TEST_VOCABULARY.test(NAMED_TEST_DRIVER)).toBe(false);
@@ -106,7 +138,7 @@ describe("isTestArtifact, swept over the real workspace tree", () => {
     // prune into a dangling import, so every importer must itself be a test artifact.
     const daemonSource = join(REPO_ROOT, "apps", "daemon", "src");
     const importers = walkFiles(daemonSource)
-      .filter((path) => [".ts", ".mts", ".js", ".mjs"].some((extension) => path.endsWith(extension)))
+      .filter((path) => SCRIPT_EXTENSIONS.some((extension) => path.endsWith(extension)))
       .filter((path) => readFileSync(join(daemonSource, path), "utf8").includes("genesis-first-boot-worker.mjs"))
       .map((path) => `apps/daemon/src/${path}`);
     expect(importers.length).toBeGreaterThan(0);
