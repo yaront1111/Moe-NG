@@ -67,7 +67,7 @@
     }
   ],
   "planRevision": 9,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -92,16 +92,30 @@
       "author": "worker-07e6de2a",
       "content": "FOLLOW-UP, not this row: affordance-planning-offers.ts:255 still mints repository.publish_resolve for every reader of an UNKNOWN publish (no capability filter). A paired browser WITHOUT ADMIN still sees Resolve on the card and now meets CAPABILITY_DENIED @ AUTHORIZE (403) instead of OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Same class as the original bug: the card offers a control the clicker cannot spend. Fold into a later affordance-filter row; do not widen this fence further to hide it.",
       "timestamp": "2026-09-19T08:16:56.192Z"
+    },
+    {
+      "id": "comment-b639f3d5c0584063b44af60db9e136fb",
+      "author": "qa-09357cdf",
+      "content": "QA (qa-09357cdf): THE DOC HUNK IS NOT IN THE COMPLETION COMMIT. 134d78ce carries 4 paths. apps/daemon/CLAUDE.md was withheld under `Moe-Contested: apps/daemon/CLAUDE.md (task-978669b6b2e84e299ded1632126d77f4)`.\n\nThe file also holds task-978669b6's live hunk (the decision-fact-slots bullet at about :230). The canonical path recipe therefore excludes it whole, and the peer's landing carries it. I did not self-land a partial hunk.\n\nThis row's hunk (:150-158) is in the working tree; see `git diff HEAD -- apps/daemon/CLAUDE.md`. Until task-978669b6 lands, HEAD's CLAUDE.md still says \"a paired browser session is refused today (task-4f16c331)\". 134d78ce made that false.",
+      "timestamp": "2026-09-19T08:28:55.345Z"
+    },
+    {
+      "id": "comment-1e88340dd1e04ec98f735828ce0a6d3c",
+      "author": "qa-09357cdf",
+      "content": "QA FOLLOW-UPS (non-blocking; complexity and wording only; fold into the epic-final hardening row):\n\n1. publish-resolve-command.ts:84, `options.store.readEvents(principal.principalId);`, is a discarded read. It reads the aggregate named by the BARE principal id, while the principal record lives at principalAggregateId(id) = `<v>/principal/<id>`. It exists only so drill M4 bites. Measured with in-memory mutants:\n   - M5 (probe deleted): command test + journey 8/8 GREEN.\n   - M6 (probe deleted AND catch -> return true): 8/8 GREEN.\n   isDurableHumanPrincipal already fails closed (readAllEvents catch -> UNKNOWN -> false), so the outer catch is dead defence in depth, exactly as in release.decide. The cleanup:\n   - delete the probe and its comment;\n   - record M4 as vacuous by construction.\n   The throwing-store arm stays green through the helper's own catch: the Proxy raises a private-member TypeError on readAggregateEvents.\n\n2. Wording only. The receipt detail still says \"the operator resolved this publish as ...\" when the owner's paired browser resolved it. The journey's it() title also still says \"the operator resolves it\".\n\n3. Re comment-e10f92e3: the production pairing seam mints OPERATOR_CAPABILITIES (daemon-store-foundation-composition.ts:629-630; daemon-command-vocabulary.ts:374-377 includes ADMIN). Production pairing therefore does not produce a paired browser without ADMIN today, so that follow-up is low priority.",
+      "timestamp": "2026-09-19T08:28:59.862Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-19T03:16:33.626Z",
-  "updatedAt": "2026-09-19T08:17:47.483Z",
+  "updatedAt": "2026-09-19T08:29:09.844Z",
   "metrics": {
     "firstClaimAt": "2026-09-19T06:48:07.636Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-19T08:29:09.844Z",
+    "wallClockMs": 6062208
   },
   "stepsCompleted": [
     "step-1",
@@ -126,7 +140,8 @@
   "planApprovedAt": "2026-09-19T08:02:34.326Z",
   "contextFetchedBy": [
     "worker-07e6de2a",
-    "governor-f32726f9"
+    "governor-f32726f9",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-19T08:03:30.428Z",
   "reviewStartedAt": "2026-09-19T08:17:47.481Z",
@@ -141,7 +156,44 @@
     "apps/daemon/src/repository/publish-resolve-command.test.ts",
     "apps/daemon/src/repository/publish-resolve-journey.test.ts",
     "apps/daemon/src/repository/publish-resolve-command.ts",
-    "apps/daemon/CLAUDE.md"
+    "apps/daemon/CLAUDE.md",
+    ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json"
   ],
-  "completionSummary": "Widened repository.publish_resolve so a paired durable HUMAN holding ADMIN can resolve an UNKNOWN publish (owner ruling comment-00ce6540). Fence is local in publish-resolve-command.ts (assertResolvePrincipal / resolveByPairedAdmin): operator OR same project + ADMIN + isDurableHumanPrincipal, fail-closed. Kind stays MCP-excluded and never-delegated. Journey paired-ADMIN arm is ACCEPTED; no-ADMIN paired human is CAPABILITY_DENIED @ AUTHORIZE (ingress capability gate — DoD 2 layer note); agent session.open with ADMIN is OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Direct entry suite pins defence-in-depth. Follow-up comment-e10f92e3: the card still offers Resolve to no-ADMIN readers. Focused: Test Files 6 passed (6), Tests 82 passed (82). typecheck exit 0. test:security Test Files 12 passed (12), Tests 1009 passed (1009)."
+  "completionSummary": "Widened repository.publish_resolve so a paired durable HUMAN holding ADMIN can resolve an UNKNOWN publish (owner ruling comment-00ce6540). Fence is local in publish-resolve-command.ts (assertResolvePrincipal / resolveByPairedAdmin): operator OR same project + ADMIN + isDurableHumanPrincipal, fail-closed. Kind stays MCP-excluded and never-delegated. Journey paired-ADMIN arm is ACCEPTED; no-ADMIN paired human is CAPABILITY_DENIED @ AUTHORIZE (ingress capability gate — DoD 2 layer note); agent session.open with ADMIN is OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Direct entry suite pins defence-in-depth. Follow-up comment-e10f92e3: the card still offers Resolve to no-ADMIN readers. Focused: Test Files 6 passed (6), Tests 82 passed (82). typecheck exit 0. test:security Test Files 12 passed (12), Tests 1009 passed (1009).",
+  "commits": [
+    {
+      "sha": "134d78ce57b207b36b26e7e9d0b3da274705085f",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-19T08:02:51Z",
+      "paths": [
+        ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json",
+        "apps/daemon/src/repository/publish-resolve-command.test.ts",
+        "apps/daemon/src/repository/publish-resolve-command.ts",
+        "apps/daemon/src/repository/publish-resolve-journey.test.ts"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-19T08:17:56.215Z",
+      "treeId": "9b69f1668cac654f31784a481c459793e174b689",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-978669b6b2e84e299ded1632126d77f4"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-07e6de2a@2026-09-19T08:02:51Z",
+    "at": "2026-09-19T08:17:56.215Z"
+  },
+  "completedAt": "2026-09-19T08:29:09.844Z",
+  "reviewCompletedAt": "2026-09-19T08:29:09.844Z",
+  "reviewSummary": "Verified completion commit 134d78ce (origin/moe/work-2026-09-18, 4 paths; the owned code paths in the tree are byte-identical to it). DoD1: owner ruling comment-00ce6540 (08:01:40Z) precedes the plan (08:02:32Z) and the first code step (08:11:18Z). DoD2: the entry fence admits the operator OR same project + ADMIN + isDurableHumanPrincipal. Journey: paired ADMIN browser ACCEPTED 200, DECIDED, PUBLISH_RESOLVED_NOT_TRANSMITTED on the production registry. A paired human without ADMIN gets CAPABILITY_DENIED@AUTHORIZE 403 at dispatch, the layer that actually answers. The direct arm asserts OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION with detail and 403. An agent session.open holding ADMIN gets OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION with detail at DISPATCH. MCP_EXCLUDED and NEVER_DELEGATED are pinned. Production pairing mints OPERATOR_CAPABILITIES, which include ADMIN, so this reaches the owner's real browser. Re-ran: task.verification leg Test Files 6 passed (6), Tests 82 passed (82). Same 6 files with the peer-dirty publish-ledger.ts / publication-effect-ledger.ts served as 134d78ce blobs: 6/6, 82/82. Registry, vocabulary, 2 affordance and contracts suites: 5/5, 740/740. daemon typecheck exit 0. test:security 12/12, 1009/1009. In-memory drills (sha256 unchanged, config deleted): M1 durable->true fails the non-human arm and journey :169; M2 ADMIN fails the no-ADMIN direct arm; M3 project fails the wrong-project arm; M4 catch->true fails the fail-closed arm; M7 revert-widening fails the paired-ADMIN arm and journey :179 (the recorded pre-fix red); M8 drop-operator fails the operator arm and journey :212. M5/M6 (readEvents probe deleted, with and without M4) stay 8/8 green: the probe only serves the drill; cleanup is in a QA comment, non-blocking. The CLAUDE.md hunk was withheld as Moe-Contested with WORKING task-978669b6 (the file also holds that row's hunk); it is in the tree and ships with that row's landing."
 }
