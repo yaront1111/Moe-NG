@@ -94,7 +94,7 @@
     }
   ],
   "planRevision": 13,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -128,20 +128,29 @@
       "author": "worker-69773bc1",
       "content": "STEP 6(G) ADVERSARIAL REVIEW (worker-69773bc1). This is the design's reasoning. The committed arms F1-F6, P1-P3 and E1-E3 carry the measured legs.\n\n1. TWO WRITERS, ONE FREE SLOT n. The first to take BEGIN IMMEDIATE decides the slot.\n- Same fence and same request bytes: the second REPLAYS (the store's preflight reconcile path).\n- Different bytes: the second throws IdempotencyConflictError, exactly as today at slot 0.\n- Receipts: requestBytes are {decisionId, goalId, receiptId, version}. They are identical for a REFUSED and a PUSHED receipt, so a racing publisher and resolver converge on the first receipt (\"first receipt wins\"; publish-resolve-service then answers NOT_UNKNOWN).\n- Residual window, unchanged from today: B finds slot n empty, A commits at n, then B reads the version (now v+1) and commits at n. The request identity differs, so B gets IdempotencyConflictError. That burns nothing. B's next pass reads A's fact. Not retried here: the plan says propagate.\n\n2. AN OCCUPIED SLOT IS RE-SENT AT ITS OWN FENCE (record.expectedVersion). This refines the step-3 text, measured in step 1b: store-digests.ts:140 folds expectedVersion into requestSha256. So a fresh version at an already-committed slot can only conflict, and F6's true retry could never replay. Behaviour change: an identical second recordPublicationTransmission now REPLAYS instead of throwing IdempotencyConflictError. A different record still throws, as its doc comment says. The publisher writes one transmission per push, and transmittedAt comes from clock(), so nothing relied on the identical-retry throw.\n\n3. A READER WALKING WHILE A WRITER IS MID-CHAIN sees slots 0..k burned and slot k+1 empty, and answers \"not yet written\":\n- PUBLISH_RECEIPT_NOT_FOUND;\n- a null intent;\n- a null transmission.\nThat is never INVALID. The chain has no gaps: slot n is written only after 0..n-1 were seen burned, and a burned decision is immutable. So a chain is some burned slots followed by at most ONE committed fact. P1 pins exactly one committed receipt decision.\n\n4. A FOREIGN COMMAND AT SLOT n>0 needs a sha256 preimage or collision of JSON.stringify([\"fact-slot\", canonicalId, n]) inside the same (projectId, principalId) scope. principalId is the reserved daemon:node-publisher. Slot 0 is the canonical id, byte for byte:\n- P3 pins the key and the event id `${receiptId}-PublishRecorded`;\n- F1 pins the literal digests for slots 1 and 2, because they are durable keys.\n\n5. BOUNDS.\n- A read makes at most FACT_SLOT_LIMIT (32) getCommandDecision calls (F5).\n- A write makes at most FACT_WRITE_ATTEMPTS (3) commits, each after one walk and at most one version read. So a write burns at most 3 slots and writes at most 3 rejection-audit events.\n- An exhausted chain fails closed with the pre-fix codes: the reader answers the last, burned slot (INVALID, a throw, or null), and the writer replays that slot's rejection (EXPECTED_VERSION_CONFLICT).\n\n6. HEALING. A key the old code already burned reads as absent, and the next write commits at slot 1: P2 (receipt) and E2 (intent). It also HEALS live stores: nothing to migrate.\n\n7. UNCHANGED:\n- publish-resolve-service.test.ts :168-180. The fake commit never persists, so all 3 attempts land on slot 0 and it ends in the same DurableStoreError EXPECTED_VERSION_CONFLICT.\n- The :14-25 race arm replays at slot 0.\n- The 13-change tamper arm (:102): a tampered NO_BUSINESS_EFFECT is skipped as burned, the next slot is empty, and it reads null.\n\n8. CLASS CENSUS: the other writers of the same shape, listed in comment-9be73c14 (deploy-ledger, landing-ledger, repository-recovery-facts writeRecoveryFact and others). They are NOT fixed here, which is the governor's call. Each affected one is now a mechanical switch to commitFactDecision/findFactDecision.",
       "timestamp": "2026-09-19T08:30:08.902Z"
+    },
+    {
+      "id": "comment-685b78fab5eb414bb0bc94075de45396",
+      "author": "qa-09357cdf",
+      "content": "QA EVIDENCE (qa-09357cdf, 2026-09-19). I reviewed completion commit e5daf51b, which is an ancestor of HEAD 779f540b. The owned paths are unchanged since e5daf51b.\n\nSTORE, re-read:\n- NoBusinessEffectDecision is typed with resultCode \"EXPECTED_VERSION_CONFLICT\". NO_BUSINESS_EFFECT therefore only ever means a lost race.\n- commitRejectedDecisionEffect writes to rejectionAuditAggregateId(decisionId), not to the target, so the target's version does not move.\n- store-digests.ts:140 hashes expectedVersion into requestSha256. That makes the worker's deviation, re-sending an occupied slot at record.expectedVersion, necessary. Drill M4 below proves it.\n\nGATES, each re-run by me:\n- Verification leg: \"Test Files 6 passed (6)\", \"Tests 81 passed (81)\".\n- `pnpm --filter @moe/daemon test`, under the full-suite-gate lease: \"Test Files 769 passed (769)\", \"Tests 12687 passed | 22 skipped (12709)\", exit 0.\n- `pnpm test`, root lane: \"Test Files 468 passed | 1 skipped (469)\", \"Tests 10734 passed | 52 skipped (10786)\", exit 0.\n- `pnpm --filter @moe/daemon typecheck`: `tsc --project tsconfig.json` ran and exited 0 with no errors. The foreign TS2554 the worker saw is gone, because f4812f16 landed as 779f540b.\n\nPROBE: the race-once variant of comment-0bbcbc54, which I ran myself.\n- first write: {\"ok\":true,\"replayed\":false,\"outcome\":\"REFUSED\"}\n- retry: {\"ok\":true,\"replayed\":true,\"outcome\":\"REFUSED\"}\n- PUSHED later: {\"ok\":true,\"replayed\":true,\"outcome\":\"REFUSED\"}\n- read: ok; slotKey abe9552f05aa4d0e…, canonical 68c6a86ac6cf2ea6….\n\nDRILLS, all in memory:\n- Setup: a %TEMP%/moe-task-978669b6-qa-09357cdf config with an enforce:\"pre\" transform. Every anchor throws when absent, and QA_DRILL_APPLIED printed exactly once per mutated file. The CLEAN control ran 81/81 green.\n- PRE, serving the pre-fix blobs (3a3547a0) of publish-ledger.ts and publication-effect-ledger.ts:\n  - P1 red: \"expected 'EXPECTED_VERSION_CONFLICT' to be false\";\n  - P2 red; E1 red (PUBLISH_INTENT_CONFLICT); E2 red (PUBLISH_INTENT_INVALID); E3 red (PUBLISH_TRANSMISSION_CONFLICT);\n  - P3 green, which confirms back-compat.\n- M1, no burned-slot skip: 8 red (F2, F3, F5, P1, P2, E1, E2, E3).\n- M2, single attempt: 5 red (F2, F3, P1, E1, E3).\n- M3, slot 0 not canonical: 7 red (F1, F2, F4, F6, P1, P2, P3).\n- M4, fresh version at an occupied slot: F6 red with \"IdempotencyConflictError: IDEMPOTENCY_CONFLICT\".\n- M5, burned check ignores the kind: F4 red.\n- M6, `<=` FACT_SLOT_LIMIT: F5 red (33 lookups).\n- M7, readPublishReceipt compares against receiptId instead of slot.commandId: P1 and P2 red with \"PUBLISH_RECEIPT_INVALID\".\n- Cleanup: the config is deleted (ls: No such file or directory). The sha256 of decision-fact-slots.ts (9d1cdee6…), publish-ledger.ts (e4f5d4f0…) and publication-effect-ledger.ts (a91f22c9…) is identical before and after.\n\nCENSUS: `git grep` finds no non-test consumer of publishReceiptId, the -PublishRecorded, -intended or -transmitted event ids, or these kinds outside the two ledgers. readPublishLedger scans EFFECTS_COMMITTED decisions by kind and principal and never checks key.commandId, so a receipt at slot n reads. The tests/e2e/control-room specs that import readPublishLedger belong to the browser lane; its behaviour is unchanged.",
+      "timestamp": "2026-09-19T08:46:17.459Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-19T01:49:08.633Z",
-  "updatedAt": "2026-09-19T08:31:32.597Z",
+  "updatedAt": "2026-09-19T08:46:25.401Z",
   "metrics": {
     "firstClaimAt": "2026-09-19T07:59:54.622Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-19T08:46:25.401Z",
+    "wallClockMs": 2790779
   },
   "contextFetchedBy": [
     "architect-0f009933",
-    "worker-69773bc1"
+    "worker-69773bc1",
+    "qa-09357cdf"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -190,7 +199,54 @@
     "apps/daemon/src/repository/publish-ledger.test.ts",
     "apps/daemon/src/repository/publication-effect-ledger.ts",
     "apps/daemon/src/repository/publication-effect-ledger.test.ts",
-    "apps/daemon/CLAUDE.md"
+    "apps/daemon/CLAUDE.md",
+    ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json",
+    ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json"
   ],
-  "completionSummary": "FIXED: a lost version race no longer burns the key for a publish receipt, intent or transmission.\n- NEW apps/daemon/src/repository/decision-fact-slots.ts (56 lines) with its .js bridge and .test.ts (F1-F6). It is a slot chain: slot 0 is the canonical key, so old facts read unchanged. A burned slot (same kind, NO_BUSINESS_EFFECT) sends the write and every read to sha256([\"fact-slot\", id, n]). Limits: FACT_SLOT_LIMIT 32 lookups, FACT_WRITE_ATTEMPTS 3.\n- publish-ledger.ts (249 lines) and publication-effect-ledger.ts (201 lines) route readPublishReceipt/recordPublishReceipt and the intent and transmission readers and writers through it. Result codes are unchanged. The observation writer is untouched.\n- Keys the old code already poisoned HEAL: they read as absent, and the next write commits at slot 1 (P2, E2).\n- One CLAUDE.md Gotchas bullet.\nDEVIATION, needed by the plan's own F6 arm: expectedVersion is part of the store's request sha (store-digests.ts:140). An occupied slot is therefore re-sent at record.expectedVersion: a true retry replays, and different bytes still throw IdempotencyConflictError.\nEVIDENCE:\n- Verification: 6 files, 81/81 tests passed.\n- `pnpm --filter @moe/daemon test`: 769 files passed, 12682 tests passed, 22 skipped.\n- `pnpm test`: 468 passed, 1 skipped.\n- The probe heals (comment-0bbcbc54).\n- Drills M1, M2 and M3 each turned every arm the plan names red, in memory only.\n- Adversarial review: comment-1a8cf5e8.\nFOREIGN RED: `pnpm -r typecheck` answers 18 passes and 1 failure. The failure is apps/daemon/src/http/affordance-read-planning.test.ts(1566) TS2554, WORKING task-f4812f16's in-flight edit. The daemon was clean with this diff before that edit, and a control that excludes that file gives exit 0.\nSHARED PATH: this commit also carries task-4f16c331's stranded CLAUDE.md @150/@155 hunk. Its completion commit 134d78ce withheld the file as Moe-Contested by this row; see comment-c626c9c0. This row's own bytes are +5 lines at :230-234."
+  "completionSummary": "FIXED: a lost version race no longer burns the key for a publish receipt, intent or transmission.\n- NEW apps/daemon/src/repository/decision-fact-slots.ts (56 lines) with its .js bridge and .test.ts (F1-F6). It is a slot chain: slot 0 is the canonical key, so old facts read unchanged. A burned slot (same kind, NO_BUSINESS_EFFECT) sends the write and every read to sha256([\"fact-slot\", id, n]). Limits: FACT_SLOT_LIMIT 32 lookups, FACT_WRITE_ATTEMPTS 3.\n- publish-ledger.ts (249 lines) and publication-effect-ledger.ts (201 lines) route readPublishReceipt/recordPublishReceipt and the intent and transmission readers and writers through it. Result codes are unchanged. The observation writer is untouched.\n- Keys the old code already poisoned HEAL: they read as absent, and the next write commits at slot 1 (P2, E2).\n- One CLAUDE.md Gotchas bullet.\nDEVIATION, needed by the plan's own F6 arm: expectedVersion is part of the store's request sha (store-digests.ts:140). An occupied slot is therefore re-sent at record.expectedVersion: a true retry replays, and different bytes still throw IdempotencyConflictError.\nEVIDENCE:\n- Verification: 6 files, 81/81 tests passed.\n- `pnpm --filter @moe/daemon test`: 769 files passed, 12682 tests passed, 22 skipped.\n- `pnpm test`: 468 passed, 1 skipped.\n- The probe heals (comment-0bbcbc54).\n- Drills M1, M2 and M3 each turned every arm the plan names red, in memory only.\n- Adversarial review: comment-1a8cf5e8.\nFOREIGN RED: `pnpm -r typecheck` answers 18 passes and 1 failure. The failure is apps/daemon/src/http/affordance-read-planning.test.ts(1566) TS2554, WORKING task-f4812f16's in-flight edit. The daemon was clean with this diff before that edit, and a control that excludes that file gives exit 0.\nSHARED PATH: this commit also carries task-4f16c331's stranded CLAUDE.md @150/@155 hunk. Its completion commit 134d78ce withheld the file as Moe-Contested by this row; see comment-c626c9c0. This row's own bytes are +5 lines at :230-234.",
+  "commits": [
+    {
+      "sha": "e5daf51bf2cb6d45897c4715b1974d9ebb4d718b",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-69773bc1@2026-09-19T08:07:01Z",
+      "paths": [
+        ".moe/tasks/task-4f16c331439f429291b801c89fe6217d.json",
+        ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json",
+        "apps/daemon/CLAUDE.md",
+        "apps/daemon/src/repository/decision-fact-slots.js",
+        "apps/daemon/src/repository/decision-fact-slots.test.ts",
+        "apps/daemon/src/repository/decision-fact-slots.ts",
+        "apps/daemon/src/repository/publication-effect-ledger.test.ts",
+        "apps/daemon/src/repository/publication-effect-ledger.ts",
+        "apps/daemon/src/repository/publish-ledger.test.ts",
+        "apps/daemon/src/repository/publish-ledger.ts"
+      ],
+      "recordedBy": "worker-69773bc1",
+      "recordedAt": "2026-09-19T08:31:45.190Z",
+      "treeId": "da4d4608368583ffeee21a93a2647ce6f6df4195",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/repository/decision-fact-slots.test.ts",
+    "apps/daemon/src/repository/publish-ledger.test.ts",
+    "apps/daemon/src/repository/decision-fact-slots.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
+    "apps/daemon/src/repository/publish-ledger.ts",
+    "apps/daemon/CLAUDE.md",
+    "apps/daemon/src/repository/publication-effect-ledger.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-69773bc1@2026-09-19T08:07:01Z",
+    "at": "2026-09-19T08:31:45.190Z"
+  },
+  "completedAt": "2026-09-19T08:46:25.401Z",
+  "reviewCompletedAt": "2026-09-19T08:46:25.401Z",
+  "reviewSummary": "APPROVED. I reviewed completion commit e5daf51b, an ancestor of HEAD 779f540b. The owned paths are unchanged since then. Full evidence is in comment-685b78fa.\n\nSTORE:\n- NO_BUSINESS_EFFECT is typed as EXPECTED_VERSION_CONFLICT, so it means a lost race.\n- The rejection audit lands on its own aggregate.\n- expectedVersion is part of requestSha256, so re-sending an occupied slot at record.expectedVersion is required (drill M4 proves it).\n\nGATES (all re-run by me):\n- Verification leg: Test Files 6 passed (6), Tests 81 passed (81).\n- `pnpm --filter @moe/daemon test`, run under the lease: 769 passed (769), 12687 tests passed | 22 skipped, exit 0.\n- `pnpm test`: 468 passed | 1 skipped, exit 0.\n- `pnpm --filter @moe/daemon typecheck`: tsc ran, exit 0.\n- wc -l: publish-ledger.ts 249, publication-effect-ledger.ts 201, decision-fact-slots.ts 56. The .js bridge is present.\n\nPROBE (race-once): all four calls ok, and the receipt reads back at slot 1.\n\nDRILLS (in memory, anchors throw when missing, config deleted, source sha256 unchanged):\n- Pre-fix blobs: P1, P2, E1, E2 and E3 go red; P3 stays green.\n- M1 skip removed and M2 single attempt: both red on the arms the plan names.\n- M3 slot 0 not canonical: F1 and P3 go red.\n- M4 fresh version at an occupied slot: F6 goes red with IdempotencyConflictError.\n- M5 kind ignored: F4 goes red.\n- M6 limit+1: F5 goes red.\n- M7 reader keyed on the canonical id: P1 and P2 go red with PUBLISH_RECEIPT_INVALID.\n\nCENSUS: no non-test consumer outside the ledgers reads these keys or event ids. readPublishLedger does not depend on the key.\n\nSHARED PATH: the CLAUDE.md @147 hunk belongs to task-4f16c331 (DONE). 134d78ce withheld it with Moe-Contested. It is accurate against that row's code and was disclosed."
 }
