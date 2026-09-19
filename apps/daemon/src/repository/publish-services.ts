@@ -11,8 +11,8 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { isDurableHumanPrincipal } from "../identity/human-approver.js";
-import { decodePublicationApproval, decodePublicationCandidate, samePublicationApproval } from "./publication-approval-contracts.js";
-import type { PublicationCandidateReader } from "./publication-approval-contracts.js";
+import { decodePublicationApproval, decodePublicationCandidate, samePublicationApproval, type PublicationCandidateReader } from "./publication-approval-contracts.js";
+import { readRemoteDefaultBranch } from "./remote-default-branch.js";
 import { publicationGoalIntegrated } from "./publication-goal-integration.js";
 import { readProjectRemote } from "./publish-ledger.js";
 import {
@@ -92,7 +92,7 @@ export function createPublishRepository(config: PublishRepositoryConfig = {}): C
   if (request.expectedVersion !== versionOf(ledger, aggregateId)) {
     return refuse(request.kind, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
-  const measured = config.readPublicationCandidate?.(remote.remoteUrl);
+  const measured = config.readPublicationCandidate?.(remote.remoteUrl, { goalId, remoteDefaultBranch: readRemoteDefaultBranch(store, request.projectId, remote.remoteUrl) });
   if (measured === undefined) return refuse(request.kind, "PUBLISH_WORKSPACE_UNCONFIGURED", "DAEMON_PREREQUISITE");
   if (!measured.ok) return refuse(request.kind, measured.code, "DAEMON_PREREQUISITE");
   const candidate = decodePublicationCandidate(measured.candidate);

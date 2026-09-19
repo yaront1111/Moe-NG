@@ -58,22 +58,33 @@
     {
       "stepId": "step-4",
       "description": "Pass the target from BOTH production readers, and prove they agree (DoD 2). In apps/daemon/src/http/repository-remote-read.ts:100 (the preview) and apps/daemon/src/repository/publish-services.ts:95 (the command), pass `{ goalId, remoteDefaultBranch: readRemoteDefaultBranch(store, projectId, remoteUrl) }` as the reader's second argument — a local store read, safe on the polled preview path. Then add the agreement arms in apps/daemon/src/repository/publication-approval.test.ts, each asserting by value: (1) with the same recorded default, the preview's approval and the command's fresh read are IDENTICAL, and the command ACCEPTS the preview's approval — no PUBLISH_CANDIDATE_CHANGED; (2) a recorded default that CHANGES between preview and command makes the command refuse with the exact code PUBLISH_CANDIDATE_CHANGED and its layer — the existing TOCTOU guard doing its designed job; (3) THE FORGOTTEN-CALLER ARM: a command reader called WITHOUT the target, against a preview that passed it, is refused PUBLISH_CANDIDATE_CHANGED — this is what catches a production caller that silently drops the target. Also assert the command RECORDS `approval.branch = moe/release/<goalId>` in its decision, since that recorded value is what node-publisher pushes.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/repository-remote-read.ts",
         "apps/daemon/src/repository/publish-services.ts",
         "apps/daemon/src/repository/publication-approval.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/repository-remote-read.ts",
+        "apps/daemon/src/repository/publish-services.ts",
+        "apps/daemon/src/repository/publication-approval.test.ts"
+      ],
+      "note": "RED then GREEN. Prerequisite task-b94b92d7 is DONE (the e2e drives take their approval from the preview), so the wiring no longer reds them.\n\nPRODUCTION (line counts unchanged, so line refs elsewhere stay accurate: publish-services.ts:72/:86/:89/:99-101/:103, cited in tests/e2e and bootstrap-durability.test.ts):\n- publish-services.ts:95 `config.readPublicationCandidate?.(remote.remoteUrl, { goalId, remoteDefaultBranch: readRemoteDefaultBranch(store, request.projectId, remote.remoteUrl) })`\n- http/repository-remote-read.ts:100 `options.readPublicationCandidate?.(remote, { goalId, remoteDefaultBranch: readRemoteDefaultBranch(store, projectId, remote) })`\n- In each file I merged the type import into the value import (inline `type`, used in 51 daemon files) so the new import line adds no line. remote-default-branch.test.ts:109, which bans the port and measurement names in both modules, stays green: it allows `readRemoteDefaultBranch`.\n\nTESTS, publication-approval.test.ts. `world()` takes an optional reader, and every existing arm is unchanged. New describe block: PRODUCTION reader over a real repo on `master`; the preview comes from the production `createRepositoryRemoteReadPort(...).preparePublication`.\n- (1) it.each over 4 defaults. never measured -> moe/release/goal-1; null -> release; `master` (equal) -> release; `main` (different) -> `master`. The preview's approval.branch is asserted by value, the command ACCEPTS it, the decision's resultBytes carry it, and `readPublishLedger` (node-publisher's own read; node-publisher.test.ts:123 pins push receives the recorded candidate) returns it.\n- (2) it.each: the default moves main->master and master->main between preview and command, and the command refuses STALE with no new decision. A fresh preview differs ONLY in branch and is accepted, which pins that the branch was the cause.\n- (3) forgotten caller: the command reader drops the target, and the command refuses STALE with no decision.\n\nCORRECTION (DoD 2 / step 4 text): the command refuses `PUBLISH_APPROVAL_STALE` @ `DAEMON_PREREQUISITE` (publish-services.ts:99-101), NOT PUBLISH_CANDIDATE_CHANGED. That code comes only from the reader, when the repo moves mid-read (publication-candidate.ts:40). The arms assert the production code. No amendment exists on this step (activeAmendmentId unset); the correction was already filed in comment-a2bfa4b6.\n\nRED (production unwired): 6 failed | 11 passed (17). The failures are the 5 release rows plus STALE main->master.\nGREEN: publication-approval + remote-default-branch: `Test Files 2 passed (2)`, `Tests 24 passed (24)`.\n\nIN-MEMORY DRILLS (out-of-tree config %TEMP%/drill-task-04160615-worker-952c612b.config.mjs; each run printed `[drill] Mx transforming`; nothing on disk touched):\n- M1, the command drops the target: 4 red.\n- M2, the preview drops the target: 6 red.\n- M3, the command ignores the recorded default: 2 red.\n- M4, the samePublicationApproval guard removed: 7 red.\n\nPeer dirt (.moe/*, apps/daemon/CLAUDE.md) not touched.",
+      "startedAt": "2026-09-19T00:06:37.358Z",
+      "completedAt": "2026-09-19T00:12:14.984Z"
     },
     {
       "stepId": "step-5",
       "description": "GATES AND ADVERSARIAL REVIEW. (A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/http/repository-remote-read.test.ts src/http/repository-publication-read.test.ts src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts`, count line quoted — read the OUTPUT, not the exit code. The node-publisher files are in the gate because the push inherits the command's recorded branch. (B) `pnpm typecheck`, projects counted — this is what proves the optional parameter left every fake and every pass-through reference valid. (C) The full `pnpm --filter @moe/daemon test`; attribute any red by the path-attributed baseline rule, re-running a failing file ALONE first and capturing stderr. (D) ADVERSARIAL REVIEW, in the completion record: Is there ANY production path that builds a publish candidate without passing the target — re-run the census and name each caller's verdict? Can the preview and the command ever compute different branches from the same recorded inputs? Does a goal published BEFORE this row, whose decision recorded the workspace branch, now push something different on recovery — it must not, because the push uses the recorded decision? Is the branch comparison case-sensitive everywhere? Can an invalid ref ever reach `git push`? Name, in the completion record, the CORRECTION to this row's description: the push does not re-read the candidate, so only two production readers pass the target.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "GATES (fresh, this session, after the final edit; output read, not only exit codes):\n(A) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/http/repository-remote-read.test.ts src/http/repository-publication-read.test.ts src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts` exited 0: `Test Files  60 passed (60)`, `Tests  651 passed | 15 skipped (666)`. That is 644 at step 3 plus the 7 new arms.\n(B) `pnpm typecheck` exited 0: `Scope: 19 of 20 workspace projects`, 19 `typecheck: Done`, zero `error TS`.\n(C) `pnpm --filter @moe/daemon test` ran under the full-suite-gate lease, which was granted after qa-09357cdf's run ended. It exited 0: `Test Files  765 passed (765)`, `Tests  12601 passed | 22 skipped (12623)`. Nothing was red, so no attribution was needed.\nEXTRA: the approval.branch consumers only the browser lane sees (`mem:gotcha-publish-approval-shape-consumers-live-in-browser-e2e`). `pnpm test:e2e:browser deploy-environment deploy-fake-docker deploy-migrations deploy-rollback-incident release-approval` ran on the REAL bytes under the browser-e2e-gate lease and exited 0: `11 passed (3.2m)`, `2 skipped` (live and opt-in arms).\nNOT RUN: the root `pnpm test` lane, because no root-lane path was touched, and control-room, because no command kind was added and no control-room path was touched.\n(D) The adversarial review, the full census with a verdict per caller, and the corrections are in row comment comment-83dd7bae. In short:\n- only 2 production invocations, and both pass the target;\n- one shared reader instance, and the handler is synchronous;\n- decisions recorded before this row push unchanged;\n- branch comparisons are case-sensitive throughout;\n- an invalid ref is refused at the reader and re-validated at record and at push.\nCORRECTION: the push does not re-read the candidate, so only two production readers pass the target.\nNo files changed in this step. Peer dirt under .moe/** was left untouched.",
+      "startedAt": "2026-09-19T00:12:17.855Z",
+      "completedAt": "2026-09-19T00:24:34.026Z"
     }
   ],
-  "planRevision": 7,
-  "status": "BLOCKED",
+  "planRevision": 11,
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -89,11 +100,17 @@
       "author": "worker-952c612b",
       "content": "worker-952c612b, 2026-09-19. Steps 1-3 are DONE; step 4 is BLOCKED on task-b94b92d70a684d82b2ff71a9abae18cc. Three things for the architect and the next worker.\n\n1. WHY STEP 4 CANNOT RUN YET: unnamed shape consumers. Browser e2e drives hand-build `approval.branch` and expect ACCEPTED from a real daemon measuring a real workspace (MOE_NODE_WORKSPACE, daemon-ports.ts:548).\n- Default-run: deploy-environment.spec.ts:100, deploy-fake-docker.spec.ts:109, deploy-migrations.spec.ts:142, lane-rollback-incident.ts:182.\n- Opt-in or live: release-approval.spec.ts:158-167, release-approval-live.spec.ts:282, live-proof-release.ts:~183.\n- No lane has a recorded default (measureRemoteDefaultBranch runs only in node-publisher transmit, after the command). So once step 4 passes the target, the command reads moe/release/<goalId> and refuses them PUBLISH_APPROVAL_STALE.\n- Naming them would take this row to 6+7 = 13 paths, over the cap. Per the shape-consumer rail I stopped instead of taking the extra path.\n- task-b94b92d7 moves the drives onto the daemon's preview approval. That is green before AND after the wiring, so it lands first. This row auto-unblocks when it is DONE.\n- ARCHITECT: please make this row dependsOn task-b94b92d7 (set_task_dependencies is architect-only).\n\n2. DoD 2 AND STEP 4 NAME THE WRONG REFUSAL CODE. Please amend.\n- The command's approval-vs-fresh-read mismatch refuses `PUBLISH_APPROVAL_STALE` @ `DAEMON_PREREQUISITE` (publish-services.ts:99-101, already pinned at publication-approval.test.ts:55).\n- `PUBLISH_CANDIDATE_CHANGED` is emitted only by the reader itself, when the repository moves between its two reads (publication-candidate.ts:40).\n- So arms (2) \"default changes between preview and command\" and (3) \"forgotten caller\" must assert PUBLISH_APPROVAL_STALE @ DAEMON_PREREQUISITE. The arm-(1) \"no PUBLISH_CANDIDATE_CHANGED\" check is really \"command ACCEPTED\".\n- Do NOT rename the command's code to match the DoD: the live drives (release-approval-live.spec.ts:57, live-proof-release.ts:171) document PUBLISH_APPROVAL_STALE.\n\n3. WHAT IS IN THE TREE (steps 2-3). No production caller passes a target yet, so there is zero behaviour change.\n- publication-approval-contracts.ts: `PublicationTarget` and the optional reader param.\n- publication-candidate.ts: `releaseBranch()` and the PUBLISH_RELEASE_BRANCH_INVALID refusal via validPublicationBranch.\n- git-publication-native.test.ts: 5 branch arms and a 19-goal-id sweep checked against real `git check-ref-format --branch`.\n- Scoped gate A at this tree: `Test Files 60 passed (60)`, `Tests 644 passed | 15 skipped (659)`. daemon tsc exit 0.\n- Step 4 as planned still stands: pass `{ goalId, remoteDefaultBranch: readRemoteDefaultBranch(store, projectId, remoteUrl) }` at repository-remote-read.ts:100 and publish-services.ts:95 (request.projectId, remote.remoteUrl).",
       "timestamp": "2026-09-18T21:39:03.253Z"
+    },
+    {
+      "id": "comment-83dd7bae53984d348584d29897e03ca6",
+      "author": "worker-952c612b",
+      "content": "worker-952c612b, step 5: census and adversarial review, measured on the delivered tree (HEAD b399000f plus this row's 3 dirty paths).\n\nCENSUS: `git grep -n \"PublicationCandidateReader\\|readPublicationCandidate\\|createPublicationCandidateReader\" -- . ':!.moe/**'`\n- Declaration: publication-approval-contracts.ts:21 `(remoteUrl, target?: PublicationTarget)`. It is the only reader type in the tree, so no old-signature type is left.\n- Implementer: publication-candidate.ts:23. It reads the target through releaseBranch().\n- Production invocations: exactly two, and both pass the target.\n  - publish-services.ts:95 (the command).\n  - http/repository-remote-read.ts:100 (the preview).\n- Pass-through only, never invoked:\n  - daemon-repository-workflow-wiring.ts:32 builds ONE reader.\n  - daemon-store-foundation-composition.ts:275 hands that same instance to the command, via daemon-command-registry.ts:132 and :289-290, and :566 hands it to the preview.\n- node-publisher: no reader call. `git grep` over the orchestrator is empty. It pushes the decision's RECORDED candidate (readPublishLedger, then push(candidate)); node-publisher.test.ts:123 pins that push receives exactly that candidate.\n- Test fakes are typed against the NEW signature and ignore the optional target by design:\n  - bootstrap-test-fixtures.ts:213-214 returns FIXTURE branch `main`, and its bootstrap arms send that same approval back.\n  - repository-publication-read.test.ts:13.\n  - publication-approval.test.ts: the world() default and :190.\n  - tsc 19/19 proves they are assignable. The full suite, 765 files, proves their arms are still consistent.\n- Real-reader test callers: git-publication-native.test.ts, publication-candidate.test.ts, node-publisher.test.ts:264, and the agreement block in publication-approval.test.ts.\n- apps/control-room live-publication-candidate.ts:17 has the same name but is an unrelated HTTP function.\n\nADVERSARIAL\n1. Can a production path build a candidate without the target? No: the census finds only 2 invocations. Drills M1 (the command drops it) and M2 (the preview drops it) each red the agreement arms.\n2. Can the preview and the command pick different branches from the same inputs? No.\n   - They share the reader instance and the workspace.\n   - They get the same admitted remoteUrl, through admitRemoteUrl or readProjectRemote.\n   - They use the same goalId and the same readRemoteDefaultBranch(store, projectId, remoteUrl).\n   - The handler is synchronous: an execFileSync reader, a sync store read and a sync commit. So within one daemon, no measurement can land between the command's read and its commit.\n   - A measurement that lands between preview and command gives STALE (arm 2), and the operator re-previews.\n3. Goals decided BEFORE this row: node-publisher decodes the stored decision (publish-ledger.ts decodeRequest) and never re-reads. Recovery therefore pushes the recorded workspace branch unchanged. The intent check at node-publisher.ts:194 compares recorded values only.\n4. Case sensitivity: releaseBranch uses `!==` and readRemoteDefaultBranch returns the stored string. No toLowerCase, toUpperCase or localeCompare appears in the 7 files of the chain. The `Master` vs `master` arm answers `Master`.\n5. Can an invalid ref reach `git push`? No.\n   - The reader refuses PUBLISH_RELEASE_BRANCH_INVALID. Its validPublicationBranch rule is swept against real `git check-ref-format --branch` over 19 names.\n   - The command records only decodePublicationCandidate output, which re-validates the branch.\n   - node-publisher decodes again before it pushes.\n   - A reader refusal at the command surfaces as `<code>` @ DAEMON_PREREQUISITE (publish-services.ts:97).\n6. Ceiling, out of scope and owned by task-4ba1e00a (RELEASE_HEAD_IS_BASE): a default re-measured AFTER the command commits does not change an approved push. That is by design: the push is the approval.\n\nCORRECTIONS to the description and DoD\n(a) The push does not re-read the candidate, so only TWO production readers pass the target, not three. node-publisher.ts:33 and :53 compare recorded values.\n(b) DoD 2's code: the command refuses `PUBLISH_APPROVAL_STALE` @ `DAEMON_PREREQUISITE` (publish-services.ts:99-101). `PUBLISH_CANDIDATE_CHANGED` is emitted only by the reader, when the repository moves mid-read. The arms assert the production code.\n(c) DoD 2 says \"through node-publisher\". The arms assert this at node-publisher's own read seam (readPublishLedger), together with the existing pin at node-publisher.test.ts:123.\n\nLINE REFS: both production files keep their line counts, because each type import was merged inline into its value import. So publish-services.ts:72, :86, :89, :99-101 and :103, cited in tests/e2e and bootstrap-durability.test.ts, still point at the right lines.",
+      "timestamp": "2026-09-19T00:24:25.386Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:57:31.970Z",
-  "updatedAt": "2026-09-18T21:39:30.179Z",
+  "updatedAt": "2026-09-19T00:25:37.623Z",
   "dependsOn": [
     "task-baefab32f1264daf8f173efc0c1fe2c0"
   ],
@@ -101,7 +118,7 @@
     "firstClaimAt": "2026-09-18T19:20:25.881Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -109,7 +126,9 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T19:22:19.143Z",
@@ -121,11 +140,64 @@
     "worker-952c612b"
   ],
   "workStartedAt": "2026-09-18T21:28:38.198Z",
-  "blockedReason": "Step 4 would red browser e2e drives the plan never names (shape-consumer rail: stop and report, do not take the extra path).\n- The drives hand-build approval.branch and expect ACCEPTED from a real daemon measuring a real workspace.\n- Default-run in test:e2e:browser, all `branch: \"main\"`: tests/e2e/control-room/deploy-environment.spec.ts:100, deploy-fake-docker.spec.ts:109, deploy-migrations.spec.ts:142, lane-rollback-incident.ts:182.\n- Opt-in/live: release-approval.spec.ts:158-167, release-approval-live.spec.ts:282, live-proof-release.ts:~183.\n- No lane has a recorded default; measureRemoteDefaultBranch runs only in node-publisher transmit, after the command. So once the preview and command pass the target, the command reads moe/release/<goalId> and refuses them PUBLISH_APPROVAL_STALE @ DAEMON_PREREQUISITE (publish-services.ts:99-101).\n- Naming them takes the row to 6+7 = 13 paths, over the 10 cap.\n\nFiled task-b94b92d70a684d82b2ff71a9abae18cc (PLANNING): the drives take their approval from the daemon's /repository/remote/read preview. That fix is green before AND after this row's wiring, so it lands first, and this row auto-unblocks when it is DONE.\n\nSeparately, DoD 2 and step 4 name the wrong code: the command's mismatch refusal is PUBLISH_APPROVAL_STALE @ DAEMON_PREREQUISITE. PUBLISH_CANDIDATE_CHANGED is emitted only by the reader, for a mid-read repository change (publication-candidate.ts:40). Please amend.\n\nSteps 1-3 are done and verified:\n- the reader rule plus PUBLISH_RELEASE_BRANCH_INVALID;\n- scoped gate A: Test Files 60 passed (60), Tests 644 passed | 15 skipped;\n- daemon tsc exit 0.\nDetails are in comment-a2bfa4b6.",
-  "blockedOnTaskIds": [
-    "task-b94b92d70a684d82b2ff71a9abae18cc"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-18T21:39:30.179Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "commits": [
+    {
+      "sha": "5d21c7c45b52b309265404bf87bc061d5dc497e5",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-18T21:28:23Z",
+      "paths": [
+        ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
+        ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+        ".moe/tasks/task-717f4c0b953a4822bf71e225ee55b938.json",
+        ".moe/tasks/task-90cbe66d7e3f4cfea3a4c778bb6bab2b.json",
+        ".moe/tasks/task-b94b92d70a684d82b2ff71a9abae18cc.json",
+        ".moe/tasks/task-baefab32f1264daf8f173efc0c1fe2c0.json",
+        ".moe/tasks/task-eca3780de7bb44f09ebe669a568bcbda.json",
+        "apps/daemon/src/repository/git-publication-native.test.ts",
+        "apps/daemon/src/repository/publication-approval-contracts.ts",
+        "apps/daemon/src/repository/publication-candidate.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-18T21:39:44.453Z",
+      "treeId": "38374bf29a909006c456c0e29fcc2d0c650bde11",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/repository/git-publication-native.test.ts",
+    "apps/daemon/src/repository/publication-approval-contracts.ts",
+    "apps/daemon/src/repository/publication-candidate.ts",
+    "apps/daemon/src/http/repository-remote-read.ts",
+    "apps/daemon/src/repository/publish-services.ts",
+    "apps/daemon/src/repository/publication-approval.test.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/repository/git-publication-native.test.ts",
+    "apps/daemon/src/repository/publication-approval-contracts.ts",
+    "apps/daemon/src/repository/publication-candidate.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-952c612b@2026-09-18T21:28:23Z",
+    "at": "2026-09-18T21:39:44.453Z"
+  },
+  "reviewStartedAt": "2026-09-19T00:25:37.621Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository src/http/repository-remote-read.test.ts src/http/repository-publication-read.test.ts src/orchestrator/node-publisher.test.ts src/orchestrator/node-publisher-approved.test.ts",
+    "exitCode": 0,
+    "outputTail": " Test Files  60 passed (60)\n      Tests  651 passed | 15 skipped (666)\n   Start at  03:24:44\n   Duration  23.30s (transform 90.66s, setup 0ms, import 133.58s, tests 109.68s, environment 4ms)",
+    "reportedAt": "2026-09-19T00:25:37.621Z",
+    "source": "agent-reported"
+  },
+  "completionSummary": "Publish targets `moe/release/<goalId>` when the remote's recorded default is UNKNOWN (null) or EQUALS the workspace branch (case-sensitive); a different known default keeps the workspace branch. The rule is set once in the reader (publication-candidate.ts releaseBranch) and fed by both production readers: the preview (http/repository-remote-read.ts:100) and the command (publish-services.ts:95). Both pass `{ goalId, remoteDefaultBranch: readRemoteDefaultBranch(...) }`. The push replays the command's recorded decision.\n\nDoD\n1. git-publication-native.test.ts: 5 by-value arms against the production reader on a real repo.\n2. publication-approval.test.ts agreement block:\n   - preview = command = recorded request (node-publisher's readPublishLedger) for 4 defaults, and the command accepts;\n   - a default re-measured after the preview is refused, both directions;\n   - a forgotten-caller arm is refused.\n3. An invalid ref is refused with PUBLISH_RELEASE_BRANCH_INVALID by the reader. A 19-name sweep matches real `git check-ref-format --branch`.\n4. Whole-tree census in comment-83dd7bae: 2 production invocations, both passing the target. Every fake is typed against the new optional signature.\n\nCORRECTIONS\n- The command's refusal is PUBLISH_APPROVAL_STALE @ DAEMON_PREREQUISITE (publish-services.ts:99-101), not PUBLISH_CANDIDATE_CHANGED. The arms assert the production code.\n- The push does not re-read the candidate, so there are 2 production readers, not 3.\n\nGATES (fresh)\n- A (scoped): Test Files 60 passed (60), Tests 651 passed | 15 skipped (666).\n- typecheck: 19/19 Done.\n- Full `pnpm --filter @moe/daemon test` under the lease: Test Files 765 passed (765), Tests 12601 passed | 22 skipped.\n- Browser e2e publish drives on the real bytes: 11 passed, 2 skipped.\n- Drills M1-M4, run in memory, all red. The root lane and control-room were not run: no path of theirs was touched.\n\nStep 4 paths: http/repository-remote-read.ts, repository/publish-services.ts, repository/publication-approval"
 }
