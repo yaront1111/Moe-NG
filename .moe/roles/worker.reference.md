@@ -1,4 +1,4 @@
-<!-- moe-generated: sha=4b041787b980 -->
+<!-- moe-generated: sha=b0ef035a319f -->
 
 # Worker — Reference
 
@@ -10,6 +10,7 @@ Deep-dive material trimmed out of `worker.md`. Read this on demand; it is not lo
 |---|---|
 | "This step is trivial, I can skip TDD/explore/etc." | Simple steps fail when skills are skipped. |
 | "I already know what this skill says" | Skills evolve. Read the current version. |
+| "ponytail says YAGNI, so I can skip this step" | No. The plan, the DoD and the rails are the requested tier. A step you believe is pointless is a `complete_step { note }`, a `report_blocked`, or a `propose_rail` — never a silent skip. |
 | "I'll run adversarial-self-review mentally instead of loading it" | No — load it and walk the checklist. |
 | "I can ship without verification-before-completion" | You can't. No complete-claim without fresh evidence. |
 | "receiving-code-review is just common sense, I'll just fix the feedback" | That's exactly the failure the skill prevents. Load it first. |
@@ -20,6 +21,7 @@ Deep-dive material trimmed out of `worker.md`. Read this on demand; it is not lo
 |-------|-------|--------------|
 | First step in unfamiliar code | `explore-before-assume` | Before referencing any symbol you haven't grepped for |
 | Test-touching step | `test-driven-development` | RED-GREEN-REFACTOR with mutation-resistant assertions |
+| Any other implementation step | `ponytail` | Climb the ladder before you write code: reuse what this repo has, then stdlib, then native, then one line. Never trims a plan step, a DoD item, or a rail — those are requested work |
 | Stuck on a bug or repeated step failure | `systematic-debugging` | 4-phase root-cause method, before proposing fixes |
 | Final step before `complete_step` | `adversarial-self-review` | Read your own diff as an attacker — concurrency, null, embarrassment checklist |
 | Before `complete_task` | `regression-check` | Run the broader suite; capture counts in your summary |
@@ -45,6 +47,22 @@ moe.propose_rail {
 
 Don't use this to dodge inconvenient rails — adversarial-self-review and receiving-code-review will catch it, and QA will reject. The proposal lands in `.moe/proposals/`; once approved, retry the step.
 
+## Filing a bug as a card
+
+A bug outside your step's scope is a new card, never an in-line fix — the plan's scope is what QA reviews and what the wrapper attributes. Example (`workerId` is proxy-injected, so `createdBy` resolves to `WORKER`; the row lands in BACKLOG, human-gated, and every `warnings[]` entry is advisory):
+
+```
+moe.create_task {
+  epicId:           "<your task's epicId>",
+  title:            "bug: retry budget ignored when RETRY_MAX is unset",
+  description:      "Repro: unset RETRY_MAX, run `npm test -- retry` — expected 5 attempts, got 1 (src/retry.ts:41). Found from task-<yours> step 2.",
+  definitionOfDone: ["`npm test -- retry` green with RETRY_MAX unset"],
+  dependsOn:        ["<your taskId>"]
+}
+```
+
+Include `dependsOn` only when the fix must land after your task; otherwise omit it. Two outcomes: it does not block you → note the new task id in `complete_step.note` and continue the step; it does → `moe.report_blocked { taskId, reason, blockedOnTaskIds: ["<bug task id>"] }` instead (your seat is freed, and your task auto-unblocks when the bug is DONE). Never both `dependsOn: [<your taskId>]` on the bug and `blockedOnTaskIds` on it from your task — that is a dependency cycle; the daemon drops the id with a `DEPENDENCY_CYCLE` warning.
+
 ## Commits, checkpoints and rescue refs
 
 You never run `git commit` for a task. The wrapper lands your work after the CLI exits — on **every** exit, not only on success:
@@ -55,7 +73,7 @@ You never run `git commit` for a task. The wrapper lands your work after the CLI
 | Any other exit — WORKING, BLOCKED, PLANNING, AWAITING_APPROVAL, status lookup failed | `wip(task-<id>): <title> [status=<S> role=<r> cli-exit=<N>]` checkpoint, pushed per `checkpointPush` | shared branch |
 | `qualityGate` failed, branch peel failed, commit failed, three CAS losses, Ctrl+C | `rescue(task-<id>): <title> [reason=…]` | `refs/moe/rescue/<taskId>/<ts>` — never a branch, never pushed |
 
-What gets staged is decided per path, never `git add -A`: **ASSERTED** (every completed step's `modifiedFiles`, `moe.declare_files`, paths you already landed) is committed no matter what; **PLANNED** (the plan's `affectedFiles`/`newFiles` you did not report) only if it changed since your session's baseline; **TOOL** (files your Edit/Write tool calls touched — claude only) always; **MEASURED** (undeclared, changed) only when no other worker is live. A peer's declared path, a path that was already dirty before your task, and anything under `.moe/` (except your own task record), `.mcp.json`, `.codex/`, `.gemini/`, `.claude/agents/`, `.worktrees/` are skipped with a `[skip] <path> MOE_ATTR_*` line. Undeclared edits with peers active are reported as `MOE_ATTRIBUTION_UNRESOLVED` and never staged — the next session sees them in `get_context.unattributedPaths` with a `moe.declare_files` hint.
+What gets staged is decided per path, never `git add -A`: **ASSERTED** (every completed step's `modifiedFiles`, `moe.declare_files`, paths you already landed) is committed no matter what; **PLANNED** (the plan's `affectedFiles`/`newFiles` you did not report) only if it changed since your session's baseline; **TOOL** (files your Edit/Write tool calls touched — claude only) always; **MEASURED** (undeclared, changed) only when no other worker is live. A peer's declared path, a path that was already dirty before your task, and anything under `.moe/` (except your own task record), `.mcp.json`, `.codex/`, `.gemini/`, `.grok/`, `.claude/agents/`, `.worktrees/` are skipped with a `[skip] <path> MOE_ATTR_*` line. Undeclared edits with peers active are reported as `MOE_ATTRIBUTION_UNRESOLVED` and never staged — the next session sees them in `get_context.unattributedPaths` with a `moe.declare_files` hint.
 
 Practical rules:
 
@@ -87,6 +105,15 @@ Naming convention (keeps a multi-agent fleet's knowledge coherent — one topic,
 Prefer `edit_memory` to append to an existing topic file over creating a near-duplicate. There is no BM25 ranking or auto-injection — this naming discipline is what replaces it, so be consistent.
 
 ## Mention reply examples
+Acknowledge ONCE. If the other side acks back, the thread is over — do not
+confirm a confirmation. A closure that needs restating was not a closure. If you
+have something NEW, say the new thing; if you only have agreement, stay silent
+and get back to your steps. Measured twice (2026-09-11 and 2026-09-12): two
+different pairs of seats each burned 3-7 messages and several minutes of live
+task time on "closed" / "confirmed closed" round-trips. The Loop Guard caps
+agent-to-agent hops per channel, but it cannot tell agreement from progress —
+only you can.
+
 
 - "Step 2 is blocked on the `retry-budget` constant — do you want `5` or the env-var fallback?"
 - "Confirmed I own task-X; starting step 0 now."

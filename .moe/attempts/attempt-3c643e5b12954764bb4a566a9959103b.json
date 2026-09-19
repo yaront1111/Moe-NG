@@ -1,0 +1,11 @@
+{
+  "id": "attempt-3c643e5b12954764bb4a566a9959103b",
+  "taskId": "task-eca3780de7bb44f09ebe669a568bcbda",
+  "workerId": "worker-07e6de2a",
+  "runnerId": "worker-07e6de2a",
+  "generation": 5,
+  "workspace": "D:/projexts/moe-next",
+  "phase": "closed",
+  "startedAt": "2026-09-18T20:30:48.730Z",
+  "lastPhaseAt": "2026-09-18T20:53:02.750Z"
+}
