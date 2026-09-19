@@ -1,9 +1,20 @@
 import type { SqliteEventStore } from "@moe/store";
+import { landedFromTree } from "../http/dependency-integration.js";
 import { readLandingReceipt } from "../repository/landing-ledger.js";
 import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { NODE_BRANCH_PREFIX } from "./node-worktrees.js";
 import type { LandedBranch } from "./node-integration.js";
+
+/**
+ * Whether a COMMITTED landing is the integrator's to merge: one made in a node's own tree, however
+ * the seat spelled its branch (it may `git switch -c wip` there; the merge is by sha, and the
+ * dependency gate and the publication credit already wait on that merge by WHERE the landing was
+ * made), or one on a `moe/` branch as before. Shared with the withdrawal's conflict rule, so a
+ * landing the integrator can conflict on is always one the withdrawal can hand back.
+ */
+export const integratorMerges = (workspace: string, branch: string): boolean =>
+  branch.startsWith(NODE_BRANCH_PREFIX) || landedFromTree(workspace);
 
 /**
  * The branches the integrator may merge: one per node whose work was accepted and whose landing
@@ -25,7 +36,7 @@ export function landedNodeBranches(
         landingReceiptId(projectId, nodeRef, review.accepted.verifierReceiptId));
       if (!receipt.ok || receipt.receipt.outcome !== "COMMITTED" || receipt.receipt.commit === null) continue;
       const { branch, sha } = receipt.receipt.commit;
-      if (!branch.startsWith(NODE_BRANCH_PREFIX)) continue;
+      if (!integratorMerges(receipt.receipt.workspace, branch)) continue;
       landed.push(Object.freeze({ branch, nodeRef, sha }));
     } catch { /* one unreadable node never costs the others their merge */ }
   }

@@ -126,10 +126,21 @@ its own: a caller that injects no dependency provider is refused, never served a
   strict port refuses `VERIFIED_WORKSPACE_PATHS_MISMATCH` after the intent), and a new round mints
   a new verifier receipt and a new landing receipt. A terminal landing receipt is never retried in
   place: the accepted binding pins `headSha`, `treeSha` and `dirtySha256` together.
-- **The lander ADOPTS a seat-authored commit** on a `moe/` branch (`node-lander-adopt.ts`): a merge
-  that resolves a conflict must be a real two-parent commit, which the single-parent plumbing
-  commit cannot make. Adoption at the SAME sha is deliberate: a do-nothing resolution conflicts
-  and is withdrawn again instead of being credited as owing no bytes.
+- **A clean accepted workspace gets one of THREE answers** (`node-lander-adopt.ts`), and only
+  positive evidence earns credit. ADOPT: a seat-authored commit made in a node's own tree (decided by
+  WHERE, the workspace's real path against the project root, never by the branch's spelling: a seat
+  may `git switch -c wip`) that `merge-base --is-ancestor` answers EXACTLY 1 for, with a three-dot
+  diff that ran and names paths; it is recorded COMMITTED with no Git effect, because a merge that
+  resolves a conflict must be a real two-parent commit, which the plumbing commit cannot make.
+  NO_EFFECT, proven: exit EXACTLY 0, or exit 1 with a diff that ran and is empty, or the workspace IS
+  the project's checkout / no project root is configured; only this records `NOTHING_TO_COMMIT`,
+  the code `landedWithNoEffect` credits. UNPROVEN (128, a failed diff, an unborn HEAD, unmerged work
+  on no branch): the lander REPORTS `LANDING_ADOPTION_UNPROVEN` and records nothing, `land` answers
+  RETRY, and the line repeats each pass like `GIT_FAILED`; the withdrawal scan says
+  `WITHDRAWAL_DELIVERY_UNPROVED` once and never finalises the receipt. `integratorMerges`
+  (`node-landed-branches.ts`) offers the integrator, and the withdrawal's conflict rule, every tree
+  landing whatever its branch is called. Adoption at the SAME sha is deliberate: a do-nothing
+  resolution conflicts and is withdrawn again instead of being credited as owing no bytes.
 - **A seat is killed on observed stillness, and only backstopped by the cap.** Claude seats run
   `--output-format stream-json --verbose --include-partial-messages`, so every event counts as
   output; `seat-output-tail.ts` decodes the stream back to the text-mode report, and the console

@@ -15,7 +15,7 @@ import { readReviewLedger } from "../review/review-read-model.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { untrackedImports } from "./landing-imports.js";
 import { runGit } from "./node-integration.js";
-import { adoptedSeatCommit } from "./node-lander-adopt.js";
+import { LANDING_ADOPTION_UNPROVEN, adoptedSeatCommit } from "./node-lander-adopt.js";
 import { checkLandingVerification, unrecordedLandingReport } from "./node-lander-verification.js";
 import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
@@ -37,6 +37,8 @@ import { commitJournaledLanding, landingJournalGate } from "./node-lander-journa
  * A seat in its own tree may have committed the work itself. That commit, verified and not yet on
  * the project's branch, IS the landing: it is recorded COMMITTED as it stands, with no Git effect
  * (node-lander-adopt.ts). Dirt on top of it lands the ordinary way, as a commit whose parent it is.
+ * NOTHING_TO_COMMIT is recorded only on PROOF that the clean workspace owes nothing; when Git
+ * cannot say, LANDING_ADOPTION_UNPROVEN is reported, nothing is recorded, and the next pass asks again.
  *
  * One landing per acceptance: the receipt id is a function of the verifier
  * receipt, so a wrapper restart lands nothing twice, and a structural refusal is
@@ -56,7 +58,7 @@ export interface NodeLanderConfig {
   readonly nodeMission: (nodeRef: string) => NodeMission | null;
   readonly nodes: () => readonly { nodeRef: string }[];
   readonly projectId: string;
-  /** The project's own checkout, whose HEAD decides whether a seat's commit is still unmerged. Absent or null = never adopt. */
+  /** The project's own checkout, whose HEAD decides whether a seat's commit is still unmerged. Absent or null = no node trees: a clean workspace owes nothing. */
   readonly projectRoot?: string | null;
   /** INJECTED in tests; production reads the node's review ledger. */
   readonly readAccepted?: (nodeRef: string) => { readonly verifierReceiptId: string } | null;
@@ -262,10 +264,13 @@ export function createNodeLander(config: NodeLanderConfig) {
       // it must to answer a merge conflict. UnAI 2026-09-19: that was credited NOTHING_TO_COMMIT and
       // the branch was never merged. The verified HEAD is adopted instead — see node-lander-adopt.ts.
       // No Git effect, so no landing intent; the binding was matched against the tree just above.
-      const adopted = adoptedSeatCommit(runGit, config.projectRoot ?? null, checked.binding, message);
-      if (adopted !== null) {
-        return committedReport(nodeRef, brief.workspace, verifierReceiptId, adopted, ", adopted from the seat's own commit");
+      const adoption = adoptedSeatCommit(runGit, config.projectRoot ?? null, checked.binding, message);
+      if (adoption.kind === "ADOPT") {
+        return committedReport(nodeRef, brief.workspace, verifierReceiptId, adoption.commit, ", adopted from the seat's own commit");
       }
+      // "Git could not say whether work remains" is a MOMENT, never "no work remains": reported, not
+      // recorded, so the next pass asks again. Recorded, it would be credited as owing no bytes.
+      if (adoption.kind === "UNPROVEN") return { detail: adoption.detail, nodeRef, outcome: LANDING_ADOPTION_UNPROVEN };
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
       });

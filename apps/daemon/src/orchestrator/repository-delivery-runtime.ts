@@ -22,6 +22,7 @@ import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { NodeMission } from "./agent-wrapper-config.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
+import { LANDING_ADOPTION_UNPROVEN } from "./node-lander-adopt.js";
 import { landingVerificationClass } from "./node-lander-verification.js";
 import { createNodeIntegration } from "./node-integration.js";
 import { createDeliveryWithdrawal, ownsDirtIn } from "./node-delivery-withdrawal.js";
@@ -216,11 +217,12 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       // Only what provably had no effect is retried: the strict port's index lock, a bare observe
       // GIT_FAILED — a read-only `status`/`hash-object` that failed before this attempt journaled
       // any intent, which the lander reports without recording exactly so a later pass can retry
-      // it — and a verification refusal the lander's table calls TRANSIENT, likewise decided before
-      // any intent. Each keeps the ACCEPTED work and its reservation for the next pass. Anything
+      // it — a verification refusal the lander's table calls TRANSIENT, likewise decided before
+      // any intent, and an adoption probe Git did not answer (read-only, no intent, no receipt).
+      // Each keeps the ACCEPTED work and its reservation for the next pass. Anything
       // else blocks: an unknown or post-effect outcome is never retried by default.
       return reports.some((report) => report.outcome === "GIT_INDEX_LOCKED"
-        || report.outcome === "GIT_FAILED"
+        || report.outcome === "GIT_FAILED" || report.outcome === LANDING_ADOPTION_UNPROVEN
         || landingVerificationClass(report.outcome) === "TRANSIENT") ? "RETRY" : undefined;
     },
   });

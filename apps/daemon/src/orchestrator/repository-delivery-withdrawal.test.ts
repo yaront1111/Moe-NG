@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { readLandingReceipt, readLatestLandingBaseline } from "../repository/landing-ledger.js";
@@ -16,6 +16,7 @@ import { calibration, envelope, packageItems, policyInput, send, submitPayload }
 import { NODE_VERIFIER_PRINCIPAL_ID } from "../review/verifier-receipt-ledger.js";
 import { NodeBriefUnreadableError } from "./agent-spawn-contract.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
+import * as nodeIntegration from "./node-integration.js";
 import { ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
 import { createRepositoryDeliveryRuntime, readRepositoryDeliveryFacts } from "./repository-delivery-runtime.js";
 
@@ -335,4 +336,38 @@ it("staffs the seat without its head start when the node's brief cannot be read 
     "[lander] c: BASELINE_RECORDED (0 dirty path(s) before the seat)"]);
   expect(f.missions.get("c")).toBe("implement");
   expect(createRepositoryExecutionPort().inspect(f.trees.get("c")!.path)).toMatchObject({ ok: true, reservation: { nodeRef: "c", phase: "EXECUTING" } });
+}, 600_000);
+
+// "Git did not say whether the seat's commit is merged" (a timeout reads as 128) was recorded
+// NOTHING_TO_COMMIT, and so was ANY commit on a branch not spelled moe/: goal closure, the dependency
+// gate and publication then credited a node whose commit sat in its tree, merged by nobody.
+it("reports an adoption Git could not prove without recording it, keeps the landing, then adopts the seat's renamed branch and merges it", async (context) => {
+  const real = nodeIntegration.runGit;
+  let deaf = true;
+  const spy = vi.spyOn(nodeIntegration, "runGit").mockImplementation((cwd, args) =>
+    deaf && args[0] === "merge-base" ? { code: 128, stdout: "" } : real(cwd, args));
+  cleanup.push(() => spy.mockRestore());
+  const f = await fixture();
+  context.onTestFailed(() => { console.error(f.logs.join("\n")); });
+  const tree = f.trees.get("a")!.path;
+  await f.seat("a", (root) => {
+    git(root, "switch", "--quiet", "-c", "wip");
+    writeFileSync(join(root, "a.txt"), "a\n");
+    git(root, "add", "--", "a.txt"); git(root, "commit", "--quiet", "-m", "seat: a");
+  });
+  const sha = git(tree, "rev-parse", "HEAD");
+
+  for (const pass of [1, 2]) {
+    await f.runtime.advance();
+    // Said on every pass, as GIT_FAILED and BASELINE_WORKSPACE_DIRTY are: nothing is recorded to dedupe against.
+    expect(linesOf(f, "a").at(-1), `pass ${String(pass)}`).toBe(`[lander] a: LANDING_ADOPTION_UNPROVEN (merge-base --is-ancestor ${sha} HEAD exited 128, which proves neither answer)`);
+    expect(f.facts("a")).toBe("ACCEPTED");
+    expect(createRepositoryExecutionPort().inspect(tree)).toMatchObject({ ok: true, reservation: { nodeRef: "a", phase: "AWAITING_LANDING" } });
+  }
+  deaf = false;
+  await f.runtime.advance();
+
+  expect(f.landedCommit("a")).toMatchObject({ branch: "wip", files: ["a.txt"], sha });
+  expect(linesOf(f, "a").at(-1)).toContain("[integration] a: MERGED");
+  expect(f.merged(sha)).toBe(true);
 }, 600_000);

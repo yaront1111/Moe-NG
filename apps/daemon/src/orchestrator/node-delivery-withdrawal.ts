@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { REVIEW_ROUND_ABSOLUTE_CEILING } from "@moe/review";
 import type { SqliteEventStore } from "@moe/store";
@@ -13,10 +13,10 @@ import { readReviewLedgers } from "../review/review-read-model.js";
 import type { ReviewLedger } from "../review/review-read-model.js";
 import { runGit } from "./node-integration.js";
 import type { IntegrationGit, LandedBranch } from "./node-integration.js";
-import { adoptedSeatCommit } from "./node-lander-adopt.js";
+import { integratorMerges } from "./node-landed-branches.js";
+import { adoptedSeatCommit, realPathOf } from "./node-lander-adopt.js";
 import { recordNodeVerifierFailure } from "./node-verifier-failure-record.js";
 import type { NodeVerifierConfig } from "./node-verifier.js";
-import { NODE_BRANCH_PREFIX } from "./node-worktrees.js";
 import { ownNodeTree } from "./wrapper-node-trees.js";
 
 /**
@@ -34,8 +34,9 @@ import { ownNodeTree } from "./wrapper-node-trees.js";
  * integrator's candidates so the halt lasts one pass, and its next seat reads the finding through
  * the ordinary verifier diagnostic. It costs the node one unsuccessful round, like any failure.
  *
- * Rule INTEGRATION_CONFLICT: the landing COMMITTED on the node's own `moe/` branch, the integrator
- * recorded a conflict with paths at that exact commit, and the project's HEAD still lacks it.
+ * Rule INTEGRATION_CONFLICT: the landing COMMITTED where the integrator merges from (`integratorMerges`:
+ * the node's own tree, or a `moe/` branch), the integrator recorded a conflict with paths at that
+ * exact commit, and the project's HEAD still lacks it.
  *
  * Rule LANDING_REFUSED: the landing was refused with a code in RECOVERABLE_LANDING_REFUSALS before
  * any landing intent was journaled. The same day a tracked `.moe-next/start.ps1` was edited while
@@ -48,8 +49,9 @@ import { ownNodeTree } from "./wrapper-node-trees.js";
  * as "this node owed no bytes", while the node's own tree still holds work the project lacks. A
  * restart without MOE_NODE_TREES had moved a node's mission back to the shared checkout: the
  * lander looked there, found nothing, and 34 changed files stayed in .moe-next/trees/<node>. A
- * genuine zero-byte delivery (no tree, or a clean tree the project already contains) keeps its
- * credit and is never withdrawn.
+ * genuine zero-byte delivery (no tree, or a clean tree the project PROVABLY already contains) keeps
+ * its credit and is never withdrawn. A tree Git could not answer for is neither: only the lander's
+ * NO_EFFECT answer finalises a receipt, and UNPROVEN is said once and asked again on the next pass.
  *
  * The two refused rules ship with two readers the staffing path asks (below). Without the pin the
  * node is re-staffed in an empty tree of its own while its work sits where the landing was
@@ -93,7 +95,6 @@ type WithdrawalRule = "INTEGRATION_CONFLICT" | "LANDING_REFUSED" | "DELIVERED_NO
 const refusedBeforeIntent = (receipt: LandingReceiptV1 | undefined, intents: ReadonlySet<string> | null): string | null =>
   receipt === undefined || receipt.outcome !== "REFUSED" || receipt.refusal === null || intents === null
     || intents.has(landingIntentKey(receipt.subjectRef, receipt.verifierReceiptId)) ? null : receipt.refusal.code;
-const real = (path: string): string => { try { return realpathSync.native(path); } catch { return resolve(path); } };
 
 /**
  * THE PIN: where a node whose landing was recoverably refused is staffed again, or null. Whatever
@@ -132,8 +133,8 @@ export function ownsDirtIn(store: SqliteEventStore, projectId: string, nodeRef: 
     const receipt = reviews.landings.get(nodeRef);
     const code = refusedBeforeIntent(receipt, reviews.landingIntents);
     if (ledger === undefined || ledger.unreadable || ledger.accepted !== undefined || receipt === undefined || code === null) return false;
-    const at = real(root);
-    if (RECOVERABLE_LANDING_REFUSALS.includes(code) && at === real(receipt.workspace)) return true;
+    const at = realPathOf(root);
+    if (RECOVERABLE_LANDING_REFUSALS.includes(code) && at === realPathOf(receipt.workspace)) return true;
     // A node's tree is <project>/.moe-next/trees/<name>: three levels under the project it belongs to.
     return ownNodeTree(resolve(at, "..", "..", ".."), nodeRef) === at;
   } catch { return false; }
@@ -284,26 +285,31 @@ export function createDeliveryWithdrawal(config: DeliveryWithdrawalConfig) {
     }, `${conflict.branch} ${conflict.sha.slice(0, 10)} conflicts with the project branch in ${String(conflict.paths.length)} path(s)`);
   };
 
-  /** What the node's own tree holds that the project lacks, in words; null = it owed no bytes. */
-  const undelivered = (workspace: string, tree: string, looked: string): string | null => {
+  /**
+   * What the node's own tree holds that the project lacks, in words. `found: null` is PROOF that it
+   * owes no bytes (the lander's own NO_EFFECT); `unproven` is Git not saying, which is neither.
+   */
+  const undelivered = (workspace: string, tree: string, looked: string): { readonly found: string | null } | { readonly unproven: string } => {
     const asked = (args: readonly string[]): string => {
       const answer = git(tree, args);
       if (answer.code !== 0) throw new Error(`the node's own tree could not be read (git ${args[0] ?? ""})`);
       return answer.stdout;
     };
     // Dirt where the landing itself looked was there at the baseline: it is not this delivery's.
-    if (real(tree) !== real(looked)) {
+    if (realPathOf(tree) !== realPathOf(looked)) {
       // The lander's own observation (git-landing-port.ts): every dirty path but Moe's runtime files.
       const dirty = asked(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]).split("\0")
         .filter((entry) => entry.length > 3 && !isMoeMetadata(entry.slice(3))).length;
-      if (dirty > 0) return `${String(dirty)} uncommitted path(s)`;
+      if (dirty > 0) return { found: `${String(dirty)} uncommitted path(s)` };
     }
-    // The lander's own adoption test: seat commits on the node's branch that the project lacks.
+    // The lander's own adoption test: seat commits in the node's tree that the project lacks.
     const headSha = asked(["rev-parse", "HEAD"]).trim();
     const branch = git(tree, ["symbolic-ref", "-q", "HEAD"]);
     const branchRef = branch.code === 0 ? branch.stdout.trim() : "";
-    return adoptedSeatCommit(git, workspace, { branchRef, headSha }, "") === null ? null
-      : `commits on ${cut(branchRef, 200)} at ${headSha} that the project's branch does not contain`;
+    const answer = adoptedSeatCommit(git, workspace, { branchRef, headSha, root: tree }, "");
+    if (answer.kind === "UNPROVEN") return { unproven: answer.detail };
+    return { found: answer.kind === "NO_EFFECT" ? null
+      : `commits on ${cut(branchRef, 200)} at ${headSha} that the project's branch does not contain` };
   };
 
   const withdrawRefused = (workspace: string, ledger: ReviewLedger, receipt: LandingReceiptV1, intents: ReadonlySet<string> | null): void => {
@@ -317,7 +323,11 @@ export function createDeliveryWithdrawal(config: DeliveryWithdrawalConfig) {
     }
     if (refusal.code !== LANDING_NOTHING_TO_COMMIT || owedNothing.has(receipt.receiptId)) return;
     const tree = ownNodeTree(workspace, nodeRef);
-    const found = tree === null ? null : undelivered(workspace, tree, receipt.workspace);
+    const held = tree === null ? { found: null } : undelivered(workspace, tree, receipt.workspace);
+    // Only PROOF finalises a receipt. "Git could not say" is said once and asked again next pass:
+    // finalised, a tree whose commit was never merged would keep its no-effect credit for good.
+    if ("unproven" in held) return waiting(nodeRef, "DELIVERED_NOTHING", "WITHDRAWAL_DELIVERY_UNPROVED", held.unproven);
+    const { found } = held;
     if (tree === null || found === null) { owedNothing.add(receipt.receiptId); return; }
     if (intents === null) return waiting(nodeRef, "DELIVERED_NOTHING", "LANDING_INTENTS_UNREADABLE", "a landing intent could not be read, so nothing proves this landing had no Git effect");
     withdraw("DELIVERED_NOTHING", ledger, receipt, () => deliveredNothingOutput(found, receipt.workspace, tree),
@@ -344,7 +354,7 @@ export function createDeliveryWithdrawal(config: DeliveryWithdrawalConfig) {
         if (receipt.outcome === "REFUSED") {
           each(nodeRef, RECOVERABLE_LANDING_REFUSALS.includes(receipt.refusal?.code ?? "") ? "LANDING_REFUSED" : "DELIVERED_NOTHING",
             () => withdrawRefused(workspace, ledger, receipt, reviews.landingIntents));
-        } else if (receipt.commit !== null && receipt.commit.branch.startsWith(NODE_BRANCH_PREFIX)) {
+        } else if (receipt.commit !== null && integratorMerges(receipt.workspace, receipt.commit.branch)) {
           landed.push({ branch: receipt.commit.branch, nodeRef, sha: receipt.commit.sha });
         }
       }

@@ -341,31 +341,30 @@ describe("createNodeLander", () => {
   });
 
   // Production wires `projectRoot` into EVERY lander, the single-tree ones included. Adoption
-  // (node-lander-adopt.test.ts, real Git) must leave a genuine no-op alone: a binding on the
-  // project's own branch is never adopted, and a node branch is not adopted on the word of a
-  // checkout Git cannot even run in — a spawn failure reads as exit 1, the same number as "not an
-  // ancestor", so the diff that follows is what keeps it from being credited.
+  // (node-lander-adopt.test.ts, real Git) must leave a genuine no-op alone: a workspace that IS the
+  // project's checkout is never adopted and asks Git nothing. A workspace that is NOT, beside a
+  // project checkout Git cannot even run in (exit 128), proves nothing: this arm used to PIN that as
+  // NOTHING_TO_COMMIT, which is credited. It is reported, nothing is recorded, the next pass retries.
   it.each([
-    ["the project's own branch", BINDING],
-    ["a node branch, but a project checkout that is not there", { ...BINDING, branchRef: "refs/heads/moe/x" }],
-  ])("keeps NOTHING_TO_COMMIT with a project root wired: %s", async (_name, binding) => {
+    ["the project's own checkout", WORKSPACE, "REFUSED"],
+    ["a workspace beside a project checkout that is not there", "D:/ws/moe-no-such-project-checkout", "LANDING_ADOPTION_UNPROVEN"],
+  ])("records NOTHING_TO_COMMIT with a project root wired only on proof: %s", async (_name, projectRoot, outcome) => {
     const git = fakeGit(observation([]));
     const store = openStore();
     const made = createNodeLander({
-      readVerifiedBinding: () => binding, projectRoot: "D:/ws/moe-no-such-project-checkout",
-      verifiedWorkspace: { capture: async () => ({ binding, ok: true as const }), commit: git.commit.bind(git) },
+      readVerifiedBinding: () => BINDING, projectRoot,
+      verifiedWorkspace: { capture: async () => ({ binding: BINDING, ok: true as const }), commit: git.commit.bind(git) },
       clock: () => "2026-09-03T12:00:00.000Z", git, nodeMission: () => brief,
       nodes: () => [{ nodeRef: NODE }], projectId: PROJECT_ID,
       readAccepted: () => ({ verifierReceiptId: VERIFIER_RECEIPT }), store,
     });
     await made.baseline(NODE);
-    expect(await made.landOnce()).toEqual([{
-      detail: "NOTHING_TO_COMMIT: no path in the workspace differs from the staffing baseline",
-      nodeRef: NODE, outcome: "REFUSED",
-    }]);
+    expect(await made.landOnce()).toEqual([{ nodeRef: NODE, outcome, detail: outcome === "REFUSED"
+      ? "NOTHING_TO_COMMIT: no path in the workspace differs from the staffing baseline"
+      : `merge-base --is-ancestor ${BINDING.headSha ?? ""} HEAD exited 128, which proves neither answer` }]);
     const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
-    expect(receipt.ok && receipt.receipt.refusal?.code).toBe(LANDING_NOTHING_TO_COMMIT);
-    expect(receipt.ok && receipt.receipt.commit).toBeNull();
+    expect(receipt.ok ? receipt.receipt.refusal?.code : receipt.code).toBe(outcome === "REFUSED" ? LANDING_NOTHING_TO_COMMIT : "LANDING_RECEIPT_NOT_FOUND");
+    expect(receipt.ok && receipt.receipt.commit).toBe(outcome === "REFUSED" ? null : false);
   });
 
   // THE SUCCEEDING HALF of the zero-delivered path. The arm above states the ANSWER; this one states

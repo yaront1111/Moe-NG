@@ -72,11 +72,10 @@ function accept(w: World, nodeRef: string): string {
 }
 
 /** Accepted, and landed on the node's own branch. */
-function acceptedAndLanded(w: World, nodeRef = NODE, branch = BRANCH, sha = SHA): string {
+function acceptedAndLanded(w: World, nodeRef = NODE, branch = BRANCH, sha = SHA, workspace = "/project/.moe-next/trees/a"): string {
   const receiptId = accept(w, nodeRef);
   expect(recordLandingReceipt(w.store, { commit: { branch, files: ["product.ts"], message: "Land product", parentSha: "b".repeat(40), sha },
-    decidedAt: NOW, projectId: PROJECT_ID, refusal: null, subjectRef: nodeRef, verifierReceiptId: receiptId,
-    workspace: "/project/.moe-next/trees/a" }).ok).toBe(true);
+    decidedAt: NOW, projectId: PROJECT_ID, refusal: null, subjectRef: nodeRef, verifierReceiptId: receiptId, workspace }).ok).toBe(true);
   return receiptId;
 }
 
@@ -218,16 +217,19 @@ describe("withdrawing an acceptance whose branch could not be merged", () => {
     expect(w.logs).toEqual([expect.stringMatching(/^\[withdrawal\] node-run-1: WITHDRAWAL_ANCESTRY_UNPROVED \(merge-base --is-ancestor exited 128, which proves neither answer; INTEGRATION_CONFLICT is not withdrawn yet/u)]);
   });
 
-  it("does not fire for a node that landed on the project's own branch, or without a project checkout", () => {
-    const onProject = world(); const first = acceptedAndLanded(onProject, NODE, "master");
+  it("does not fire for a node that landed in the project's own checkout, or without a project checkout; a tree landing fires whatever its branch is called", () => {
+    const onProject = world(); const first = acceptedAndLanded(onProject, NODE, "master", SHA, "/project");
     conflicted(onProject, ["src/shared.ts"], NODE, "master");
     const none = world({ projectWorkspace: null }); const second = acceptedAndLanded(none);
     conflicted(none, ["src/shared.ts"]);
+    // WHERE, not spelling (node-landed-branches.ts): a seat that ran `git switch -c wip` in its tree is merged, so it can conflict.
+    const renamed = world(); acceptedAndLanded(renamed, NODE, "wip"); conflicted(renamed, ["src/shared.ts"], NODE, "wip");
     const writes = [onProject.writes(), none.writes()];
 
-    onProject.withdrawal.scanOnce(); none.withdrawal.scanOnce();
+    onProject.withdrawal.scanOnce(); none.withdrawal.scanOnce(); renamed.withdrawal.scanOnce();
 
     untouched(onProject, first, writes[0]!); untouched(none, second, writes[1]!);
+    expect(renamed.ledger().accepted).toBeUndefined();
   });
 
   it("does not fire over an unreadable ledger", () => {
@@ -491,6 +493,24 @@ describe("withdrawing an acceptance credited with nothing while the node's own t
 
     untouched(w, receiptId, writes);
     expect(w.logs).toEqual([expect.stringMatching(/^\[withdrawal\] node-run-1: WITHDRAWAL_FAILED \(the node's own tree could not be read \(git status\); DELIVERED_NOTHING is not withdrawn yet/u)]);
+  });
+
+  // "Git did not say" was read as "owes nothing" and FINALISED: the tree's unmerged commit kept its no-effect credit for good.
+  it("never finalises a tree Git could not answer for: says so once, asks again, and withdraws once Git answers", () => {
+    const { project, tree } = projectWithTree();
+    let ancestry = 128;
+    const w = world({ git: (cwd, args) => args[0] === "merge-base" ? { code: ancestry, stdout: "" } : treeGit("", false)(cwd, args), projectWorkspace: project });
+    const receiptId = acceptedAndRefused(w, "NOTHING_TO_COMMIT", tree);
+    const writes = w.writes();
+
+    w.withdrawal.scanOnce(); w.withdrawal.scanOnce();
+
+    untouched(w, receiptId, writes);
+    expect(w.logs).toEqual([`[withdrawal] node-run-1: WITHDRAWAL_DELIVERY_UNPROVED (merge-base --is-ancestor ${SHA} HEAD exited 128, which proves neither answer; DELIVERED_NOTHING is not withdrawn yet and is tried again on the next pass)`]);
+    ancestry = 1;
+    w.withdrawal.scanOnce();
+    expect(w.ledger().accepted).toBeUndefined();
+    expect(findingOf(w)).toContain(`which holds commits on ${TREE_BRANCH} at ${SHA} that the project's branch does not contain`);
   });
 });
 
