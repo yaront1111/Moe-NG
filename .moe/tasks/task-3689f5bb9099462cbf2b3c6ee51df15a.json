@@ -13,12 +13,12 @@
   "taskRails": [],
   "implementationPlan": [],
   "planRevision": 0,
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "DELIVERED — archived on the owner's instruction 2026-09-18. DoD 1/2/3/5 shipped in d5f0ef36 (ancestor of origin/main), mapped by architect-73d103f8 and recorded in comment-0e4ed5fd: verifier-database.ts:167 + deliveredVariables() :199-206; provisionTls() :188-193 with TLS_CERTIFICATE_MINT_FAILED / TLS_ENABLE_FAILED / TLS_CERTIFICATE_INVALID and the CA injected at :203; resolveVerifierDatabaseProvisioning defaults; DOCKER_UNAVAILABLE :161 and MIGRATION_FAILED :228. The one thing that made it INERT on the live stack is also fixed: MOE_VERIFIER_DB_CA_VAR/IMAGE/TLS/URL_VARS were missing from PROJECT_STACK_ENVIRONMENT_KEYS, so UnAI's start.ps1 set all four and the wrapper still provisioned plain postgres + DATABASE_URL; a peer landed that roster fix as 5b981dc7 on main, with the measurement in its own comment. Only DoD 4 (a live DB-backed node reaching accepted) lacks evidence, and it needs a live run rather than code: it will be evidenced or refuted by the next DB-backed UnAI node after the re-pack. If that run fails at the verifier DB, file a fresh row against the measured failure rather than reopening this one.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -33,5 +33,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-17T21:33:32.308Z",
-  "updatedAt": "2026-09-18T06:24:53.726Z"
+  "updatedAt": "2026-09-18T12:00:19.079Z"
 }
