@@ -1,9 +1,11 @@
+import { sep } from "node:path";
+
 import type { SqliteEventStore } from "@moe/store";
 
-import { NODE_BRANCH_PREFIX } from "../orchestrator/node-worktrees.js";
+import { NODE_TREES_DIRECTORY } from "../orchestrator/node-worktrees.js";
 import { readLandingReceipt } from "../repository/landing-ledger.js";
 import { landedWithNoEffect, landingReceiptId } from "../repository/landing-receipt-contracts.js";
-import { readRepositoryIntegration } from "../repository/repository-integration-read.js";
+import { nodeCommitMerged } from "../repository/repository-integration-read.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 
 /**
@@ -16,16 +18,26 @@ import { readReviewLedgers } from "../review/review-read-model.js";
  * real branch at integration.
  *
  * Satisfied, exactly one of:
- *  (a) COMMITTED on a branch that is not a `moe/` node branch — the single-tree layout, where the
- *      landing IS the project branch;
- *  (b) COMMITTED on a `moe/` branch AND the integrator recorded that exact sha MERGED;
+ *  (a) COMMITTED from the project's own checkout — the single-tree layout, where the landing IS
+ *      the project branch. Decided by WHERE the landing was made (the receipt's workspace), never
+ *      by the branch's spelling: moe-next's own project branch is `moe/work-<date>`, so a prefix
+ *      test would hold every dependent there forever, and a seat may `git switch -c` inside its
+ *      tree, which would pass a prefix test with the work nowhere the integrator merges.
+ *  (b) COMMITTED from a tree under `.moe-next/trees` AND the integrator recorded that exact sha
+ *      MERGED, named or not (`nodeCommitMerged`);
  *  (c) a genuine zero-byte delivery: REFUSED NOTHING_TO_COMMIT with no landing intent journaled
  *      for that acceptance (`landedWithNoEffect`, the same rule goal closure and publication use).
- * Everything else — accepted with no receipt yet, WAITING or CONFLICTED on a `moe/` branch, any
- * other refusal, an unreadable ledger or receipt — is NOT satisfied. Fail closed: an error reads
- * as "not yet", never as "done". Pure store reads, safe on the poll path; the caller memoises
- * per surface read, because the integration read is a walk of the whole integration aggregate.
+ * Everything else — accepted with no receipt yet, WAITING or CONFLICTED from a tree, any other
+ * refusal, an unreadable ledger or receipt — is NOT satisfied. Fail closed: an error reads as
+ * "not yet", never as "done". Pure store reads, safe on the poll path; the caller memoises per
+ * surface read, because the integration read is a walk of the whole integration aggregate.
  */
+/** Mirrors node-worktrees.ts: a tree lives under `<project>/.moe-next/trees/`, on either separator. */
+export function landedFromTree(workspace: string): boolean {
+  const marker = `${sep}${NODE_TREES_DIRECTORY}${sep}`;
+  return workspace.replaceAll("/", sep).replaceAll("\\", sep).includes(marker);
+}
+
 export function dependencySatisfied(store: SqliteEventStore, projectId: string, nodeRef: string): boolean {
   try {
     const reviews = readReviewLedgers(store, projectId, new Set([nodeRef]));
@@ -38,12 +50,8 @@ export function dependencySatisfied(store: SqliteEventStore, projectId: string, 
     if (!landing.ok) return false;
     const { receipt } = landing;
     if (receipt.commit === null) return landedWithNoEffect(receipt, reviews.landingIntents);
-    const { branch, sha } = receipt.commit;
-    if (!branch.startsWith(NODE_BRANCH_PREFIX)) return true;
-    // ponytail: a merge the integrator could not NAME is served as nothing by this read, so its
-    // dependents stay blocked; read the raw MERGED record if that ever shows up live.
-    return readRepositoryIntegration(store, projectId, [{ branch, nodeRef, sha }]).branches
-      .some((entry) => entry.sha === sha && entry.state === "MERGED");
+    if (!landedFromTree(receipt.workspace)) return true;
+    return nodeCommitMerged(store, projectId, nodeRef, receipt.commit.sha);
   } catch {
     return false;
   }

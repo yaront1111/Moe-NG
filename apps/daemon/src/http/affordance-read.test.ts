@@ -908,12 +908,15 @@ describe("a node waits on its hard dependencies", () => {
   }
 
   /** The lander's receipt for the node's CURRENT acceptance, through the production writer. */
-  function land(nodeRef: string, commit: LandingCommit | null, refusal: LandingRefusal | null): void {
+  const PROJECT_CHECKOUT = "D:/fixture/project";
+  const TREE_OF = (nodeRef: string): string => `${PROJECT_CHECKOUT}/.moe-next/trees/${nodeRef}`;
+  function land(nodeRef: string, commit: LandingCommit | null, refusal: LandingRefusal | null,
+    workspace = PROJECT_CHECKOUT): void {
     const accepted = readReviewLedger(store, PROJECT, nodeRef).accepted;
     if (accepted === undefined) throw new Error(`${nodeRef} is not accepted; nothing to land`);
     const landed = recordLandingReceipt(store, {
       commit, decidedAt: "2026-09-04T12:06:00.000Z", projectId: PROJECT, refusal,
-      subjectRef: nodeRef, verifierReceiptId: accepted.verifierReceiptId, workspace: "/fixture-workspace",
+      subjectRef: nodeRef, verifierReceiptId: accepted.verifierReceiptId, workspace,
     });
     if (!landed.ok) throw new Error(`landing for ${nodeRef} refused: ${landed.code}`);
   }
@@ -929,12 +932,13 @@ describe("a node waits on its hard dependencies", () => {
    */
   function recordIntegration(
     eventType: "NodeBranchMerged" | "NodeBranchConflicted", nodeRef: string, branch: string, sha: string,
+    mergeSha: string | null = "f".repeat(40),
   ): void {
     const aggregateId = `repository-integration/${createHash("sha256").update(PROJECT, "utf8").digest("hex")}`;
     const version = store.getAggregateVersion(aggregateId);
     const commandId = `rin-affordance-${String(version)}`;
     const facts = eventType === "NodeBranchMerged"
-      ? { at: "2026-09-04T12:07:00.000Z", branch, mergeSha: "f".repeat(40), nodeRef, projectId: PROJECT, sha, version: "moe-repository-integration/1" }
+      ? { at: "2026-09-04T12:07:00.000Z", branch, mergeSha, nodeRef, projectId: PROJECT, sha, version: "moe-repository-integration/1" }
       : { at: "2026-09-04T12:07:00.000Z", branch, nodeRef, paths: ["product.ts"], projectId: PROJECT, sha, version: "moe-repository-integration/1" };
     store.commit({
       aggregateId, commandBytes: encoder.encode(JSON.stringify({ eventType })), commandId,
@@ -978,8 +982,9 @@ describe("a node waits on its hard dependencies", () => {
     expect(stepFor(PAIR, B)).toMatchObject({ missing: [`depends:${A}`], status: "BLOCKED" });
     expect(offeredKindsFor(PAIR, B)).toEqual([]);
 
-    // COMMITTED on the project's own branch (the single-tree layout): already where it belongs.
-    land(A, commitOn("master", "1".repeat(40)), null);
+    // COMMITTED from the project's own checkout (the single-tree layout): already where it
+    // belongs, whatever that branch is called — moe-next's own is `moe/work-<date>`.
+    land(A, commitOn("moe/work-2026-09-18", "1".repeat(40)), null);
     expect(stepFor(PAIR, A)).toMatchObject({ status: "COMMITTED" });
     expect(stepFor(PAIR, B)).toMatchObject({ missing: [], status: "READY" });
     expect(offeredKindsFor(PAIR, B)).toEqual(["review.submit"]);
@@ -993,7 +998,7 @@ describe("a node waits on its hard dependencies", () => {
     ]);
     const sha = "2".repeat(40);
     accept(T);
-    land(T, commitOn("moe/node-dep-tree", sha), null);
+    land(T, commitOn("moe/node-dep-tree", sha), null, TREE_OF(T));
     // COMMITTED on its own branch, nothing recorded: WAITING for the integrator.
     expect(stepFor(tree, T)).toMatchObject({ status: "COMMITTED" });
     expect(stepFor(tree, "node-dep-tree-child")).toMatchObject({ missing: [`depends:${T}`], status: "BLOCKED" });
@@ -1007,6 +1012,23 @@ describe("a node waits on its hard dependencies", () => {
     recordIntegration("NodeBranchMerged", T, "moe/node-dep-tree", sha);
     expect(stepFor(tree, "node-dep-tree-child")).toMatchObject({ missing: [], status: "READY" });
     expect(offeredKindsFor(tree, "node-dep-tree-child")).toEqual(["review.submit"]);
+  });
+
+  it("decides by where the landing was made, and hears a merge the integrator could not name", () => {
+    // A seat may switch branches inside its tree: a `wip` branch there is still not on the
+    // project branch. The integration view drops a MERGED record with no mergeSha; the
+    // dependent must still hear yes, or it waits forever (the sha is already an ancestor).
+    const W = "node-dep-wip";
+    const spec: readonly NodeSpec[] = Object.freeze([
+      Object.freeze({ dependsOn: Object.freeze([]), nodeRef: W, title: "Wip" }),
+      Object.freeze({ dependsOn: Object.freeze([W]), nodeRef: "node-dep-wip-child", title: "After wip" }),
+    ]);
+    const sha = "3".repeat(40);
+    accept(W);
+    land(W, commitOn("wip", sha), null, TREE_OF(W));
+    expect(stepFor(spec, "node-dep-wip-child")).toMatchObject({ missing: [`depends:${W}`], status: "BLOCKED" });
+    recordIntegration("NodeBranchMerged", W, "wip", sha, null);
+    expect(stepFor(spec, "node-dep-wip-child")).toMatchObject({ missing: [], status: "READY" });
   });
 
   it("credits a genuine zero-byte delivery, and only that refusal", () => {
