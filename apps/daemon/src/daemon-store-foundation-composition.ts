@@ -263,10 +263,10 @@ export function createStoreDependencies(
       // Deferred until dispatch; the shared authenticator is constructed below before ports
       // are exposed. Capture rechecks the same durable identity after its asynchronous work.
       reviewSubmission: { workspace: repositoryWorkspace,
-        // The same knob the wrapper briefs nodes by, read where it is set: with node trees on, a
-        // node's evidence is captured from ITS tree, the workspace the verifier will test.
-        ...(process.env["MOE_NODE_TREES"] === "1"
-          ? { workspaceOf: (nodeRef: string) => nodeWorkspaceOf(repositoryWorkspace, nodeRef) } : {}),
+        // A node's evidence is captured from ITS tree, the workspace the verifier will test. No
+        // knob is read here: MOE_NODE_TREES decides only whether NEW trees are made, and a second
+        // read of it took a node's capture off the tree that held its work (UnAI 2026-09-19).
+        workspaceOf: (nodeRef: string) => nodeWorkspaceOf(repositoryWorkspace, nodeRef),
         authenticate: (credential) => authenticator.authenticate(credential) },
     }),
     ...(config.deploymentDeploy === undefined ? {} : { deploymentDeploy: config.deploymentDeploy }),

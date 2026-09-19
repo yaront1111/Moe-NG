@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { NodeMission } from "./agent-wrapper.js";
 import { NODE_TREES_DIRECTORY, forgetNodeTrees, nodeTreeName } from "./node-worktrees.js";
-import { createNodeTreeMissions, nodeWorkspaceOf } from "./wrapper-node-trees.js";
+import { createNodeTreeMissions, keepNodeTreeMissions, nodeWorkspaceOf, ownNodeTree } from "./wrapper-node-trees.js";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -97,4 +97,42 @@ describe("briefing a node into its own tree", () => {
     // A node finishing in the checkout it holds stays there even though a tree of its exists.
     expect(nodeWorkspaceOf(root, "node:v1:alpha", () => "node:v1:alpha")).toBe(root);
   }, 120_000);
+});
+
+/**
+ * MOE_NODE_TREES off. UnAI 2026-09-19: a restart without the knob briefed a node into the shared
+ * checkout while its 34 changed files sat in its tree, and the lander recorded NOTHING_TO_COMMIT.
+ */
+describe("keeping a node in the tree it already has, with the knob off", () => {
+  it("keeps an existing tree and everything else in the mission", () => {
+    const root = project();
+    const made = createNodeTreeMissions(() => {}, unheld)(brief(root), "node:v1:alpha");
+    expect(made?.workspace).not.toBe(root);
+
+    expect(keepNodeTreeMissions(unheld)(brief(root), "node:v1:alpha"))
+      .toEqual({ ...brief(root), workspace: made?.workspace });
+    expect(ownNodeTree(root, "node:v1:alpha")).toBe(made?.workspace);
+  }, 120_000);
+
+  it("makes no tree when the node has none", () => {
+    const root = project();
+
+    expect(keepNodeTreeMissions(unheld)(brief(root), "node:v1:alpha")).toEqual(brief(root));
+
+    expect(ownNodeTree(root, "node:v1:alpha")).toBeNull();
+    expect(existsSync(join(root, NODE_TREES_DIRECTORY))).toBe(false);
+    const listed = execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: root, windowsHide: true, encoding: "utf8" });
+    expect(listed.match(/^worktree /gmu)).toHaveLength(1);
+  }, 120_000);
+
+  it("keeps the project for a node that holds it, even though a tree of its exists", () => {
+    const root = project();
+    createNodeTreeMissions(() => {}, unheld)(brief(root), "node:v1:alpha");
+
+    expect(keepNodeTreeMissions(() => "node:v1:alpha")(brief(root), "node:v1:alpha")?.workspace).toBe(root);
+  }, 120_000);
+
+  it("passes a null brief through as null", () => {
+    expect(keepNodeTreeMissions(unheld)(null, "node:v1:absent")).toBeNull();
+  });
 });

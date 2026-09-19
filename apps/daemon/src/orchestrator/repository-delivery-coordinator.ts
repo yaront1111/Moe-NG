@@ -199,18 +199,31 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
    * A BLOCKED hold resumes on its own once every runtime that ran a process for it is gone
    * (owner decision 2026-09-16): a gone broker closed its Job, which killed every process in it.
    * Only review states come back; a landing whose Git effect is unknown stays for a human.
+   * Returns the hold when it came back RESERVED, so the same pass can give an idle one back.
    */
-  const resumeGone = (handle: RepositoryExecutionHandle): void => {
-    if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) return;
+  const resumeGone = (handle: RepositoryExecutionHandle): RepositoryExecutionHandle | null => {
+    if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) return null;
     const facts = config.facts(handle.owner.nodeRef, handle);
-    if (idleFacts(facts)) change(handle, { phase: "RESERVED", sessionId: null, pid: null });
-    else if (facts === "SUBMITTED") change(handle, { phase: "VERIFYING" });
+    if (idleFacts(facts)) {
+      const next = change(handle, { phase: "RESERVED", sessionId: null, pid: null });
+      return next.ok ? next.handle : null;
+    }
+    if (facts === "SUBMITTED") change(handle, { phase: "VERIFYING" });
+    return null;
   };
 
   const advanceOne = async (initial: RepositoryExecutionHandle): Promise<void> => {
     let handle = initial;
     const nodeRef = handle.owner.nodeRef;
-    if (handle.reservation.phase === "BLOCKED") { resumeGone(handle); return; }
+    if (handle.reservation.phase === "BLOCKED") {
+      // In the SAME pass, not the next one. UnAI 2026-09-19: a restart brought a dead seat's hold
+      // back RESERVED over a clean checkout; staffing ran before the next pass could yield it, so
+      // the holder was staffed right there, on a project branch that lacked its dependencies, and
+      // the integrator (which needs that checkout) could merge none of three landed branches.
+      const resumed = resumeGone(handle);
+      if (resumed !== null) await yieldIdle(resumed);
+      return;
+    }
     if (handle.reservation.phase === "RESERVED") { await yieldIdle(handle); return; }
     if (handle.reservation.phase === "EXECUTING") {
       const closed = exits.get(handle.owner.ownershipToken);
@@ -232,7 +245,11 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       // A replanned node's contained seat is done for good: back to RESERVED, where it may yield.
       const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "VERIFYING" });
-      if (!next.ok || idleFacts(facts)) return;
+      if (!next.ok) return;
+      // The SAME pass gives an idle, clean checkout back (UnAI 2026-09-19, twice): staffing runs
+      // right after this advance, and a RESERVED holder is staffed where it holds, so the next
+      // pass's yield came too late every time and the integrator never got the checkout.
+      if (idleFacts(facts)) { await yieldIdle(next.handle); return; }
       handle = next.handle;
     }
     if (handle.reservation.phase === "VERIFYING") {
@@ -251,7 +268,8 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       if (facts !== "ACCEPTED" && !idleFacts(facts)) { block(handle); return; }
       const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "AWAITING_LANDING" });
-      if (!next.ok || idleFacts(facts)) return;
+      if (!next.ok) return;
+      if (idleFacts(facts)) { await yieldIdle(next.handle); return; }
       handle = next.handle;
     }
     if (handle.reservation.phase === "AWAITING_LANDING") {

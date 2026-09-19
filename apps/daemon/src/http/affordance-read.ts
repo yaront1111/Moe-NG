@@ -38,6 +38,7 @@ import { resolveDeployTargetOffers } from "./affordance-deploy-target-offers.js"
 import { resolveRollbackOffers } from "./affordance-rollback-offers.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
+import { dependencySatisfied } from "./dependency-integration.js";
 import { readRunGoalPublication } from "./run-goal-publication.js";
 import type {
   AffordancePort,
@@ -578,22 +579,24 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         }
         return verificationMissing;
       };
-      // A node is a satisfied dependency exactly when this loop would call it
-      // COMMITTED — the review ledger's acceptance record, nothing else. An
-      // unresolvable producer key has no acceptance, so it blocks rather than
-      // silently un-gating the node that named it.
-      const acceptedByRef = new Map<string, boolean>();
-      const isAccepted = (nodeRef: string): boolean => {
-        const known = acceptedByRef.get(nodeRef);
+      // A node is a satisfied dependency when its accepted work is ON THE PROJECT BRANCH
+      // (dependency-integration.ts) — a stricter fact than the acceptance this loop calls
+      // COMMITTED. Released at acceptance, a dependent's tree was cut before its dependency was
+      // merged (UnAI 2026-09-19). An unresolvable producer key has no acceptance, so it blocks
+      // rather than silently un-gating the node that named it. Memoised per read: the rule
+      // walks the landing and integration ledgers, and a fan-in names one producer many times.
+      const satisfiedByRef = new Map<string, boolean>();
+      const isSatisfied = (nodeRef: string): boolean => {
+        const known = satisfiedByRef.get(nodeRef);
         if (known !== undefined) return known;
-        const accepted = readReviewLedger(config.store, config.projectId, nodeRef)
-          .accepted !== undefined;
-        acceptedByRef.set(nodeRef, accepted);
-        return accepted;
+        const satisfied = dependencySatisfied(config.store, config.projectId, nodeRef);
+        satisfiedByRef.set(nodeRef, satisfied);
+        return satisfied;
       };
       for (const spec of nodes) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
-        acceptedByRef.set(spec.nodeRef, review.accepted !== undefined);
+        // Unaccepted is unsatisfied with no further read; accepted must still prove its landing.
+        if (review.accepted === undefined) satisfiedByRef.set(spec.nodeRef, false);
         const claim = claimFields(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
         if (review.accepted !== undefined) {
           steps.push(Object.freeze({
@@ -632,15 +635,15 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           }));
           continue;
         }
-        // Build order. Every dependency whose review is not accepted is named,
-        // so the operator reads WHICH node is in the way rather than "blocked".
+        // Build order. Every dependency whose work is not yet on the project branch is
+        // named, so the operator reads WHICH node is in the way rather than "blocked".
         // A dependency-blocked node is offered nothing: the wrapper staffs from
         // these offers, and one review.submit here staffs a node beside the
         // parent it is waiting on. Reported BEFORE the verification tokens —
         // a node that cannot start yet is not usefully described by its
         // verifier queue — and the other blocking reasons keep their own
         // earlier branches untouched.
-        const unmet = spec.dependsOn.filter((nodeRef) => !isAccepted(nodeRef))
+        const unmet = spec.dependsOn.filter((nodeRef) => !isSatisfied(nodeRef))
           .map((nodeRef) => `depends:${nodeRef}`);
         if (unmet.length === 0) {
           offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));

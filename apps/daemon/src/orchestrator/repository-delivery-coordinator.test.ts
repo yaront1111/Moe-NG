@@ -268,18 +268,27 @@ describe("repository delivery lifetime", () => {
  */
 describe("an idle holder yields the repository", () => {
   const describeHolder = (nodeRef: string, phase: string) => `held by ${nodeRef} (${phase})`;
+  /**
+   * A hold between rounds. The clean probe answers "dirty" until `arm()`, because a clean idle
+   * checkout is given back in the SAME pass that returns it to RESERVED (UnAI 2026-09-19): the
+   * pass after was always too late, the holder was staffed where it held first.
+   */
   async function reservedBetweenRounds(extras: FixtureExtras) {
-    const f = fixture(undefined, undefined, undefined, undefined, extras);
+    let armed = false;
+    const clean = extras.clean;
+    const f = fixture(undefined, undefined, undefined, undefined,
+      { ...extras, ...(clean === undefined ? {} : { clean: async (root: string) => armed && await clean(root) }) });
     const started = await f.coordinator.start(request(f.workspace), f.spawn);
     if (!started.ok) throw new Error(started.code);
     f.finish(); await f.exit; f.retire();
     await f.coordinator.advance();
     expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", nodeRef: "node-a" } });
-    return f;
+    return { ...f, arm: () => { armed = true; } };
   }
 
   it("releases a clean reservation between rounds so a sibling can start", async () => {
     const f = await reservedBetweenRounds({ clean: async () => true });
+    f.arm();
 
     await f.coordinator.advance();
 
@@ -300,7 +309,7 @@ describe("an idle holder yields the repository", () => {
 
   it.each(["SUBMITTED", "ACCEPTED", "UNKNOWN", "REFUSED"] as const)("never yields while the holder's facts read %s", async (facts) => {
     const f = await reservedBetweenRounds({ clean: async () => true });
-    f.setFacts(facts);
+    f.arm(); f.setFacts(facts);
 
     await f.coordinator.advance();
 
@@ -335,7 +344,7 @@ describe("an idle holder yields the repository", () => {
    */
   it("releases a replanned holder's clean reservation", async () => {
     const f = await reservedBetweenRounds({ clean: async () => true });
-    f.setFacts("REPLANNED");
+    f.arm(); f.setFacts("REPLANNED");
 
     await f.coordinator.advance();
 
@@ -354,7 +363,7 @@ describe("an idle holder yields the repository", () => {
     expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", nodeRef: "node-a" } });
   }, 120_000);
 
-  it("returns a replanned node's contained seat to RESERVED instead of blocking, then yields", async () => {
+  it("returns a replanned node's contained seat to RESERVED instead of blocking, and yields it in that same pass", async () => {
     const f = fixture(undefined, undefined, undefined, undefined, { clean: async () => true });
     const started = await f.coordinator.start(request(f.workspace), f.spawn);
     if (!started.ok) throw new Error(started.code);
@@ -362,10 +371,9 @@ describe("an idle holder yields the repository", () => {
     f.finish(); await f.exit; f.retire();
 
     await f.coordinator.advance();
-    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", nodeRef: "node-a" } });
-    await f.coordinator.advance();
 
     expect(f.releases).toEqual(["YIELDED"]);
+    expect(f.port.inspect(f.workspace)).toEqual({ ok: true, reservation: null });
   }, 120_000);
 
   it("tells a waiter who holds the repository before it claims anything, without writing", async () => {

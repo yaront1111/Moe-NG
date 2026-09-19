@@ -1,12 +1,19 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { closeStores, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
+import { recordLandingReceipt } from "../repository/landing-ledger.js";
+import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { verifyStoredPackageItems } from "../review/review-package-restore.js";
+import { calibration, policyInput } from "../review/review-test-fixtures.js";
+import { NODE_VERIFIER_PRINCIPAL_ID } from "../review/verifier-receipt-contracts.js";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
+import { createDeliveryWithdrawal } from "./node-delivery-withdrawal.js";
+import { createNodeIntegration, runGit } from "./node-integration.js";
+import { NODE_TREES_DIRECTORY, ensureNodeTree, forgetNodeTrees } from "./node-worktrees.js";
 import { MARKER, OPERATOR, reviewWorld } from "./wrapper-review-test-fixtures.js";
-import { withLatestVerifierFailure } from "./wrapper-review-missions.js";
+import { createReviewAwareNodeMissions, withLatestVerifierFailure } from "./wrapper-review-missions.js";
 
 /**
  * Every arm here builds a REAL durable world, and the heaviest takes about 2.1 s on an idle
@@ -32,6 +39,7 @@ async function failedWorld() {
 }
 afterEach(async () => {
   for (const w of worlds) await w.finishSeat();
+  forgetNodeTrees();
   closeStores();
   for (const w of worlds.splice(0)) rmSync(w.workspace, { recursive: true, force: true });
 });
@@ -62,6 +70,96 @@ it("delivers a real verifier failure to the next coding seat, then accepts a cor
   expect(w.runs()).toBe(2);
   expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).accepted).toBeDefined();
   expect(readFileSync(join(w.workspace, "app.mjs"), "utf8")).toContain("42");
+});
+
+it("briefs a node into the tree it already has with MOE_NODE_TREES off, and makes none for one without", () => {
+  // UnAI 2026-09-19: a restart without the knob briefed a node into the shared checkout while its
+  // changed files sat in its tree, so the lander recorded NOTHING_TO_COMMIT for accepted work.
+  const w = world();
+  const off = createReviewAwareNodeMissions({ workspace: w.workspace, testCommand: "node check.mjs",
+    nodeTrees: false, log: () => undefined, projectId: PROJECT_ID, operatorPrincipalId: OPERATOR, store: () => w.store });
+  expect(off.nodeMission(w.nodeRef)?.workspace).toBe(w.workspace);
+  expect(existsSync(join(w.workspace, NODE_TREES_DIRECTORY))).toBe(false);
+  const tree = ensureNodeTree({ nodeRef: w.nodeRef, projectRoot: w.workspace });
+  if (tree === null) throw new Error("fixture tree was not made");
+  expect(off.nodeMission(w.nodeRef)).toEqual({ ...w.compiled.mission(w.nodeRef), workspace: tree.path });
+  // The fixture's own resolver never names the knob at all: unset is off.
+  expect(w.missions.nodeMission(w.nodeRef)?.workspace).toBe(tree.path);
+});
+
+// UnAI 2026-09-19: a landing refused over an edited .moe-next/start.ps1 left the accepted files
+// uncommitted in the project's checkout. The node no longer held that checkout, so its next mission
+// moved to a tree of its own that held none of them. NOTHING_TO_COMMIT pins nothing: that landing
+// looked in the wrong place, and the node's own tree is where its work is.
+it.each([["TRACKED_RUNTIME_METADATA_DIRTY", "the refused landing's workspace"], ["LANDING_VERIFIED_WORKSPACE_CHANGED", "the refused landing's workspace"],
+  ["NOTHING_TO_COMMIT", "its own tree"]])("after a landing refused %s, briefs the node into %s", async (code, where) => {
+  const w = world();
+  expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+  writeFileSync(join(w.workspace, "app.mjs"), "export const answer = 42;\n");
+  expect(await w.submitSeat(w.requests[0]!)).toMatchObject({ ok: true });
+  await w.finishSeat();
+  expect(await w.verifier.verifyOnce()).toMatchObject([{ outcome: "ACCEPTED" }]);
+  const tree = ensureNodeTree({ nodeRef: w.nodeRef, projectRoot: w.workspace });
+  if (tree === null) throw new Error("fixture tree was not made");
+  expect(w.missions.nodeMission(w.nodeRef)?.workspace).toBe(tree.path);
+
+  expect(recordLandingReceipt(w.store, { commit: null, decidedAt: new Date().toISOString(), projectId: PROJECT_ID,
+    refusal: { code, detail: "refused for the fixture" }, subjectRef: w.nodeRef,
+    verifierReceiptId: readReviewLedger(w.store, PROJECT_ID, w.nodeRef).accepted!.verifierReceiptId, workspace: w.workspace }).ok).toBe(true);
+
+  expect(w.missions.nodeMission(w.nodeRef)).toEqual({ ...w.compiled.mission(w.nodeRef),
+    workspace: where === "its own tree" ? tree.path : w.workspace });
+});
+
+// UnAI 2026-09-19: a recorded merge conflict reached no seat. It now arrives as the node's latest
+// verifier failure. The payload keeps the TAIL of the text and this brief keeps the HEAD, so both
+// the integrator's worst record (64 paths) and an ordinary one must arrive with both ends whole.
+it.each([20, 64])("hands a %i-path integration conflict to the node's next seat with the merge recipe intact", async (count) => {
+  const w = world();
+  expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+  writeFileSync(join(w.workspace, "app.mjs"), "export const answer = 42;\n");
+  expect(await w.submitSeat(w.requests[0]!)).toMatchObject({ ok: true });
+  await w.finishSeat();
+  expect(await w.verifier.verifyOnce()).toMatchObject([{ outcome: "ACCEPTED" }]);
+  const landed = { branch: "moe/node-slice-1234abcd", nodeRef: w.nodeRef, sha: "1".repeat(40) };
+  expect(recordLandingReceipt(w.store, { commit: { branch: landed.branch, files: ["app.mjs"], message: "Land", parentSha: "b".repeat(40), sha: landed.sha },
+    decidedAt: new Date().toISOString(), projectId: PROJECT_ID, refusal: null, subjectRef: w.nodeRef,
+    verifierReceiptId: readReviewLedger(w.store, PROJECT_ID, w.nodeRef).accepted!.verifierReceiptId, workspace: w.workspace }).ok).toBe(true);
+  const paths = Array.from({ length: count }, (_unused, index) => `src/${String(index).padStart(2, "0")}/${"deep/".repeat(30)}module.ts`);
+  // The integrator's own record, written by the integrator: only its Git is stood in.
+  const repository = createRepositoryExecutionPort();
+  expect(await createNodeIntegration({ candidates: () => [landed], clock: () => new Date().toISOString(),
+    controller: { controllerId: "controller-a", controllerPid: process.pid }, projectId: PROJECT_ID, repository, store: w.store, storeId: "store-a",
+    workspace: w.workspace, git: (_cwd, args) => args[0] === "diff" ? { code: 0, stdout: paths.join("\n") }
+      : { code: args[0] === "merge-base" || (args[0] === "merge" && args[1] !== "--abort") ? 1 : 0, stdout: "" },
+  }).integrateOnce()).toMatchObject([{ outcome: "CONFLICT" }]);
+  expect(w.missions.nodeMission(w.nodeRef)?.instructions).not.toContain("INTEGRATION_CONFLICT");
+
+  const logs: string[] = [];
+  // The landed sha is the fixture's own, so real Git answers 128 ("not a commit") about it, which
+  // proves neither answer and withdraws nothing. The ancestry probe gets the integrator's stand-in
+  // answer above (1, not an ancestor); every other question, the branch name too, goes to real Git.
+  createDeliveryWithdrawal({ log: (line) => logs.push(line), nodes: w.compiled.nodes, projectWorkspace: w.workspace, repository,
+    git: (cwd, args) => args[0] === "merge-base" ? { code: 1, stdout: "" } : runGit(cwd, args),
+    verifier: { ...w.host, nodeMission: w.missions.nodeMission, verificationAuthority: () => {
+      const restored = verifyStoredPackageItems(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).rounds.at(-1)!);
+      return restored.ok ? { calibration: calibration(), packageItems: restored.items.filter((item) => item.kind !== "DAEMON_RECEIPT"),
+        policy: policyInput({ actor: NODE_VERIFIER_PRINCIPAL_ID }) } : null;
+    } } }).scanOnce();
+
+  expect(logs).toEqual([expect.stringContaining(`${w.nodeRef}: INTEGRATION_CONFLICT`)]);
+  // The node is staffed again, and its seat reads the whole finding.
+  expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+  const mission = w.requests[1]!.mission;
+  expect(mission).toContain("Recorded operator-authored verifier failure");
+  expect(mission).not.toContain("[diagnostic truncated]");
+  const diagnostic = mission.split("BEGIN VERIFIER DIAGNOSTIC\n")[1]?.split("\nEND VERIFIER DIAGNOSTIC")[0] ?? "";
+  expect(diagnostic).toContain(`INTEGRATION_CONFLICT: nothing was tested. Your accepted work is safe on ${landed.branch} at ${landed.sha}`);
+  expect(diagnostic).toContain(`Git could not join ${String(count)} path(s):\n${paths[0]!.slice(0, 120)}\n`);
+  expect(diagnostic).toContain(`\n${paths[19]!.slice(0, 120)}\n`);
+  expect(diagnostic).toContain("1. Run: git -c user.name=Moe -c user.email=moe@moe.local -c commit.gpgsign=false merge main\n");
+  expect(diagnostic).toContain("3. COMMIT the merge. Leave no merge in progress and nothing uncommitted.");
+  expect(diagnostic.endsWith("4. Re-run the test, then submit the review again.")).toBe(true);
 });
 
 it("keeps another node's valid mission free of this node's diagnostic without writing state", async () => {

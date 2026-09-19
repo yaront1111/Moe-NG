@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import type { SqliteEventStore } from "@moe/store";
+import { isMoeMetadata } from "../repository/git-landing-port.js";
 import type { RepositoryExecutionController, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 import { readRepositoryIntegration } from "../repository/repository-integration-read.js";
 import { INTEGRATION_REF_PREFIX } from "../repository/repository-workflow-ref.js";
@@ -20,8 +21,10 @@ import { INTEGRATION_REF_PREFIX } from "../repository/repository-workflow-ref.js
  * inferring it from Git, and a merge already taken is never taken twice. A conflict is only ever
  * paths Git could not join: a merge it stopped for a reason of its own (a lock, an untracked file
  * in the way, a commit it cannot reach) records nothing and is tried again on the next pass, as is
- * a conflict some earlier pass recorded with no paths. A recorded conflict is answered by the node
- * landing again; the same commit is never tried twice.
+ * a conflict some earlier pass recorded with no paths. A recorded conflict withdraws its node's
+ * acceptance (node-delivery-withdrawal.ts): the node returns to a seat and leaves the candidates,
+ * so the halt lasts one pass, and the conflict is answered by the node landing again. The same
+ * commit is never tried twice.
  */
 const MERGED = "NodeBranchMerged";
 const CONFLICTED = "NodeBranchConflicted";
@@ -43,7 +46,8 @@ export interface IntegrationReport {
 export type IntegrationGit = (cwd: string, args: readonly string[]) =>
   { readonly code: number; readonly stderr?: string; readonly stdout: string };
 
-const runGit: IntegrationGit = (cwd, args) => {
+/** Exported so the lander's adoption probe asks Git the same way; never copy it a third time. */
+export const runGit: IntegrationGit = (cwd, args) => {
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith("GIT_")));
   try {
     const stdout = execFileSync("git", [...args], {
@@ -53,7 +57,9 @@ const runGit: IntegrationGit = (cwd, args) => {
     return { code: 0, stdout };
   } catch (error: unknown) {
     const failure = error as { status?: number; stderr?: string; stdout?: string };
-    return { code: typeof failure.status === "number" ? failure.status : 1, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
+    // A timeout or a spawn failure has no status: Git never answered. 1 is `merge-base
+    // --is-ancestor`'s own "no", which the withdrawal and the adoption probe act on, so it is 128.
+    return { code: typeof failure.status === "number" ? failure.status : 128, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
   }
 };
 
@@ -119,9 +125,13 @@ export function createNodeIntegration(config: NodeIntegrationConfig) {
     // paths names nothing a node could answer, so it holds nothing back: it is simply tried again.
     const recorded = readRepositoryIntegration(config.store, config.projectId, pending).branches;
     if (recorded.some((branch) => branch.state === "CONFLICTED" && branch.conflictPaths.length > 0)) return [];
-    const dirty = git(workspace, ["status", "--porcelain=v1", "--untracked-files=no"]);
+    const dirty = git(workspace, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=no"]);
     if (dirty.code !== 0) return [report(pending[0]!.nodeRef, "UNAVAILABLE", "the project checkout could not be read")];
-    if (dirty.stdout.trim() !== "") {
+    // Moe's own tracked runtime files are nobody's uncommitted work (the lander's own reading,
+    // git-landing-port.ts). Only a node staffed IN this checkout ever checkpoints them, so once every
+    // node lived in a tree one operator edit to .moe-next/start.ps1 skipped every merge, forever
+    // (UnAI 2026-09-19). A merge that would touch the edited file is still refused, by Git, whole.
+    if (dirty.stdout.split("\0").some((entry) => entry.length > 3 && !isMoeMetadata(entry.slice(3)))) {
       return [report(pending[0]!.nodeRef, "SKIPPED", "the project checkout holds uncommitted work; nothing was merged")];
     }
     const owner = { projectId: config.projectId, nodeRef: `${INTEGRATION_REF_PREFIX}${config.projectId}`,

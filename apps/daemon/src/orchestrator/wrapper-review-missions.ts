@@ -9,10 +9,10 @@ import { readReviewImplementationGuidance } from "../review/review-implementatio
 import { reviewContinuationAvailable } from "../review/review-continuation.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
+import { refusedLandingWorkspace } from "./node-delivery-withdrawal.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
 import { withAttributedFindings } from "./wrapper-attributed-findings.js";
-import { withIntegrationConflict } from "./wrapper-integration-conflict.js";
-import { createNodeTreeMissions } from "./wrapper-node-trees.js";
+import { createNodeTreeMissions, keepNodeTreeMissions } from "./wrapper-node-trees.js";
 
 export interface WrapperReviewContext {
   readonly operatorPrincipalId: string;
@@ -113,7 +113,9 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
     } });
   // The node's workspace is chosen once, here, and everything downstream follows it: the
   // reservation's identity, the baseline, the verifier, the review binding and the landing commit.
-  const intoTree = config.nodeTrees === true ? createNodeTreeMissions(config.log) : null;
+  // The knob decides only whether NEW trees are made. A tree already on disk is kept either way:
+  // on UnAI 2026-09-19 a restart without the knob moved a node off the tree that held its work.
+  const intoTree = config.nodeTrees === true ? createNodeTreeMissions(config.log) : keepNodeTreeMissions();
   return Object.freeze({ listNodes: source.listNodes,
     reviewContinuation: (nodeRef: string): ReviewContinuationApproval | null => {
       try {
@@ -125,10 +127,20 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
     },
     nodeMission: (nodeRef: string): NodeMission | null => {
       const brief = source.nodeMission(nodeRef);
-      const placed = intoTree === null ? brief : intoTree(brief, nodeRef);
-      // A merge the integrator could not take is the owning node's next piece of work.
-      return withIntegrationConflict(config, nodeRef,
-        withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed)));
+      // THE PIN comes before the tree. A node whose landing was recoverably refused has its work
+      // uncommitted where that landing looked, and is staffed there again, not in a tree of its
+      // own that holds none of it. UnAI 2026-09-19: refused over an edited .moe-next/start.ps1,
+      // the node's files stayed dirty in the project's checkout and no seat was ever sent back.
+      // ponytail: one more fold of the memoised ledger per mission, beside the diagnostic's own
+      // below. Share one walk between the two if a profile of the wrapper ever shows it.
+      const store = config.store();
+      const pinned = brief === null || store === undefined ? null : refusedLandingWorkspace(store, config.projectId, nodeRef);
+      const placed = brief !== null && pinned !== null ? Object.freeze({ ...brief, workspace: pinned }) : intoTree(brief, nodeRef);
+      // A merge the integrator could not take reaches its node as a verifier failure like any
+      // other: the withdrawal (node-delivery-withdrawal.ts) records it as the node's latest round.
+      // The brief-side text it replaces was only ever added for a node that was accepted AND
+      // landed, which is never staffed again, so no seat ever read it (UnAI 2026-09-19).
+      return withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed));
     },
   });
 }

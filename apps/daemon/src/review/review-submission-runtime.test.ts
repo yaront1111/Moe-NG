@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonObject } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GOAL_ID, PROJECT_ID, closeStores } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
@@ -24,6 +24,8 @@ import { verifyStoredPackageItems } from "./review-package-restore.js";
 import { createVerifiedWorkspacePort } from "../repository/git-verified-workspace-port.js";
 import type { VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 import { createNodeVerifier } from "../orchestrator/node-verifier.js";
+import { NODE_TREES_DIRECTORY, nodeTreeName } from "../orchestrator/node-worktrees.js";
+import { nodeWorkspaceOf } from "../orchestrator/wrapper-node-trees.js";
 import { calibration, packageItems, policyInput } from "./review-test-fixtures.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, verifierReceiptId } from "./verifier-receipt-contracts.js";
 import { readVerifierReceipt, recordVerifierReceipt } from "./verifier-receipt-ledger.js";
@@ -36,7 +38,7 @@ import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 const NOW = "2026-08-30T12:05:00.000Z";
 const PRINCIPAL = "review-coder";
 const folders: string[] = [];
-afterEach(() => { closeStores(); for (const folder of folders.splice(0)) rmSync(folder, { force: true, recursive: true }); });
+afterEach(() => { vi.unstubAllEnvs(); closeStores(); for (const folder of folders.splice(0)) rmSync(folder, { force: true, recursive: true }); });
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
 function world(approved = true, capture?: VerifiedWorkspacePort["capture"], workspaceOf?: (nodeRef: string) => string) {
@@ -212,26 +214,40 @@ describe("runtime review submission without development payload hints", () => {
   });
 
   it("captures the evidence from the NODE's workspace when it has one of its own", async () => {
-    // Under MOE_NODE_TREES the verifier tests the node's tree. Evidence captured from the shared
-    // checkout can never equal it: two UnAI nodes looped VERIFIER_WORKSPACE_CHANGED on that.
+    // The verifier tests the node's tree. Evidence captured from the shared checkout can never
+    // equal it: two UnAI nodes looped VERIFIER_WORKSPACE_CHANGED on that.
+    // MOE_NODE_TREES is UNSET on purpose: the knob decides only whether NEW trees are made. On
+    // UnAI 2026-09-19 a restart without it took a node's capture off the tree that held its work.
+    vi.stubEnv("MOE_NODE_TREES", undefined);
     const asked: string[] = [];
     const captured: string[] = [];
     const port = createVerifiedWorkspacePort();
-    const tree = { path: "" };
+    const project = { root: "" };
     const w = world(true, (workspace) => { captured.push(workspace); return port.capture(workspace); },
-      (nodeRef) => { asked.push(nodeRef); return tree.path; });
-    tree.path = join(w.workspace, ".moe-next", "trees", "own");
-    w.git("worktree", "add", "-q", "-b", "moe/own", tree.path);
+      // The composition's own callback: where the node's tree is, asked without making one.
+      (nodeRef) => { asked.push(nodeRef); return nodeWorkspaceOf(project.root, nodeRef); });
+    project.root = w.workspace;
+    const tree = join(realpathSync.native(w.workspace), NODE_TREES_DIRECTORY, nodeTreeName(w.nodeRef)!);
+    w.git("worktree", "add", "-q", "-b", "moe/own", tree);
     await w.claim();
     expect(await w.dispatch("review.submit", { subjectRef: w.nodeRef, findings: [], packageItems: [], round: 1 }))
       .toMatchObject({ ok: true });
     expect(asked).toEqual([w.nodeRef]);
-    expect(captured).toEqual([tree.path]);
+    expect(captured).toEqual([tree]);
     const round = readReviewLedger(w.store, PROJECT_ID, w.nodeRef).rounds[0];
     if (round === undefined) throw new Error("missing round");
     const submitted = readSubmittedReviewWorkspace(w.store, PROJECT_ID, w.nodeRef, round);
     if (submitted.status !== "PRESENT") throw new Error(submitted.status);
     expect(submitted.binding.branchRef).toBe("refs/heads/moe/own");
+  });
+
+  it("wires that callback into the daemon's composition with no second read of MOE_NODE_TREES", () => {
+    // Pinned by SOURCE: the composition opens its own durable store, so no unit here can drive a
+    // review through it. The wrapper owns the knob (wrapper-knobs.ts); the daemon's copy of the
+    // read is what split the capture from the brief.
+    const source = readFileSync(new URL("../daemon-store-foundation-composition.ts", import.meta.url), "utf8");
+    expect(source).toContain("workspaceOf: (nodeRef: string) => nodeWorkspaceOf(repositoryWorkspace, nodeRef),");
+    expect(source).not.toContain("process.env[\"MOE_NODE_TREES\"]");
   });
 
   it.each([false, true])("refuses changed submitted bytes before verification/acceptance (pending receipt: %s)", async (pending) => {

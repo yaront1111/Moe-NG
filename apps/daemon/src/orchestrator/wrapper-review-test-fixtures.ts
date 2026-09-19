@@ -119,5 +119,7 @@ export function reviewWorld(options: ReviewWorldOptions = {}) {
     return dispatch(request, "review.submit", { subjectRef: nodeRef, round: version + 1, findings: [], packageItems: [] }, version);
   };
   return { store, workspace, nodeRef, compiled, missions, requests, wrapper, finishSeat, verifier,
-    submitSeat, dispatch, runs: () => runs };
+    submitSeat, dispatch, runs: () => runs,
+    /** What a second host-side writer (the delivery withdrawal) needs to act as this world's operator. */
+    host: { deps, operatorCredential: CREDENTIAL, projectId: PROJECT_ID, store } };
 }

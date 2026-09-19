@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,6 +46,9 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import {
   reviewerCalibrationSlice, verifierPolicySlice,
 } from "../orchestrator/demo-seed-policy.js";
+import { recordLandingReceipt } from "../repository/landing-ledger.js";
+import { LANDING_NOTHING_TO_COMMIT } from "../repository/landing-receipt-contracts.js";
+import type { LandingCommit, LandingRefusal } from "../repository/landing-receipt-contracts.js";
 import { runReviewCommand } from "../review/review-services.js";
 import {
   REVIEWER, finding, packageItems, seedVerifierReceipt,
@@ -816,13 +820,16 @@ describe("a REPLAN decision retires the node", () => {
 });
 
 /**
- * A node.deliver step is READY only when every node it depends on is ACCEPTED.
+ * A node.deliver step is READY only when every node it depends on has its accepted
+ * work ON THE PROJECT BRANCH (dependency-integration.ts).
  *
- * ACCEPTED is the review ledger's acceptance record — the SAME fact the loop
- * already uses to mark a node COMMITTED. There is deliberately no second notion
- * of doneness here (no landing receipt, no verifier receipt): a node is a
- * satisfied dependency exactly when the surface would call it COMMITTED, so the
- * board and the gate can never disagree about what "done" means.
+ * The gate used to read the review ledger's acceptance record alone — the same
+ * fact the loop uses to mark a node COMMITTED. With MOE_NODE_TREES=1 that released
+ * a dependent before the integrator had merged its dependency's `moe/` branch, so
+ * the dependent's tree was cut from a project HEAD without the dependency and the
+ * seat hand-copied the branch's files, which conflicted at integration (UnAI
+ * 2026-09-19, three times). The producer's OWN step still reads COMMITTED at
+ * acceptance; only the DEPENDENT's gate waits for the landing to be integrated.
  *
  * These arms share the suite store, which the arms above already drove to a
  * durably approved plan; the node keys are unique to this block so their review
@@ -895,8 +902,49 @@ describe("a node waits on its hard dependencies", () => {
       schemaVersion: "moe-review-command/1",
     })));
     if (!outcome.ok) throw new Error(`acceptance for ${nodeRef} refused: ${outcome.code}`);
-    // The gate's whole premise: acceptance is what the surface calls COMMITTED.
+    // Acceptance is what the surface calls COMMITTED for the node itself; the
+    // dependency gate below asks for more.
     expect(readReviewLedger(store, PROJECT, nodeRef).accepted).toBeDefined();
+  }
+
+  /** The lander's receipt for the node's CURRENT acceptance, through the production writer. */
+  const PROJECT_CHECKOUT = "D:/fixture/project";
+  const TREE_OF = (nodeRef: string): string => `${PROJECT_CHECKOUT}/.moe-next/trees/${nodeRef}`;
+  function land(nodeRef: string, commit: LandingCommit | null, refusal: LandingRefusal | null,
+    workspace = PROJECT_CHECKOUT): void {
+    const accepted = readReviewLedger(store, PROJECT, nodeRef).accepted;
+    if (accepted === undefined) throw new Error(`${nodeRef} is not accepted; nothing to land`);
+    const landed = recordLandingReceipt(store, {
+      commit, decidedAt: "2026-09-04T12:06:00.000Z", projectId: PROJECT, refusal,
+      subjectRef: nodeRef, verifierReceiptId: accepted.verifierReceiptId, workspace,
+    });
+    if (!landed.ok) throw new Error(`landing for ${nodeRef} refused: ${landed.code}`);
+  }
+
+  function commitOn(branch: string, sha: string): LandingCommit {
+    return { branch, files: ["product.ts"], message: "Land product", parentSha: null, sha };
+  }
+
+  /**
+   * The integrator's own record shape (node-integration.ts `record`), on its aggregate, exactly
+   * as repository-integration-read.test.ts writes it: the read folds MERGED/CONFLICTED per
+   * (nodeRef, sha), latest wins.
+   */
+  function recordIntegration(
+    eventType: "NodeBranchMerged" | "NodeBranchConflicted", nodeRef: string, branch: string, sha: string,
+    mergeSha: string | null = "f".repeat(40),
+  ): void {
+    const aggregateId = `repository-integration/${createHash("sha256").update(PROJECT, "utf8").digest("hex")}`;
+    const version = store.getAggregateVersion(aggregateId);
+    const commandId = `rin-affordance-${String(version)}`;
+    const facts = eventType === "NodeBranchMerged"
+      ? { at: "2026-09-04T12:07:00.000Z", branch, mergeSha, nodeRef, projectId: PROJECT, sha, version: "moe-repository-integration/1" }
+      : { at: "2026-09-04T12:07:00.000Z", branch, nodeRef, paths: ["product.ts"], projectId: PROJECT, sha, version: "moe-repository-integration/1" };
+    store.commit({
+      aggregateId, commandBytes: encoder.encode(JSON.stringify({ eventType })), commandId,
+      committedAt: "2026-09-04T12:07:00.000Z", expectedVersion: version,
+      events: [{ eventId: `${commandId}-e1`, eventType, payload: encoder.encode(JSON.stringify(facts)) }],
+    });
   }
 
   const PAIR: readonly NodeSpec[] = Object.freeze([
@@ -924,17 +972,91 @@ describe("a node waits on its hard dependencies", () => {
     expect(offeredKindsFor(PAIR, B)).toEqual([]);
   });
 
-  it("releases the dependent node the moment its dependency is ACCEPTED", () => {
+  // PIN MOVED (UnAI 2026-09-19): this arm used to release b the moment a was ACCEPTED. That is
+  // the rule that cut dependents' trees before their dependency was on the project branch.
+  it("holds the dependent while its ACCEPTED dependency has no landing, then releases it once the landing is on the project branch", () => {
     accept(A);
+    // The producer's own step is COMMITTED at acceptance: that part of the surface did not move.
+    expect(stepFor(PAIR, A)).toMatchObject({ status: "COMMITTED" });
+    // Accepted, no landing receipt yet: the work is nowhere a dependent could build on.
+    expect(stepFor(PAIR, B)).toMatchObject({ missing: [`depends:${A}`], status: "BLOCKED" });
+    expect(offeredKindsFor(PAIR, B)).toEqual([]);
+
+    // COMMITTED from the project's own checkout (the single-tree layout): already where it
+    // belongs, whatever that branch is called — moe-next's own is `moe/work-<date>`.
+    land(A, commitOn("moe/work-2026-09-18", "1".repeat(40)), null);
     expect(stepFor(PAIR, A)).toMatchObject({ status: "COMMITTED" });
     expect(stepFor(PAIR, B)).toMatchObject({ missing: [], status: "READY" });
     expect(offeredKindsFor(PAIR, B)).toEqual(["review.submit"]);
   });
 
+  it("holds the dependent behind a moe/ branch until the integrator records that exact sha MERGED", () => {
+    const T = "node-dep-tree";
+    const tree: readonly NodeSpec[] = Object.freeze([
+      Object.freeze({ dependsOn: Object.freeze([]), nodeRef: T, title: "Tree" }),
+      Object.freeze({ dependsOn: Object.freeze([T]), nodeRef: "node-dep-tree-child", title: "Child" }),
+    ]);
+    const sha = "2".repeat(40);
+    accept(T);
+    land(T, commitOn("moe/node-dep-tree", sha), null, TREE_OF(T));
+    // COMMITTED on its own branch, nothing recorded: WAITING for the integrator.
+    expect(stepFor(tree, T)).toMatchObject({ status: "COMMITTED" });
+    expect(stepFor(tree, "node-dep-tree-child")).toMatchObject({ missing: [`depends:${T}`], status: "BLOCKED" });
+    expect(offeredKindsFor(tree, "node-dep-tree-child")).toEqual([]);
+
+    // A conflict is not on the project branch either.
+    recordIntegration("NodeBranchConflicted", T, "moe/node-dep-tree", sha);
+    expect(stepFor(tree, "node-dep-tree-child")).toMatchObject({ missing: [`depends:${T}`], status: "BLOCKED" });
+
+    // Merged at that exact sha: the dependent may now be cut from a HEAD that holds the work.
+    recordIntegration("NodeBranchMerged", T, "moe/node-dep-tree", sha);
+    expect(stepFor(tree, "node-dep-tree-child")).toMatchObject({ missing: [], status: "READY" });
+    expect(offeredKindsFor(tree, "node-dep-tree-child")).toEqual(["review.submit"]);
+  });
+
+  it("decides by where the landing was made, and hears a merge the integrator could not name", () => {
+    // A seat may switch branches inside its tree: a `wip` branch there is still not on the
+    // project branch. The integration view drops a MERGED record with no mergeSha; the
+    // dependent must still hear yes, or it waits forever (the sha is already an ancestor).
+    const W = "node-dep-wip";
+    const spec: readonly NodeSpec[] = Object.freeze([
+      Object.freeze({ dependsOn: Object.freeze([]), nodeRef: W, title: "Wip" }),
+      Object.freeze({ dependsOn: Object.freeze([W]), nodeRef: "node-dep-wip-child", title: "After wip" }),
+    ]);
+    const sha = "3".repeat(40);
+    accept(W);
+    land(W, commitOn("wip", sha), null, TREE_OF(W));
+    expect(stepFor(spec, "node-dep-wip-child")).toMatchObject({ missing: [`depends:${W}`], status: "BLOCKED" });
+    recordIntegration("NodeBranchMerged", W, "wip", sha, null);
+    expect(stepFor(spec, "node-dep-wip-child")).toMatchObject({ missing: [], status: "READY" });
+  });
+
+  it("credits a genuine zero-byte delivery, and only that refusal", () => {
+    const NONE = "node-dep-nothing";
+    const OTHER = "node-dep-refused";
+    const zero: readonly NodeSpec[] = Object.freeze([
+      Object.freeze({ dependsOn: Object.freeze([]), nodeRef: NONE, title: "Nothing" }),
+      Object.freeze({ dependsOn: Object.freeze([]), nodeRef: OTHER, title: "Refused" }),
+      Object.freeze({ dependsOn: Object.freeze([NONE]), nodeRef: "node-dep-nothing-child", title: "After nothing" }),
+      Object.freeze({ dependsOn: Object.freeze([OTHER]), nodeRef: "node-dep-refused-child", title: "After refused" }),
+    ]);
+    accept(NONE);
+    accept(OTHER);
+    // NOTHING_TO_COMMIT with no landing intent journaled for the acceptance: the node ran, was
+    // accepted, and owed no bytes (`landedWithNoEffect`) — there is nothing to wait for.
+    land(NONE, null, { code: LANDING_NOTHING_TO_COMMIT, detail: "nothing differed from the baseline" });
+    expect(stepFor(zero, "node-dep-nothing-child")).toMatchObject({ missing: [], status: "READY" });
+    // Any other refusal is work that did not land.
+    land(OTHER, null, { code: "LANDING_BASELINE_MISSING", detail: "no baseline was recorded" });
+    expect(stepFor(zero, OTHER)).toMatchObject({ status: "COMMITTED" });
+    expect(stepFor(zero, "node-dep-refused-child")).toMatchObject({ missing: [`depends:${OTHER}`], status: "BLOCKED" });
+    expect(offeredKindsFor(zero, "node-dep-refused-child")).toEqual([]);
+  });
+
   it("gates the WHOLE chain, not just the frontier's direct parents", () => {
-    // a is accepted (previous arm), b and c are not. A gate that only resolved
-    // the frontier's direct parents would call c READY here, because its own
-    // parent b is listed — the transitive fact is that b is not ACCEPTED.
+    // a is accepted and landed (previous arm), b and c are not. A gate that only
+    // resolved the frontier's direct parents would call c READY here, because its
+    // own parent b is listed — the transitive fact is that b is not ACCEPTED.
     expect(stepFor(CHAIN, A)).toMatchObject({ status: "COMMITTED" });
     expect(stepFor(CHAIN, B)).toMatchObject({ missing: [], status: "READY" });
     expect(stepFor(CHAIN, C)).toMatchObject({ missing: [`depends:${B}`], status: "BLOCKED" });

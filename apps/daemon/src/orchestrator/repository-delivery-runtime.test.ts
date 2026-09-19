@@ -98,12 +98,10 @@ describe("production repository delivery composition", () => {
     await f.runtime.advance();
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ reservation: { phase: "EXECUTING" } });
     f.retire(); await f.runtime.advance();
-    const next = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
-    if (!next.ok || next.handle === null) throw new Error("expected retained repository owner");
-    expect({ facts: readRepositoryDeliveryFacts(f.store, f.projectId, "a"), phase: next.handle.reservation.phase })
-      .toEqual({ facts: "READY", phase: "RESERVED" });
-    expect(next.handle.owner).toEqual(first.handle.owner);
-    expect(next.handle.reservation.baselineId).toBe(first.handle.reservation.baselineId);
+    // Between rounds a CLEAN checkout is given back in the same pass (UnAI 2026-09-19), so a
+    // sibling or the integrator can take it; the retry below re-acquires with a fresh baseline.
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("READY");
+    expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
     expect(readReviewLedger(f.store, f.projectId, "a").accepted).toBeUndefined();
     expect(f.tests()).toBe(0);
     expect(git(f.workspace, "rev-parse", "HEAD")).toBe(head);

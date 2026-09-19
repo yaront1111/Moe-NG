@@ -17,11 +17,13 @@ import { readReviewSubmissionSource } from "../review/review-submission-source.j
 import type { RepositoryExecutionPhase } from "../repository/repository-execution-contracts.js";
 import { describeRepositoryHolder } from "./repository-holder-words.js";
 import { createRepositoryContainmentLedger } from "./repository-containment-witness.js";
+import type { BrokerImageProbe } from "./repository-containment-witness.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
 import { landingVerificationClass } from "./node-lander-verification.js";
 import { createNodeIntegration } from "./node-integration.js";
+import { createDeliveryWithdrawal, ownsDirtIn } from "./node-delivery-withdrawal.js";
 import { landedNodeBranches } from "./node-landed-branches.js";
 import { createNodePublisher, pendingPublication } from "./node-publisher.js";
 import type { ReleasePublisher } from "../release/release-decide-service.js";
@@ -37,6 +39,8 @@ interface RepositoryDeliveryRuntimeConfig {
   readonly publisher?: ReleasePublisher;
   /** The Windows Job broker that owns this runtime's Job; null or absent = unnamed, never inferred from. */
   readonly runtimeBrokerPid?: number | null;
+  /** Asks the OS whether a recorded broker pid still runs the broker image; absent means it cannot say. */
+  readonly brokerImageAt?: BrokerImageProbe;
   readonly compiledWorkspace: string | null;
   readonly fence: AgentSessionFence;
   readonly landingOn: boolean;
@@ -93,14 +97,20 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   const landerFor = (nodeRef: string, root: string, baselineId: string | null, reservationHandle?: RepositoryExecutionHandle) => createNodeLander({
     git, verifiedWorkspace, nodeMission: missionIn(root), nodes: () => [{ nodeRef }], projectId, store,
     baselineId: () => baselineId,
+    // Whose HEAD decides whether a seat's own commit on a node branch is still unmerged work.
+    projectRoot: config.compiledWorkspace,
     ...(reservationHandle === undefined ? {} : { reservationHandle }),
   });
   let closed = false;
-  // `baseline` is retried on the wrapper's timer, so one checkpoint is attempted per node per
-  // UNCHANGED dirty set: re-running a failing commit against the operator's repository every few
-  // seconds would turn one bug into a write storm. The key is the dirty set itself, so the attempt
-  // re-arms as soon as that set changes. The prior outcome is kept so every later pass still shows
-  // the operator the DISTINCT actionable code instead of an opaque repeating refusal.
+  // `baseline` is retried on the wrapper's timer, so a FAILED checkpoint is attempted once per node
+  // per unchanged set of dirty paths: re-running a failing commit against the operator's repository
+  // every few seconds would turn one bug into a write storm. The key is the path names, so the
+  // attempt re-arms when that set changes. The prior outcome is kept so every later pass still
+  // shows the operator the DISTINCT actionable code instead of an opaque repeating refusal.
+  // A checkpoint that WORKED is never remembered. The key holds no content, so the same file
+  // edited again is the same key: a node withdrawn after TRACKED_RUNTIME_METADATA_DIRTY (UnAI
+  // 2026-09-19) comes back through this gate on the same path, and a remembered success refused
+  // it REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE on every pass under a line that said CHECKPOINTED.
   const metadataCheckpoints = new Map<string, { attempt: string; outcome: string }>();
   const checkpointMetadata = async (nodeRef: string, workspace: string, paths: readonly string[]): Promise<boolean> => {
     const attempt = paths.join("\0");
@@ -110,7 +120,8 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       return false;
     }
     const report = await checkpointRuntimeMetadata({ git, nodeRef, paths, workspace });
-    metadataCheckpoints.set(nodeRef, { attempt, outcome: report.outcome });
+    if (report.ok) metadataCheckpoints.delete(nodeRef);
+    else metadataCheckpoints.set(nodeRef, { attempt, outcome: report.outcome });
     config.log(`[lander] ${nodeRef}: ${report.outcome} (${report.detail})`);
     return report.ok;
   };
@@ -127,7 +138,7 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     // Deliveries leave a free repository to an approved publish that has not held it yet; the
     // publisher (below) runs after the delivery pass and would otherwise lose every race.
     publishWaiting: () => config.compiledWorkspace === null ? null : pendingPublication(store, projectId),
-    containment: createRepositoryContainmentLedger(store, config.runtimeBrokerPid ?? null),
+    containment: createRepositoryContainmentLedger(store, config.runtimeBrokerPid ?? null, config.brokerImageAt),
     // A probe that throws reads as "not clean": any throw inside advance blocks the reservation.
     clean: async (root) => {
       try {
@@ -158,13 +169,19 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       if (dirtyMetadata.length > 0 && await checkpointMetadata(nodeRef, brief.workspace, dirtyMetadata)) {
         observed = await git.observe(brief.workspace);
       }
-      if (!observed.ok || observed.observation.entries.length !== 0) {
+      // GATE B HAS ONE EXIT: a node whose refused landing was withdrawn, in the workspace that still
+      // holds its own accepted, uncommitted work (`ownsDirtIn`). Refusing it admission over that
+      // work would strand it for good: nobody else may commit it and no seat could reach it (UnAI
+      // 2026-09-19). Every other node on the same dirt is refused exactly as before.
+      const dirty = !observed.ok || observed.observation.entries.length !== 0;
+      const ownDirt = dirty && observed.ok && ownsDirtIn(store, projectId, nodeRef, brief.workspace);
+      if (dirty && !ownDirt) {
         config.log(observed.ok
           ? `[lander] ${nodeRef}: BASELINE_WORKSPACE_DIRTY (${observed.observation.entries.length} changed paths). Review git status --short and checkpoint existing work before execution; Moe rechecks automatically.`
           : `[lander] ${nodeRef}: ${observed.code} (${observed.detail}); Moe rechecks repository admission automatically.`);
         return null;
       }
-      const report = await landerFor(nodeRef, root, null).baseline(nodeRef);
+      const report = await landerFor(nodeRef, root, null).baseline(nodeRef, ownDirt);
       config.log(`[lander] ${report.nodeRef}: ${report.outcome} (${report.detail})`);
       return report.baselineId ?? null;
     },
@@ -205,7 +222,9 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     clock: () => new Date().toISOString(),
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
     projectId, repository, store, storeId, workspace: config.compiledWorkspace });
-  const close = (): Promise<void> => { closed = true; return criteria.close(); };
+  const withdrawal = createDeliveryWithdrawal({ log: config.log, nodes: config.nodes,
+    projectWorkspace: config.compiledWorkspace, repository, verifier: config.verifier });
+  const close =(): Promise<void> => { closed = true; return criteria.close(); };
   const start: (spawn: AgentSpawnStart) => AgentSpawnStart = (spawn) => async (request) => {
     if (closed) return deliveryRefusal("REPOSITORY_DELIVERY_CLOSED");
     if (request.kind === "node.deliver" && !config.landingOn) return deliveryRefusal("REPOSITORY_DELIVERY_LANDING_REQUIRED");
@@ -213,6 +232,10 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   };
   const advance = async (): Promise<void> => {
     if (closed) return;
+    // FIRST, so a node whose delivery failed is READY before this same pass staffs and integrates:
+    // withdrawn, it is out of the integrator's candidates below and the branches that waited
+    // behind its conflict merge now rather than a pass later (UnAI 2026-09-19).
+    withdrawal.scanOnce();
     await coordinator.advance();
     if (closed) return;
     await criteria.advance();

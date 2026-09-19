@@ -110,13 +110,21 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
   }
   if (ledger.replanned) return refuse(request.kind, "REVIEW_NODE_REPLANNED", "DAEMON_PREREQUISITE");
-  if (ledger.accepted !== undefined) return refuse(request.kind, "REVIEW_ALREADY_ACCEPTED", "DAEMON_PREREQUISITE");
+  const source = context.verifierFailureSource;
+  const verifierFailure = findings.length > 0 && verifierFailureSourceMatches(source, ledger);
+  // An acceptance is final to every caller but one: the host's own failed round naming the exact
+  // accepted receipt it withdraws. Before it, accepted work that then failed to deliver left its
+  // node accepted forever, with nothing landed and no seat ever staffed again (UnAI 2026-09-19).
+  // `withdraws` is host-only like the source that carries it; SUBMIT_PAYLOAD_KEYS keeps both off
+  // the wire.
+  if (ledger.accepted !== undefined && !(verifierFailure && source?.withdraws !== undefined)) {
+    return refuse(request.kind, "REVIEW_ALREADY_ACCEPTED", "DAEMON_PREREQUISITE");
+  }
   // Design 15.2: reaching the limit creates a REVIEW_ESCALATION blocker, and a blocker blocks.
   // The kernel is stateless about what happens next — it would happily route a fourth round to
   // ESCALATE again — so the durable consequence is the composition's to enforce.
   const continuation = reviewContinuationForSubmission(ledger, request.projectId, subjectRef, round);
-  const verifierFailure = findings.length > 0 && verifierFailureSourceMatches(context.verifierFailureSource, ledger);
-  if (context.verifierFailureSource !== undefined && !verifierFailure) {
+  if (source !== undefined && !verifierFailure) {
     return refuse(request.kind, "REVIEW_VERIFIER_RECEIPT_STALE", "DAEMON_PREREQUISITE");
   }
   // At the final allowed submission the host may append its one terminal diagnostic.
@@ -136,7 +144,15 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   if (!recorded.ok) return refuseFromKernel(request.kind, recorded.code, recorded.layer);
   const { lineage, routing } = recorded.value;
   const result = {
-    ...(verifierFailure ? { verifierFailureSource: context.verifierFailureSource } : {}),
+    // The stored source stays the exact 3-key triple the fold matches; a withdrawal travels
+    // beside it. It has two readers: the fold (review-read-model.ts), which alone acts on it, and
+    // the replan history (planning/replan-guidance-history.ts), which only excuses its version gap.
+    ...(verifierFailure && source !== undefined ? {
+      verifierFailureSource: {
+        aggregateVersion: source.aggregateVersion, decisionId: source.decisionId, resultSha256: source.resultSha256,
+      },
+      ...(source.withdraws === undefined ? {} : { withdrawsAcceptance: source.withdraws }),
+    } : {}),
     ...(continuation === undefined ? {} : { continuation }),
     ...(prepared === undefined ? {} : { submissionEvidence: prepared.evidence }),
     lineage,

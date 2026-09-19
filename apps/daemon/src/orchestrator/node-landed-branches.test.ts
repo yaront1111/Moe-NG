@@ -8,7 +8,7 @@ import {
 import { recordLandingReceipt } from "../repository/landing-ledger.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import {
-  calibration, envelope, packageItems, policyInput, submitPayload,
+  calibration, envelope, finding, packageItems, policyInput, submitPayload,
 } from "../review/review-test-fixtures.js";
 import { runReviewCommand } from "../review/review-services.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, recordVerifierReceipt } from "../review/verifier-receipt-ledger.js";
@@ -39,13 +39,14 @@ function world(): { readonly apiRef: string; readonly uiRef: string; readonly st
   };
 }
 
-/** A real accepted verifier receipt for one node, through the review command path. */
+/** A real accepted verifier receipt for one node, through the review command path; its next clean round. */
 function accept(store: SqliteEventStore, nodeRef: string): string {
   const review = (kind: string, version: number, payload: Record<string, unknown>): { ok: boolean } =>
     runReviewCommand(store, new TextEncoder().encode(JSON.stringify({
       ...envelope(kind, version, payload), projectId: PROJECT_ID,
     })));
-  expect(review("review.submit", 0, submitPayload(1, [], { subjectRef: nodeRef })).ok).toBe(true);
+  const before = readReviewLedger(store, PROJECT_ID, nodeRef);
+  expect(review("review.submit", before.version, submitPayload(before.lineage.highestRound + 1, [], { subjectRef: nodeRef })).ok).toBe(true);
   const source = readReviewLedger(store, PROJECT_ID, nodeRef).rounds.at(-1);
   if (source === undefined) throw new Error("no review round to attest");
   const verified = recordVerifierReceipt(store, {
@@ -99,6 +100,39 @@ it("offers nothing for work that landed on the project's own branch", () => {
   land(w.store, w.apiRef, accept(w.store, w.apiRef), "master", "2".repeat(40));
 
   expect(landedNodeBranches(w.store, PROJECT_ID, [{ nodeRef: w.apiRef }])).toEqual([]);
+});
+
+/** The host's withdrawal round (node-delivery-withdrawal.ts), through the same seam it uses. */
+function withdraw(store: SqliteEventStore, nodeRef: string, verifierReceiptId: string): void {
+  const ledger = readReviewLedger(store, PROJECT_ID, nodeRef);
+  const latest = ledger.rounds.at(-1);
+  if (latest === undefined) throw new Error("no accepted round to withdraw");
+  expect(runReviewCommand(store, new TextEncoder().encode(JSON.stringify({
+    ...envelope("review.submit", ledger.version, submitPayload(latest.round + 1, [finding()], { subjectRef: nodeRef }), "cmd-withdraw"),
+    projectId: PROJECT_ID,
+  })), undefined, undefined, { aggregateVersion: latest.aggregateVersion, decisionId: latest.decisionId,
+    resultSha256: latest.resultSha256, withdraws: verifierReceiptId }).ok).toBe(true);
+}
+
+// UnAI 2026-09-19: a conflicted node stayed a candidate forever, so the integrator's halt never
+// lifted. Withdrawn, it offers nothing; its old COMMITTED receipt is not the current acceptance's.
+it("offers nothing for a withdrawn node, and its NEW sha once it is accepted and landed again", () => {
+  const w = world();
+  const first = accept(w.store, w.apiRef);
+  land(w.store, w.apiRef, first, "moe/node-api-tree", "1".repeat(40));
+  withdraw(w.store, w.apiRef, first);
+
+  expect(readReviewLedger(w.store, PROJECT_ID, w.apiRef)).toMatchObject({ accepted: undefined, unreadable: false });
+  expect(landedNodeBranches(w.store, PROJECT_ID, [{ nodeRef: w.apiRef }])).toEqual([]);
+
+  const second = accept(w.store, w.apiRef);
+  expect(second).not.toBe(first);
+  // Accepted again but not landed again: the first landing answers for the first acceptance only.
+  expect(landedNodeBranches(w.store, PROJECT_ID, [{ nodeRef: w.apiRef }])).toEqual([]);
+  land(w.store, w.apiRef, second, "moe/node-api-tree", "3".repeat(40));
+
+  expect(landedNodeBranches(w.store, PROJECT_ID, [{ nodeRef: w.apiRef }]))
+    .toEqual([{ branch: "moe/node-api-tree", nodeRef: w.apiRef, sha: "3".repeat(40) }]);
 });
 
 it("offers nothing for an accepted node that has not landed, or an unknown node", () => {
