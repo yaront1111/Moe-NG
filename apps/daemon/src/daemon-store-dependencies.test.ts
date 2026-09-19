@@ -835,54 +835,10 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],
-      // The kind SET, not its size: a bare count lands every registration as an
-      // off-by-one naming nothing. A new command writes its own kind here.
-      registryKinds: [
-        "approval.decide", "approval.decide_intent",
-        "criterion_check.approve", "criterion_check.verify",
-        "cutover.activate",
-        "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
-        // The design authoring wire (task-06ac0da1): a SEAT kind, unlike its neighbours here.
-        "design.submit",
-        "effect.activate",
-        // The two OPERATOR-ONLY environment writes (task-a2409cba), served by their own edge.
-        "environment.set_variable", "environment.unset_variable",
-        "escalation.decide", "events.resume", "foundation.dispatch",
-        "foundation.verification",
-        // 0b53ccc5: the "Abandon the product" wire. SORTED, so it files before `goal.close`.
-        "goal.cancel",
-        "goal.close",
-        "goal.create",
-        "goal.create_with_source",
-        "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
-        "graph.request_expansion", "graph.supersede",
-        "integration.accept_output", "journal.append",
-        // The OPERATOR-ONLY probe-interval write (task-eb37494e), served by its own edge through
-        // the interval record. This roster is SORTED, so it files between `journal.append` and
-        // `plan.propose` rather than at the end of the PAYLOAD_KEYS table it is appended to.
-        // And the OPERATOR-ONLY retirement write (task-509f0437), served by its own edge through
-        // the retirement record. Sorted BEFORE the interval kind despite being APPENDED to the
-        // PAYLOAD_KEYS table after it, which is the difference this roster's sort exists to absorb.
-        "monitoring.retire_environment",
-        "monitoring.set_probe_interval",
-        "plan.propose", "planning.submit_decomposition", "policy.install",
-        "policy.validate", "preview.decide", "preview.start",
-        "product_contract.answer_clarification", "product_contract.approve_gate_1",
-        "product_contract.ask_clarification", "product_contract.propose_revision",
-        "product_contract.sync_env_example",
-        "project.activate", "project.bind_repository", "project.register",
-        "project.set_agent_provider",
-        "provider.probe", "qualification.replan", "recovery.complete",
-        "release.decide", "repository.bootstrap", "repository.publish",
-        // The OPERATOR-ONLY resolve of an UNKNOWN publish (task-2c3f878b), async-served.
-        "repository.publish_resolve", "repository.recover",
-        "resource.confirm_released", "resource.reconcile",
-        "review.submit",
-        "session.close", "session.open", "session.renew",
-        "step.checkpoint", "step.finish", "step.start",
-        "work.claim", "work.release",
-        "work.renew", "work.resume",
-      ],
+      // The kind SET, not its size: a bare count lands every registration as an off-by-one
+      // naming nothing. The shipped child's registry against the vocabulary table, both ways;
+      // the table's members are pinned once, as ROWS in daemon-command-vocabulary.test.ts.
+      registryKinds: Object.keys(PAYLOAD_KEYS).sort(),
       sameEffect: true,
       sameSchedules: true,
       scheduleRegistration: { ok: true },

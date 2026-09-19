@@ -382,46 +382,9 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
   });
 
   it("serves approval.decide from the registry while MCP neither advertises nor serves it", () => {
-    // The operator-only class less `session.open` (the operator's own scoped-session mint over
-    // the bearer-authorized MCP HTTP path); production derives this from the vocabulary.
-    const expectedExclusions: readonly string[] = Object.freeze([
-      "project.set_agent_provider",
-      "criterion_check.approve", "criterion_check.verify", "repository.recover",
-      "approval.decide", "approval.decide_intent", "cutover.activate", "escalation.decide",
-      // Abandoning a stuck product is the operator's act, so writing it over MCP is never
-      // reachable — derived from OPERATOR_PRINCIPAL_KINDS like the rest, never typed here.
-      "goal.cancel", "goal.close",
-      "graph.approve", "graph.supersede", "integration.accept_output", "preview.decide",
-      "product_contract.answer_clarification", "repository.publish", "resource.confirm_released",
-      // Landed by task-a2409cba: writing a production secret is never reachable over MCP.
-      "environment.set_variable", "environment.unset_variable",
-      // Creating a repository at an operator-supplied path. The MCP port authenticates with the
-      // operator bootstrap credential, so an advertised operator kind would let an agent arrive
-      // AS THE OPERATOR — the exclusion is derived from OPERATOR_PRINCIPAL_KINDS, not typed here.
-      "repository.bootstrap",
-      "release.decide", "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
-      // Committing in the operator's own product repository; derived from
-      // OPERATOR_PRINCIPAL_KINDS like the rest, never typed into the allowlist.
-      "product_contract.sync_env_example",
-      // Asking for a product preview runs the product on the daemon's host, so it is the
-      // operator's act and never an agent's. Derived from OPERATOR_PRINCIPAL_KINDS like the rest.
-      "preview.start",
-      // task-eb37494e. Re-timing the production health probe is the operator's act. Derived from
-      // OPERATOR_PRINCIPAL_KINDS like every entry above, never typed into the allowlist -- which
-      // is exactly why this transcription grew by ADDING the kind rather than by relaxing the
-      // length pin: the pin is what proves the derivation moved when the vocabulary did.
-      "monitoring.set_probe_interval",
-      // task-509f0437, and it grew this transcription the same way and for the same reason:
-      // retiring an environment ends its monitoring, so it joined OPERATOR_PRINCIPAL_KINDS and
-      // the exclusion followed by derivation with no edit to the production array.
-      "monitoring.retire_environment",
-      // task-2c3f878b. Resolving an UNKNOWN publish is the operator's assertion about their own
-      // remote; it joined OPERATOR_PRINCIPAL_KINDS and the exclusion followed by derivation.
-      "repository.publish_resolve",
-    ]);
-    expect(expectedExclusions).toHaveLength(30);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(30);
-    expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
+    // The kind is on production's exclusion (the operator-only class less `session.open`). The
+    // exclusion's members are pinned once, as `OPERATOR_ONLY` in daemon-command-vocabulary.test.ts.
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("approval.decide");
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);
     // Direction 2: the advertised MCP roster does not carry it, so the witness minted on

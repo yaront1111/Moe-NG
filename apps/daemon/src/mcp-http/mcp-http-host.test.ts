@@ -645,18 +645,15 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
 const ENTRY = "http";
 
 /**
- * The transport-exclusion SWEEP ROSTER for this entry, named as a frozen constant so its
- * denominator can be pinned (epic rail 7) and drilled by deletion (step 7 D4). A sweep that
- * silently generates zero cases passes while testing nothing.
+ * The transport-exclusion SWEEP ROSTER for this entry: production's exclusion, one case per
+ * kind. A sweep that silently generates zero cases passes while testing nothing, so both arms
+ * below prove they generated some; neither pins a count.
  *
- * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
- * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
- * them, so the row's total case count is kinds x entries = 25 x 2 = 50, and the arm below
- * asserts both this file's share and that documented total. These are the vocabulary's
- * operator-only class (`OPERATOR_PRINCIPAL_KINDS`) less `session.open`, which production
- * derives its exclusion from.
+ * Two entries pass wiredMcpToolKinds() INDEPENDENTLY — mcp-main.ts (stdio) and
+ * mcp-http/mcp-http-host.ts (http) — and each file sweeps its own; this one covers http. The
+ * members are the vocabulary's operator-only class (`OPERATOR_PRINCIPAL_KINDS`) less
+ * `session.open`, pinned once, by hand, as `OPERATOR_ONLY` in `daemon-command-vocabulary.test.ts`.
  */
-const MCP_TRANSPORT_ENTRY_COUNT = 2;
 const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
 
@@ -687,14 +684,10 @@ describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
         observed.push({ body: await within(`body ${kind}`, response.text()), kind });
       }
 
-      // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-      // 29 since `goal.cancel` landed (0b53ccc5): the exclusion set is DERIVED from the
-      // operator-only kinds, so an operator act added to the vocabulary joins it automatically.
-      // The count is pinned so that growth has to be looked at, not so that it cannot happen.
-      // 30 since `repository.publish_resolve` joined the operator-only kinds (task-2c3f878b).
-      expect(EXCLUSION_CASES.length).toBe(30);
+      // The sweep must have GENERATED cases, and answered every one: a zero-case loop passes
+      // vacuously. Growth is looked at in the operator census, not by a count here.
+      expect(EXCLUSION_CASES.length).toBeGreaterThan(0);
       expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-      expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(60);
       expect(observed).toHaveLength(EXCLUSION_CASES.length);
       for (const { body, kind } of observed) {
         expect({ denied: body.includes("CAPABILITY_DENIED"), kind })
@@ -723,7 +716,7 @@ describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
       )));
       const body = await within("tools/list body", response.text());
 
-      expect(EXCLUSION_CASES.length).toBe(30);
+      expect(EXCLUSION_CASES.length).toBeGreaterThan(0);
       for (const { kind } of EXCLUSION_CASES) {
         expect({ advertised: body.includes(`"${toolLabelForKind(kind)}"`), kind })
           .toEqual({ advertised: false, kind });

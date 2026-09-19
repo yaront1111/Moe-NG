@@ -208,56 +208,17 @@ describe("the stdio host lifecycle", () => {
 const ENTRY = "stdio";
 
 /**
- * The transport-exclusion SWEEP ROSTER for this entry, named as a frozen constant so its
- * denominator can be pinned (epic rail 7) and drilled by deletion (step 7 D4). A sweep that
- * silently generates zero cases passes while testing nothing.
+ * The transport-exclusion SWEEP ROSTER for this entry: production's exclusion, one case per
+ * kind. A sweep that silently generates zero cases passes while testing nothing, so the arm
+ * below proves it generated some; it pins no count.
  *
- * MCP_TRANSPORT_ENTRY_COUNT is 2 — `composeStdioServer` (stdio) and `createMcpHttpHost`
- * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
- * them, so the row's total case count is kinds x entries = 26 x 2 = 52, and the arm below
- * asserts both this file's share and that documented total.
+ * Two entries pass wiredMcpToolKinds() INDEPENDENTLY — `composeStdioServer` (stdio) and
+ * `createMcpHttpHost` (http) — and each file sweeps its own; this one covers stdio.
  *
- * HAND-WRITTEN: the operator-only kinds of `OPERATOR_PRINCIPAL_KINDS` less `session.open` (the
- * operator's own scoped-session mint over the bearer-authorized MCP HTTP path). Production
- * derives its exclusion from that set, so this literal is the independent side of the comparison.
+ * NOT A TRANSCRIPTION. The members are pinned once, by hand, as `OPERATOR_ONLY` in
+ * `daemon-command-vocabulary.test.ts`; `mcp-tool-allowlist.test.ts` pins the relation (that
+ * set less `session.open`). What this file proves is the stdio entry's handling of each one.
  */
-const MCP_TRANSPORT_ENTRY_COUNT = 2;
-const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
-  "project.set_agent_provider",
-  "criterion_check.approve", "criterion_check.verify", "repository.recover",
-  "approval.decide",
-  "approval.decide_intent",
-  "escalation.decide",
-  "product_contract.answer_clarification",
-  "cutover.activate",
-  // 0b53ccc5 added `goal.cancel` as an operator-only kind, so the DERIVED exclusion grew and
-  // this hand transcription did not. Abandoning a product is a human act on the same terms
-  // as closing one.
-  "goal.cancel",
-  "goal.close",
-  "graph.approve",
-  "graph.supersede",
-  "integration.accept_output",
-  "preview.decide",
-  "environment.set_variable",
-  "environment.unset_variable",
-  "repository.bootstrap",
-  "repository.publish",
-  "release.decide", "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
-  "product_contract.sync_env_example",
-  "preview.start",
-  "resource.confirm_released",
-  // task-eb37494e: re-timing the production health probe is the operator's act. This literal is
-  // the INDEPENDENT side of the comparison, so it is hand-written here even though production
-  // derives the exclusion from OPERATOR_PRINCIPAL_KINDS.
-  "monitoring.set_probe_interval",
-  // task-509f0437: retiring an environment ends its monitoring, so it is the operator's act on
-  // the same standing. Hand-written here for the same independence reason as the kind above.
-  "monitoring.retire_environment",
-  // task-2c3f878b: resolving an UNKNOWN publish is the operator's assertion about their own
-  // remote. Hand-written here for the same independence reason as the two kinds above.
-  "repository.publish_resolve",
-]);
 const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
 
@@ -271,18 +232,8 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     const allowed = new Set(advertisedNames());
 
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-    // 29 since `goal.cancel` landed (0b53ccc5): the set is DERIVED from the operator-only
-    // kinds, so an operator act joins it automatically. Verified the 29th entry IS goal.cancel.
-    // 30 since `repository.publish_resolve` was wired (task-2c3f878b), by the same derivation.
-    expect(EXCLUSION_CASES.length).toBe(30);
+    expect(EXCLUSION_CASES.length).toBeGreaterThan(0);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(60);
-    const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
-    const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
-    expect(production).toEqual(expected);
-    expect(expected).toEqual(production);
-    expect(EXPECTED_EXCLUDED_COMMAND_KINDS)
-      .toContain("product_contract.answer_clarification");
     expect(MCP_EXCLUDED_COMMAND_KINDS)
       .toContain("product_contract.answer_clarification");
     for (const { kind } of EXCLUSION_CASES) {

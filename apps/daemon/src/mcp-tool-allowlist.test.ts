@@ -223,66 +223,32 @@ describe("wiredMcpToolKinds command half", () => {
   });
 
   /**
-   * ROSTER DENOMINATORS (epic rail 7). These pin the SIZE of the exclusion, not its members,
-   * so a silent shrink is visible even when every membership arm above still passes.
+   * NO DENOMINATOR HERE, AND NO SECOND TRANSCRIPTION. A size pin earned its place only while no
+   * exact membership list existed. The members are now transcribed ONCE, as `OPERATOR_ONLY` in
+   * `daemon-command-vocabulary.test.ts`, whose set equality against `OPERATOR_PRINCIPAL_KINDS`
+   * reds a silent shrink (or a re-admitted approval kind) and NAMES the kind. This arm pins the
+   * RELATION the exclusion must keep to that set, which a new operator kind never moves.
    */
-  it("pins an EXACT, frozen exclusion denominator and the derived roster size", () => {
-    // Independent transcription of every currently served operator-only command except
-    // session.open. Keeping the names catches swaps that preserve the denominator.
-    const expectedExcluded = Object.freeze([
-      "approval.decide", "approval.decide_intent",
-      "criterion_check.approve", "criterion_check.verify", "cutover.activate",
-      "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
-      "environment.set_variable", "environment.unset_variable", "escalation.decide",
-      // Sorted before goal.close: the exclusion is DERIVED from OPERATOR_PRINCIPAL_KINDS and the
-      // derivation sorts, so this independent transcription places it where the sort does.
-      "goal.cancel", "goal.close",
-      "graph.approve", "graph.supersede", "integration.accept_output",
-      // task-eb37494e wired the kind for dispatch, and the exclusion followed BY DERIVATION from
-      // OPERATOR_PRINCIPAL_KINDS -- precisely the movement the lockstep arm at the foot of this
-      // file exists to force. In SORTED position, because the derivation sorts.
-      // task-509f0437 wired the kind for dispatch and the exclusion followed BY DERIVATION in the
-      // same way -- no member was hand-added to this production array; only this INDEPENDENT
-      // transcription of it moved. Sorted BEFORE the interval kind, because the derivation sorts.
-      "monitoring.retire_environment",
-      "monitoring.set_probe_interval",
-      "preview.decide", "preview.start", "product_contract.answer_clarification",
-      "product_contract.sync_env_example", "project.set_agent_provider", "release.decide",
-      // task-2c3f878b: resolving an UNKNOWN publish is the operator's assertion about their own
-      // remote. Excluded BY DERIVATION from OPERATOR_PRINCIPAL_KINDS, never hand-added there.
-      "repository.bootstrap", "repository.publish", "repository.publish_resolve",
-      "repository.recover", "resource.confirm_released",
-    ]);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(expectedExcluded);
-    // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
-    // re-admitting one approval kind to MCP, which is the precise regression this row exists
-    // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(30);
+  it("excludes exactly the operator-only kinds but session.open, frozen, and derives the roster size", () => {
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
     // roster with no edit here. `session.open` is the documented exception.
     const operatorOnly = [...OPERATOR_PRINCIPAL_KINDS].filter((kind) => kind !== "session.open").sort();
+    expect(operatorOnly.length).toBeGreaterThan(0);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual(operatorOnly);
     for (const kind of operatorOnly) expect(wiredMcpToolKinds()).not.toContain(kind);
     expect(wiredMcpToolKinds()).toContain("session.open");
 
-    // The DERIVED denominator, from live imports on both sides, so it stays true as the
-    // vocabulary grows and reds the moment the subtraction stops happening.
+    // The DERIVED roster size, from live imports on both sides, so it stays true as the
+    // vocabulary grows and reds the moment the subtraction stops happening. Each term's members
+    // are pinned elsewhere: the vocabulary census, the operator census, and arm Q1's
+    // served == advertised query equality.
     expect(wiredMcpToolKinds().length).toBe(
       Object.keys(PAYLOAD_KEYS).length
       - MCP_EXCLUDED_COMMAND_KINDS.length
       + MCP_SERVED_QUERY_KINDS.length,
     );
-    // Independent count witness: the current surface has 62 commands, subtracts the exact
-    // 25-member exclusion above, and adds seven queries. Schema rollback joins both the
-    // vocabulary and the exclusion, so it adds no agent-facing command.
-    expect({
-      excluded: MCP_EXCLUDED_COMMAND_KINDS.length,
-      queries: MCP_SERVED_QUERY_KINDS.length,
-      vocabulary: Object.keys(PAYLOAD_KEYS).length,
-      wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 30, queries: 7, vocabulary: 66, wired: 43 });
   });
 
   it("is deterministic and frozen", () => {
@@ -293,12 +259,11 @@ describe("wiredMcpToolKinds command half", () => {
 
 describe("the owner's delegate roster (moe mcp --as-operator)", () => {
   it("partitions the exclusion EXACTLY with the never-delegated list, so a new operator kind reds until classified", () => {
+    // Exact and duplicate-free, so no per-list count: the two production lists ARE the owner's
+    // hand-kept classification, and a count here moved with every new operator kind.
     const classified = [...MCP_DELEGABLE_OPERATOR_KINDS, ...MCP_NEVER_DELEGATED_KINDS].sort();
     expect(classified).toEqual([...MCP_EXCLUDED_COMMAND_KINDS].sort());
     expect(new Set(classified).size).toBe(classified.length);
-    expect({
-      delegable: MCP_DELEGABLE_OPERATOR_KINDS.length, never: MCP_NEVER_DELEGATED_KINDS.length,
-    }).toEqual({ delegable: 15, never: 15 });
     expect(Object.isFrozen(MCP_DELEGABLE_OPERATOR_KINDS)).toBe(true);
     expect(Object.isFrozen(MCP_NEVER_DELEGATED_KINDS)).toBe(true);
   });

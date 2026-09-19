@@ -394,108 +394,14 @@ const ROWS: readonly Row[] = [
 ];
 
 /**
- * The order the registry is BUILT in, transcribed by hand from the `PAYLOAD_KEYS`
- * literal rather than sorted: `buildCommandRegistry` fills a Map, so `keys()` is
- * that literal's key order. `ROWS` above is alphabetical, so a move that reordered
- * the table would agree with it. This one does not.
+ * The kinds the registry gates behind the configured operator principal: PRODUCTION's set, not
+ * a transcription. Its members are pinned once, by hand, as `OPERATOR_ONLY` in
+ * `daemon-command-vocabulary.test.ts`. What this file proves is that the SERVED registry
+ * enforces the set BOTH ways over every wired kind (the gate sweep below): a gated kind answers
+ * the non-operator 403 at DAEMON_AUTHORIZATION, and an open one reaches its own layer. An async
+ * entry that forgets to fence itself reds there by name.
  */
-const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
-  "criterion_check.approve", "criterion_check.verify", "repository.recover",
-  "approval.decide", "approval.decide_intent",
-  "planning.submit_decomposition", "product_contract.answer_clarification",
-  "product_contract.ask_clarification", "product_contract.propose_revision",
-  "events.resume", "work.resume", "effect.activate", "recovery.complete",
-  "product_contract.approve_gate_1", "journal.append",
-  "foundation.dispatch", "foundation.verification", "resource.reconcile",
-  "resource.confirm_released",
-  "step.start", "step.finish", "step.checkpoint", "cutover.activate",
-  "environment.set_variable", "environment.unset_variable",
-  "design.submit",
-  "escalation.decide", "goal.close", "goal.cancel", "goal.create", "goal.create_with_source",
-  "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
-  "graph.request_expansion", "graph.supersede",
-  "integration.accept_output",
-  "plan.propose", "policy.install", "policy.validate", "preview.decide", "preview.start",
-  "project.activate",
-  "project.bind_repository", "project.register", "project.set_agent_provider",
-  "provider.probe", "repository.publish",
-  "release.decide", "product_contract.sync_env_example",
-  "deployment.set_target", "deployment.deploy", "deployment.rollback", "deployment.migrate_down",
-  "repository.bootstrap",
-  "qualification.replan",
-  "review.submit", "session.close", "session.open", "session.renew",
-  "work.claim", "work.release", "work.renew",
-  // APPENDED, and appended for a reason this list already documents: the order here is
-  // `PAYLOAD_KEYS`' key order, and the probe-interval entry was appended THERE rather than filed
-  // beside the deployment kinds it reads like, so that neither this transcription nor the
-  // vocabulary's ROWS had to be rewritten mid-table.
-  "monitoring.set_probe_interval",
-  // task-509f0437, appended after it for exactly the same reason.
-  "monitoring.retire_environment",
-  // task-2c3f878b, appended after it for exactly the same reason.
-  "repository.publish_resolve",
-];
-
-/**
- * The kinds the registry gates behind the configured operator principal, transcribed
- * by hand. The sweep below asserts this set BOTH ways over every wired kind: a kind
- * added here reddens on the twenty that must reach their own family, and a kind
- * dropped reddens on the four that must not.
- */
-const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
-  "project.set_agent_provider",
-  "criterion_check.approve", "criterion_check.verify", "repository.recover",
-  // BOTH approval wires. The intent seam derives the activation witness and the record the
-  // caller-shaped wire used to accept, so gating one and not the other would leave the derived
-  // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
-  "approval.decide", "approval.decide_intent", "escalation.decide", "goal.close",
-  // Abandoning a product is the owner's call, same seat as close.
-  "goal.cancel",
-  // Publishing pushes the operator's repository to the remote the operator named.
-  "repository.publish",
-  "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
-  // Reverting a production schema destroys the data the forward migration created.
-  "deployment.migrate_down",
-  // Writing into and committing in the operator's own product repository is their act.
-  "product_contract.sync_env_example",
-  // The operator ANSWERS a material product question; an agent transport presenting
-  // that answer would be quiet invention with a human label (see the vocabulary set).
-  "product_contract.answer_clarification",
-  // The two graph kinds that MOVE authority: one makes a graph the running one, the other
-  // replaces the running one. Both are the human approve action on their own edge.
-  "graph.approve", "graph.supersede",
-  "integration.accept_output",
-  "resource.confirm_released", "session.open",
-  // The one-way GA activation: ADMIN fences reach, this set fences the human act itself.
-  "cutover.activate",
-  // Deciding a rendered product preview is the operator's own verdict, and its REVIEW
-  // capability is a reach fence an agent can hold -- this set is what makes it human-only.
-  // ASKING for one is the same act on the same terms: it runs the product on the daemon's
-  // host. `preview.start` is served from an ASYNC entry, so this membership keeps it off the
-  // MCP roster while the handler's own entry check is what refuses the dispatch.
-  "preview.decide", "preview.start",
-  // Writing an environment variable hands a production secret to the deploy; ADMIN fences
-  // reach, this set fences the act. Landed by task-a2409cba; transcribed here because the
-  // roster is an exact set and its own row had not backfilled the census yet.
-  "environment.set_variable", "environment.unset_variable",
-  // Creating a product repository at an operator-supplied path, and optionally pushing it to
-  // a GitHub account the operator's own `gh` login owns. ADMIN fences reach; this set is what
-  // makes it the operator's act.
-  "repository.bootstrap",
-  // task-eb37494e. Re-timing the production health probe is the operator's act: too fast and the
-  // probe is the load it was meant to watch for, too slow and an outage ends before the signal
-  // arrives. ADMIN fences reach; this set fences the act, and the MCP exclusion derived from it
-  // is what keeps the kind off a surface the operator bootstrap credential authenticates.
-  "monitoring.set_probe_interval",
-  // task-509f0437. Retiring an environment is the operator's act in a stronger sense still: it
-  // does not re-time the probe, it ENDS it, so the signal an outage would have produced stops
-  // existing. ADMIN fences reach; this set fences the act, and the derived MCP exclusion keeps
-  // the kind off a surface the operator bootstrap credential authenticates.
-  "monitoring.retire_environment",
-  // task-2c3f878b. Resolving an UNKNOWN publish asserts what the operator's own remote holds.
-  // Async-served, so the entry applies this set's check itself (repository/publish-resolve-command.ts).
-  "repository.publish_resolve",
-];
+const OPERATOR_ONLY: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
 
 const CREDENTIAL = "registry-operator-credential";
 const PROJECT = "proj-command-registry";
@@ -1260,10 +1166,9 @@ describe("production command transport stamps", () => {
 
 describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
-    // Pins the swept case count: an it.each over an empty or shortened table
-    // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(66);
-    expect(deps.registry.size).toBe(66);
+    // Exact both ways, so it pins the swept case count too; the guard keeps the it.each sweeps
+    // from passing over an empty table.
+    expect(ROWS.length).toBeGreaterThan(0);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1350,10 +1255,11 @@ describe("registered command table", () => {
   });
 
   it("keeps the registration order the payload table declares", () => {
-    // The sorted-set assertion above cannot see a reordered table, and a move that
-    // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(66);
-    expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
+    // The sorted-set assertion above cannot see a reordered registry: `buildCommandRegistry`
+    // fills a Map, so `keys()` must be the `PAYLOAD_KEYS` literal's own key order. That order
+    // is transcribed by hand ONCE, as ROWS in daemon-command-vocabulary.test.ts, so a reshuffled
+    // literal reds there; this pins the registry to it.
+    expect([...deps.registry.keys()]).toEqual(Object.keys(PAYLOAD_KEYS));
   });
 
   it.each(ROWS)("$kind keeps its capability and ordered payload allow-list", (row) => {
@@ -1522,13 +1428,14 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(31);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(31);
+    it("sweeps every operator-gated kind", () => {
+      // Every gated kind is a characterized row, so the sweep below reaches all of them.
+      expect(OPERATOR_ONLY.size).toBeGreaterThan(0);
+      expect([...OPERATOR_ONLY].filter((kind) => !ROWS.some((row) => row.kind === kind))).toEqual([]);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
-      const gated = OPERATOR_ONLY.includes(row.kind);
+      const gated = OPERATOR_ONLY.has(row.kind);
       const answered = row.asyncOnly === true
         ? await sendAsync(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential)
         : send(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential);
@@ -2234,7 +2141,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(66);
+    expect([...ports.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -2256,7 +2163,6 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(66);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -2288,7 +2194,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(66);
+    expect([...snapshotPorts.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

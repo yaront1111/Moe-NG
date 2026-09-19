@@ -186,8 +186,11 @@ its own: a caller that injects no dependency provider is refused, never served a
   **`FORBIDDEN_FIXTURES.length === 37`** — the second is a deny-list of fixture helper names
   (`streamPort`, `approveNodes`, `exactKeys`, …) that must *not* reach the package root. One
   new export in `index.ts` reds the count arm and the exact-namespace arm together.
-- `daemon-command-vocabulary.test.ts` pins **65 kinds** plus per-family sizes (BOOTSTRAP 18,
-  GRAPH 5, REVIEW 4, SESSION 3, STEP 3, WORK 3, COMPILER 4, …). By contrast
+- `daemon-command-vocabulary.test.ts` holds the ONE hand-written census of the wired kinds
+  (`ROWS`, in `PAYLOAD_KEYS` order) and of the operator-only set (`OPERATOR_ONLY`), by exact
+  set equality and no counts; every other daemon test derives both from production. A new
+  operator kind moves that file, its `ROWS` row in `daemon-command-registry.test.ts`, and its
+  hand classification in `mcp-tool-allowlist.ts` (delegable or never). Similarly
   `gates-roster-coherence.test.ts` deliberately freezes nothing: it enumerates served kinds off
   a real composed registry, asserts served ⊆ advertised (equality is false by design — some
   kinds are advertised and deliberately unserved) and exact set equality against
