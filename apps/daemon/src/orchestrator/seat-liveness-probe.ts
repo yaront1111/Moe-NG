@@ -1,17 +1,18 @@
 /**
- * The seat's LIVENESS PROBE: what the wrapper can observe about a seat that prints nothing.
+ * The seat's LIVENESS PROBE: what the wrapper can observe about a seat's process tree.
  *
- * `claude -p` (and `codex exec -`) write NOTHING until they finish: the final report is the whole
- * of stdout. So bytes-on-stdout, the only activity signal the wrapper had, reads 0 for the seat's
- * entire life, and the wall-clock cap was the only thing that ever ended a hung seat — which also
- * ended working ones. UnAI 2026-09-18: node 6 was killed at exactly 30 min ("agent exceeded
- * 1800000ms; killing") while a bash tool child of claude.exe was alive; node 5 finished with 59 s
- * to spare; every quiet notice in between read "0 bytes seen".
+ * In text mode `claude -p` (and `codex exec -`) wrote NOTHING until they finished: the final
+ * report was the whole of stdout. So bytes-on-stdout, the only activity signal the wrapper had,
+ * read 0 for the seat's entire life, and the wall-clock cap was the only thing that ever ended a
+ * hung seat — which also ended working ones. UnAI 2026-09-18: node 6 was killed at exactly 30 min
+ * ("agent exceeded 1800000ms; killing") while a bash tool child of claude.exe was alive; node 5
+ * finished with 59 s to spare; every quiet notice in between read "0 bytes seen".
  *
- * WHY NOT `--output-format stream-json`: it would make the seat speak as it works, but it changes
- * how the wrapper reads the seat's FINAL REPORT (the bounded tail the exit classifier and the
- * ledger fold read), so that switch is OUT OF SCOPE here. This probe looks at the OS instead: the
- * seat's process tree (a tool child is a descendant) and the tree's cumulative CPU time. ONE
+ * CLAUDE SEATS NOW STREAM (`--output-format stream-json`, task-815f803d): every event is output,
+ * seat-output-tail.ts decodes the stream back to the text-mode report, and the exit classifier
+ * reads the result text exactly as text mode printed it. This probe still supplies what output
+ * cannot: the process tree (a tool child is a descendant) for every seat, and the tree's
+ * cumulative CPU time, evidence for a claude seat and the whole CPU rule for a codex seat. ONE
  * process spawn per tick at the liveness cadence, never per event. seat-liveness.ts turns the
  * samples into a verdict; this file only measures.
  */

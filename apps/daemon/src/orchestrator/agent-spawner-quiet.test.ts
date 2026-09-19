@@ -3,9 +3,10 @@ import { PassThrough } from "node:stream";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { claudeSpawnStarter } from "./agent-spawner.js";
+import { AgentProcessFailureError, claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnerOptions } from "./agent-spawner.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
+import { classifySeatExit, SEAT_EXIT_ROSTER } from "./seat-exit-classifier.js";
 
 /**
  * THE SILENT SEAT.
@@ -23,6 +24,7 @@ import type { SpawnRequest } from "./agent-wrapper.js";
 const MCP_ORIGIN = "http://127.0.0.1:39124";
 
 interface FakeChild {
+  readonly args: readonly string[];
   readonly emitter: EventEmitter;
   readonly stderr: PassThrough;
   readonly stdout: PassThrough;
@@ -33,11 +35,11 @@ function fakeSpawn(): {
   readonly spawn: NonNullable<AgentSpawnerOptions["spawn"]>;
 } {
   const children: FakeChild[] = [];
-  const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = () => {
+  const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (_file, args) => {
     const emitter = new EventEmitter();
     const stdout = new PassThrough();
     const stderr = new PassThrough();
-    children.push({ emitter, stderr, stdout });
+    children.push({ args, emitter, stderr, stdout });
     const child = Object.assign(emitter, {
       kill: vi.fn(),
       pid: 4242,
@@ -210,17 +212,26 @@ describe("a live seat that says nothing", () => {
 /**
  * THE SEAT TIMEOUT WAS A WALL-CLOCK CAP, NOT A LIVENESS TEST (UnAI 2026-09-18).
  *
- * `claude -p` writes nothing until it finishes, so "0 bytes seen" was true of every seat for its
- * whole life and said nothing. Node 6 was killed at exactly 30 min while a bash tool child was
- * alive; node 5 finished with 59 s to spare. These arms drive the spawner with a fake clock and a
- * fake probe: silence (no output, no tool child, flat CPU) kills at MOE_AGENT_SILENCE_MS and names
- * itself; a live tool child holds the seat past that; the absolute cap fires regardless and names
- * what the seat was last seen doing.
+ * A text-mode `claude -p` writes nothing until it finishes, so "0 bytes seen" was true of every
+ * seat for its whole life and said nothing. Node 6 was killed at exactly 30 min while a bash tool
+ * child was alive; node 5 finished with 59 s to spare. These arms drive the spawner with a fake
+ * clock and a fake probe: silence kills at MOE_AGENT_SILENCE_MS and names itself; a live tool
+ * child holds the seat past that; the absolute cap fires regardless and names what the seat was
+ * last seen doing. A claude seat now STREAMS its events (task-815f803d), so its silence is no
+ * event and no tool child, CPU reported only; a codex seat keeps the CPU rule.
  */
 describe("a seat judged on liveness, not on the clock alone", () => {
   const MINUTE = 60_000;
   const SILENCE = 20 * MINUTE;
   const CAP = 2 * 60 * MINUTE;
+  // The measured claude 2.1.277 event shapes (task-815f803d comment-7c263f1c).
+  const STATUS_EVENT = "{\"type\":\"system\",\"subtype\":\"status\",\"status\":\"requesting\"}\n";
+  const INIT_EVENT = `${JSON.stringify({ type: "system", subtype: "init", model: "claude-opus-5", session_id: "s-1" })}\n`;
+  const assistantEvent = (text: string, model: string, extra: Record<string, unknown> = {}): string => `${JSON.stringify({
+    type: "assistant", message: { content: [{ type: "text", text }], model, role: "assistant" }, session_id: "s-1", ...extra })}\n`;
+  const resultEvent = (text: string, extra: Record<string, unknown> = {}): string => `${JSON.stringify({
+    duration_api_ms: 0, is_error: true, result: text, subtype: "success", type: "result", ...extra })}\n`;
+  const BANNER = SEAT_EXIT_ROSTER.find((entry) => entry.id === "claude/rate-limit-429")?.sample ?? "";
 
   function seat(probe: AgentSpawnerOptions["probeActivity"], overrides: Partial<AgentSpawnerOptions> = {}): {
     readonly advance: (ms: number) => void;
@@ -237,6 +248,8 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     const groupKills: number[] = [];
     const { children, spawn } = fakeSpawn();
     const start = claudeSpawnStarter(MCP_ORIGIN, {
+      // Pinned, never read from MOE_AGENT_COMMAND: the silence rule now depends on the provider.
+      command: "claude",
       // Wide enough that a test can advance past a kill without tripping CLOSE_NOT_OBSERVED.
       killGraceMs: 10 * MINUTE,
       killProcessGroup: (pid) => { groupKills.push(pid); },
@@ -265,11 +278,20 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     };
   }
 
-  const admit = async (h: ReturnType<typeof seat>): Promise<void> => {
+  // The exit is WRAPPED: an async function returning a bare promise would wait for the seat to end.
+  const admit = async (h: ReturnType<typeof seat>): Promise<{ readonly exit: Promise<unknown> }> => {
     const started = h.start(request());
     await drain();
     h.spawned[0]?.emitter.emit("spawn");
-    await started;
+    const result = await started;
+    if (!result.ok) throw new Error(`seat refused: ${result.code}`);
+    return { exit: result.exit };
+  };
+  /** What the seat's exit rejected with; a seat that exited cleanly fails the test here. */
+  const failureOf = async (exit: Promise<unknown>): Promise<AgentProcessFailureError> => {
+    const settled = await exit.then(() => undefined, (error: unknown) => error);
+    if (!(settled instanceof AgentProcessFailureError)) throw new Error(`exit did not reject: ${String(settled)}`);
+    return settled;
   };
 
   const killLines = (lines: readonly string[]): string[] => lines.filter((l) => l.includes("killing"));
@@ -318,10 +340,11 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     await h.start.close();
   });
 
-  it("counts any CPU growth as activity, so a silent seat that is computing is not a hung seat", async () => {
+  it("counts any CPU growth as activity for a NON-streaming (codex) seat, so its computing is not a hang", async () => {
     let cpuMs = 0;
-    const h = seat(() => { cpuMs += 125; return { cpuMs, descendants: 2 }; });
+    const h = seat(() => { cpuMs += 125; return { cpuMs, descendants: 2 }; }, { command: "codex", environment: {} });
     await admit(h);
+    expect(h.spawned[0]?.args[0]).toBe("exec");
 
     h.advance(SILENCE + 5 * MINUTE);
 
@@ -333,11 +356,12 @@ describe("a seat judged on liveness, not on the clock alone", () => {
     await h.start.close();
   });
 
-  it("kills at the absolute cap whatever the seat is doing, and names the last activity", async () => {
+  it("kills a NON-streaming (codex) seat at the absolute cap whatever it is doing, and names the last activity", async () => {
     // Computing at every tick for the whole two hours: never silent, still capped.
     let cpuMs = 0;
-    const h = seat(() => { cpuMs += 125; return { cpuMs, descendants: 2 }; });
+    const h = seat(() => { cpuMs += 125; return { cpuMs, descendants: 2 }; }, { command: "codex", environment: {} });
     await admit(h);
+    expect(h.spawned[0]?.args[0]).toBe("exec");
 
     h.advance(CAP);
 
@@ -352,6 +376,148 @@ describe("a seat judged on liveness, not on the clock alone", () => {
 
     h.spawned[0]?.emitter.emit("close", null, "SIGKILL");
     await drain();
+    await h.start.close();
+  });
+
+  it("spawns a claude seat that streams its events: the exact leading argv", async () => {
+    const h = seat(() => ({ cpuMs: 1_000, descendants: 2 }));
+    await admit(h);
+
+    expect(h.spawned[0]?.args.slice(0, 5))
+      .toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
+
+    await retire(h.spawned[0]);
+    await h.start.close();
+  });
+
+  it("kills a streaming seat with no event and no tool child at the silence threshold, CPU growing or not", async () => {
+    // +1.3 s per tick is inside the WORKING band: for a streaming seat CPU is reported, never counted.
+    let cpuMs = 0;
+    const h = seat(() => { cpuMs += 1_300; return { cpuMs, descendants: 2 }; });
+    await admit(h);
+
+    h.advance(SILENCE - MINUTE);
+    expect(h.groupKills).toEqual([]);
+
+    h.advance(MINUTE);
+    expect(h.groupKills).toEqual([-4242]);
+    expect(killLines(h.lines)).toEqual(["[wrapper] project.register@proj-1 killing: silent 20m0s"
+      + " (no output, no tool child, cpu +1.3s since 13:12:04Z); absolute cap 2h0m not reached (age 20m0s)"]);
+
+    h.spawned[0]?.emitter.emit("close", null, "SIGKILL");
+    await drain();
+    await h.start.close();
+  });
+
+  it("keeps a streaming seat that speaks events alive, and hands none of them to the console", async () => {
+    let cpuMs = 0;
+    const stdout = new PassThrough();
+    const h = seat(() => { cpuMs += 1_300; return { cpuMs, descendants: 2 }; },
+      { output: { stderr: new PassThrough(), stdout } });
+    const { exit } = await admit(h);
+
+    // One event half a minute before every tick: the seat is never a whole interval without a byte.
+    for (let minute = 0; minute < SILENCE / MINUTE + 5; minute += 1) {
+      h.advance(MINUTE / 2);
+      h.spawned[0]?.stdout.write(STATUS_EVENT);
+      await drain();
+      h.advance(MINUTE / 2);
+    }
+
+    expect(cpuMs).toBe(1_300 * (SILENCE / MINUTE + 5));
+    expect(killLines(h.lines)).toEqual([]);
+    expect(h.lines.filter((l) => l.includes("seat quiet"))).toEqual([]);
+    expect(stdout.readableLength).toBe(0);
+
+    await retire(h.spawned[0]);
+    expect(await exit).toMatchObject({ exitCode: 0, outputSeen: false, tail: [] });
+    await h.start.close();
+  });
+
+  it("reads a streamed 429 exactly as text mode printed it, so the provider is parked", async () => {
+    const stdout = new PassThrough();
+    const h = seat(() => ({ cpuMs: 1_000, descendants: 2 }), { output: { stderr: new PassThrough(), stdout } });
+    const { exit } = await admit(h);
+    h.spawned[0]?.stdout.write(INIT_EVENT + STATUS_EVENT);
+    h.spawned[0]?.stdout.write(assistantEvent(BANNER, "<synthetic>", { error: "rate_limit", is_api_error_message: true }));
+    h.spawned[0]?.stdout.write(resultEvent(BANNER, { api_error_status: 429, terminal_reason: "api_error" }));
+    await drain();
+    h.spawned[0]?.emitter.emit("close", 1, null);
+
+    const failure = await failureOf(exit);
+    expect(failure.outputSeen).toBe(true);
+    expect(failure.tail).toEqual([BANNER]);
+    expect(stdout.read()).toEqual(Buffer.from(`${BANNER}\n`, "utf8"));
+    expect(classifySeatExit({ exitAt: "2026-09-18T13:13:04.000Z", exitCode: 1, provider: "claude",
+      signal: null, tail: failure.tail })).toMatchObject({ kind: "PROVIDER_LIMIT", matched: "claude/rate-limit-429" });
+
+    await h.start.close();
+  });
+
+  it("never parks the provider on a refusal sentence the model wrote inside an event", async () => {
+    const h = seat(() => ({ cpuMs: 1_000, descendants: 2 }));
+    const { exit } = await admit(h);
+    h.spawned[0]?.stdout.write(INIT_EVENT + assistantEvent("You've hit your usage limit · resets 3am", "claude-opus-5"));
+    h.spawned[0]?.stdout.write(resultEvent("API Error: Connection error."));
+    await drain();
+    h.spawned[0]?.emitter.emit("close", 1, null);
+
+    const failure = await failureOf(exit);
+    expect(failure.tail).toEqual(["API Error: Connection error."]);
+    expect(failure.tail.some((line) => line.includes("usage limit"))).toBe(false);
+    expect(classifySeatExit({ exitAt: "2026-09-18T13:13:04.000Z", exitCode: 1, provider: "claude",
+      signal: null, tail: failure.tail })).toMatchObject({ kind: "FAILED", matched: null });
+
+    await h.start.close();
+  });
+
+  it("settles at close a report the seat never ended with a newline", async () => {
+    const h = seat(() => ({ cpuMs: 1_000, descendants: 2 }));
+    const { exit } = await admit(h);
+    h.spawned[0]?.stdout.write(INIT_EVENT + resultEvent(BANNER, { api_error_status: 429 }).trimEnd());
+    await drain();
+    h.spawned[0]?.emitter.emit("close", 1, null);
+
+    const failure = await failureOf(exit);
+    expect(failure.tail).toEqual([BANNER]);
+    expect(classifySeatExit({ exitAt: "2026-09-18T13:13:04.000Z", exitCode: 1, provider: "claude",
+      signal: null, tail: failure.tail })).toMatchObject({ kind: "PROVIDER_LIMIT", matched: "claude/rate-limit-429" });
+
+    await h.start.close();
+  });
+
+  it("never parks the provider on an event a kill cut mid-write", async () => {
+    const h = seat(() => ({ cpuMs: 1_000, descendants: 2 }));
+    const { exit } = await admit(h);
+    const cut = assistantEvent("You've hit your usage limit · resets 3am", "claude-opus-5").slice(0, 120);
+    expect(cut).toContain("usage limit");
+    h.spawned[0]?.stdout.write(INIT_EVENT + cut);
+    await drain();
+    h.spawned[0]?.emitter.emit("close", null, "SIGKILL");
+
+    const failure = await failureOf(exit);
+    expect(failure.outputSeen).toBe(false);
+    expect(failure.tail).toEqual([]);
+    expect(classifySeatExit({ exitAt: "2026-09-18T13:13:04.000Z", exitCode: null, provider: "claude",
+      signal: "SIGKILL", tail: failure.tail })).toMatchObject({ kind: "FAILED", matched: null });
+
+    await h.start.close();
+  });
+
+  it("says a streaming seat that emitted only protocol events printed nothing", async () => {
+    const h = seat(() => ({ cpuMs: 1_000, descendants: 2 }));
+    const { exit } = await admit(h);
+    h.spawned[0]?.stdout.write(INIT_EVENT + STATUS_EVENT);
+    await drain();
+    h.spawned[0]?.emitter.emit("close", 1, null);
+
+    const failure = await failureOf(exit);
+    expect(failure.outputSeen).toBe(false);
+    expect(failure.tail).toEqual([]);
+    expect(h.lines.filter((l) => l.includes("agent exited"))).toEqual([
+      "[wrapper] project.register@proj-1 agent exited 1 (signal none, output none, closed on its own)",
+    ]);
+
     await h.start.close();
   });
 

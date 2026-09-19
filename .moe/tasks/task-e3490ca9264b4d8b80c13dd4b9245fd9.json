@@ -1,0 +1,27 @@
+{
+  "id": "task-e3490ca9264b4d8b80c13dd4b9245fd9",
+  "epicId": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "title": "bug: pack-artifact-sweep reds on production apps/daemon/src/node-spec-loader.{ts,js} (\"spec\" matches TEST_VOCABULARY); name them in PRODUCTION_EXCEPTIONS",
+  "description": "Filed by worker-69773bc1 during task-815f803d's epic-final regression (not caused by it: no new file names in that diff). Repro: `pnpm exec vitest run tests/integration/distribution/pack-artifact-sweep.test.ts` gives 1 failed | 8 passed. The arm \"refuses every test-shaped file in the tree bar the named production exception\" receives [\"apps/daemon/src/node-spec-loader.js\", \"apps/daemon/src/node-spec-loader.ts\"].\nOrigin: f5d5f4ee (2026-09-18, \"fix(daemon): an unreadable node-spec directory …\") added the production module node-spec-loader.ts plus its .js bridge. The sweep's TEST_VOCABULARY matches \"spec\", while isTestArtifact rightly ships them.\nLikely fix: re-measure, then name both paths in the test's PRODUCTION_EXCEPTIONS (a census pin move). Never widen the matcher.",
+  "definitionOfDone": [
+    "`pnpm exec vitest run tests/integration/distribution/pack-artifact-sweep.test.ts` passes with its `Test Files 1 passed` count line quoted",
+    "node-spec-loader.ts/.js are named as production exceptions (census pin moved), not excluded by widening TEST_VOCABULARY or isTestArtifact"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 15,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-19T00:45:10.102Z",
+  "updatedAt": "2026-09-19T00:45:10.102Z"
+}

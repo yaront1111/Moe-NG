@@ -427,8 +427,8 @@ async function main(): Promise<void> {
         event: "SEAT_LINE",
         write: (line) => { process.stdout.write(`${line}\n`); },
       }),
-      // The OS view of a seat that prints nothing (`claude -p` says nothing until it finishes):
-      // tool children and tree CPU. Silence needs observed stillness; the cap bounds the rest.
+      // The OS view of the seat's tree: tool children for every seat, and tree CPU, activity only
+      // for a non-streaming seat. Silence needs observed stillness; the cap bounds the rest.
       probeActivity: createSeatActivityProbe(process.platform),
       silenceMs: knobs.agentSilenceMs,
       timeoutMs: knobs.agentTimeoutMs,

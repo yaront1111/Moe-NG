@@ -2,10 +2,12 @@
  * The seat's LIVENESS VERDICT: turns output bytes and liveness-probe samples into "when was this
  * seat last seen doing anything, and what was it".
  *
- * "Activity" is any one of: bytes on stdout/stderr; at least one live TOOL CHILD; or the tree's
- * CPU time growing since the previous tick. The spawner kills a seat on SILENCE (no activity for
- * MOE_AGENT_SILENCE_MS) and, separately, at the ABSOLUTE cap (MOE_AGENT_TIMEOUT_MS) whatever it
- * is doing — see agent-spawner.ts. This file never kills; it only measures and describes.
+ * "Activity" is any one of: bytes on stdout/stderr; at least one live TOOL CHILD; or, for a seat
+ * that does not stream, the tree's CPU time growing since the previous tick (a STREAMING claude
+ * seat prints an event while it works, so its CPU is reported, never counted). The spawner kills a
+ * seat on SILENCE (no activity for MOE_AGENT_SILENCE_MS) and, separately, at the ABSOLUTE cap
+ * (MOE_AGENT_TIMEOUT_MS) whatever it is doing — see agent-spawner.ts. This file never kills; it
+ * only measures and describes.
  *
  * TOOL CHILDREN ARE COUNTED ABOVE THE LAUNCHER CHAIN. The probe reports every descendant of the
  * seat pid, and that pid is not the model: on win32 the seat is spawned through cmd.exe (a `.cmd`
@@ -14,14 +16,16 @@
  * the smallest descendant count ever observed for THIS seat is taken as its launcher chain: a
  * seat with no tool open shows exactly that chain, and every process above it is a tool child.
  * The one blind spot is a seat that has had a tool child open at every tick since its first —
- * that seat is judged on CPU growth and output alone, which is exactly the judgement a tool child
- * that has burned no CPU for the whole silence window deserves.
+ * that seat is judged on output (and, when it does not stream, CPU growth) alone, which is exactly
+ * the judgement a tool child that has burned no CPU for the whole silence window deserves.
  *
  * CPU is evidence, never a threshold (human ruling 2026-09-18, task-eca3780d comment-6d395077).
  * Measured on this host through this probe, in ms of tree CPU per ~60 s (comment-a96f4b63): a hung
  * `claude -p` burns 125-547; a working one with no tool child burns 219-1219. The bands overlap,
- * so any growth counts as activity, and a hung seat that still burns CPU is bounded only by the
- * absolute cap. A wasted wait is recoverable; a killed working seat loses its context.
+ * so for a seat that does not stream any growth counts as activity, and a hung one that still
+ * burns CPU is bounded only by the absolute cap. A STREAMING seat's silence is its output instead
+ * (task-815f803d): a hung request emits no event, so it is killed for silence whatever its CPU
+ * does. A wasted wait is recoverable; a killed working seat loses its context.
  */
 import { describeThrownForProbe, isProbeFailure, probeFailure } from "./seat-liveness-probe.js";
 import type { SeatActivityProbe, SeatProbeAnswer } from "./seat-liveness-probe.js";
@@ -37,6 +41,12 @@ export interface SeatLivenessOptions {
    * cap; one transient failure delays a kill by at most one window.
    */
   readonly probe: SeatActivityProbe | undefined;
+  /**
+   * The seat STREAMS its events (a claude seat under stream-json), so it prints while it works and
+   * its output silence is evidence: CPU growth is reported, never counted. Tool children still
+   * count, and an unobserved tick still restarts the count.
+   */
+  readonly streaming?: boolean;
 }
 
 export interface SeatLivenessTick {
@@ -138,7 +148,7 @@ export function createSeatLiveness(options: SeatLivenessOptions): SeatLiveness {
       if (toolChildren > 0) {
         lastActivityAt = at;
         lastActivityKind = parts[1]!;
-      } else if (cpuDelta !== undefined && cpuDelta !== 0) {
+      } else if (!options.streaming && cpuDelta !== undefined && cpuDelta !== 0) {
         lastActivityAt = at;
         lastActivityKind = parts[2]!;
       }

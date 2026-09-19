@@ -91,11 +91,17 @@
       "author": "worker-07e6de2a",
       "content": "Step 1 census STOP (worker-07e6de2a). Prerequisites landed with the expected contracts (baefab32 + 04160615, both DONE/merged). Cannot start step 2.\n\nUNNAMED PIN (this step's stop rule): apps/daemon/src/release/release-receipt-ledger.test.ts:67 `expect(RELEASE_DECIDE_CODES.length).toBe(3)` then records a REFUSED receipt per code. Adding RELEASE_HEAD_IS_BASE reds that file. It is not in any step's affectedFiles. Unique plan paths are already 10; adding it is 11 and submit_plan hard-rejects past 10. Split or swap, do not append.\n\nAlso in NAMED files (amend the step text so the worker is not grading as drift):\n- release-decide-contracts.test.ts:76 `expect(checked).toBe(3)` (step 2 missed this; same file as the :63 pin).\n- release-decide-service.test.ts:483-486 exact Object.keys list + toHaveLength(3) (step 3 owns the file; text does not mention the pins).\n\nPLAN PREMISE FALSE on the card shape: live-release.ts:149 evidenceOf uses effectRecord with an exact 8-key list. live-effect-read.ts:8-13 requires ownKeys.length === keys.length, so a measured remoteDefaultBranch on the wire makes the whole PRESENT body RELEASE_RESPONSE_INVALID. Planning notes said there was no exact-key decoder. File is already in step 4; amend that step to teach evidenceOf 8-or-9 keys (omit when unmeasured). Decoder arms can stay in the already-named test files.\n\nNo product files were edited. Peer dirt includes apps/daemon/CLAUDE.md (this row's step 6 path).",
       "timestamp": "2026-09-19T00:43:05.180Z"
+    },
+    {
+      "id": "comment-f084efe22788476fb252635c1a8099bd",
+      "author": "governor-f32726f9",
+      "content": "GOVERNOR RULING on the step-1 stop: AMEND, DO NOT SPLIT OR SWAP. The census is good work and the stop was correct — all three findings stand — but finding 1's arithmetic rests on a cap that does not exist here.\n\nTHE CAP IS 20, NOT 10. settings.taskSizing.maxDistinctFiles = 20 on this project (read it in get_context.project.settings). submit_plan does NOT hard-reject at 11. The \"10-file cap\" is stale text in the epic rails and older planning notes; this is the third row tonight to stop on it (task-2c3f878b at 12, task-0416061 at 13, now this one at 11). So apps/daemon/src/release/release-receipt-ledger.test.ts:67 is simply added to the owning step as an 11th path. Nothing is split and nothing is swapped out.\n\nWHAT THE ARCHITECT AMENDS, all three of the worker's findings:\n1. Add release-receipt-ledger.test.ts to the step that adds RELEASE_HEAD_IS_BASE, and say its `RELEASE_DECIDE_CODES.length` pin and its per-code REFUSED receipt loop both rotate from the PRINTED expected-vs-received. Never freeze 3 or 4 in the step text.\n2. Name the two pins the step text missed, so the worker is not graded as drift: release-decide-contracts.test.ts:76 `expect(checked).toBe(3)` and release-decide-service.test.ts:483-486 (the exact Object.keys list plus toHaveLength(3)).\n3. Correct the false premise in step 4. live-release.ts:149 evidenceOf DOES go through an exact-key decoder (live-effect-read.ts:8-13 requires ownKeys.length === keys.length), so serving remoteDefaultBranch unconditionally would make the card RELEASE_RESPONSE_INVALID. Accept 8-or-9 keys and OMIT the field when the default is unmeasured. The file is already owned by step 4.\n\nThe worker changed no product files and stopped exactly where the shape rail says to. Nothing here is a fault of theirs.",
+      "timestamp": "2026-09-19T00:43:36.810Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:08:47.382Z",
-  "updatedAt": "2026-09-19T00:43:14.962Z",
+  "updatedAt": "2026-09-19T00:43:36.810Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:09:47.523Z",
     "plannedStepCount": 7,
@@ -125,5 +131,34 @@
   "blockedReason": "Step 1 census STOP — unnamed pin + false plan premise. No product files edited. Prerequisites baefab32 and 04160615 are DONE/merged with the expected contracts; that is not the block.\n\n1. UNNAMED PIN (step 1 stop rule: if a pin appears outside release-decide-contracts.test.ts, stop rather than take the path). apps/daemon/src/release/release-receipt-ledger.test.ts:67 `expect(RELEASE_DECIDE_CODES.length).toBe(3)` then writes a REFUSED receipt per code. Adding RELEASE_HEAD_IS_BASE reds this file. It is in no step's affectedFiles. Unique plan paths are already 10; adding it is 11 and submit_plan hard-rejects past 10. Split or swap; do not append. Comment comment-28a325e7 has the full census.\n\n2. Amend named-file step text so the worker is not graded as drift: contracts.test.ts:76 `expect(checked).toBe(3)` (step 2 missed it); service.test.ts:483-486 exact Object.keys list + toHaveLength(3) (step 3 owns the file).\n\n3. PLAN PREMISE FALSE: live-release.ts:149 evidenceOf uses effectRecord with an exact 8-key list (live-effect-read.ts:8-13 requires ownKeys.length === keys.length). Serving remoteDefaultBranch when measured would make the card RELEASE_RESPONSE_INVALID. Planning notes said there was no exact-key decoder. File is already in step 4; amend that step to accept 8-or-9 keys and omit the field when unmeasured. Decoder arms can stay in already-named tests.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-19T00:43:14.962Z"
+  "blockedAt": "2026-09-19T00:43:14.962Z",
+  "commits": [
+    {
+      "sha": "7ac5fc2bc79f681c2c4bbf606f5fbe12b8325724",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-19T00:37:16Z",
+      "paths": [
+        ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-19T00:43:23.543Z",
+      "treeId": "48f2afcabf9ec5710f2618f79faa141184a87e29",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-0416061566de49939e91bbd6351be79e.json",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-07e6de2a@2026-09-19T00:37:16Z",
+    "at": "2026-09-19T00:43:23.543Z"
+  }
 }

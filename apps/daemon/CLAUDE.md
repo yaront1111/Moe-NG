@@ -94,25 +94,30 @@ its own: a caller that injects no dependency provider is refused, never served a
   tight loop against SQLite and `active < NaN` staffs nothing while the log says idle.
   `sessionTtlMs` is *derived* (`max(claimTtl, agentTimeout) + 60 s`) so the bearer outlives the
   child's own release. `MOE_NODE_TREES=1` and `MOE_WRAPPER_ONCE=1` are the two `=== "1"` flags.
-- **A seat is killed on observed stillness, and only backstopped by the cap.** `claude -p` prints nothing
-  until it finishes, so bytes-on-stdout is 0 for a seat's whole life. `seat-liveness-probe.ts`
-  looks at the OS once per tick (win32: PowerShell CIM `Win32_Process`; POSIX: `ps`) for the
-  seat's descendants and tree CPU; `seat-liveness.ts` calls a seat active on output, on a live
-  tool child (descendants above the smallest count seen — the launcher chain, cmd.exe → model),
-  or on any CPU growth. `MOE_AGENT_SILENCE_MS` (20 min) kills after a whole window of observed
-  ticks with no output, no tool child and no CPU growth at all; `MOE_AGENT_TIMEOUT_MS` (2 h)
-  kills regardless. Each kill line names which limit fired and the last activity seen; the quiet
-  notice carries the same three facts. The tick runs at `min(quietNoticeMs || 60 s, silenceMs)`;
-  `quietNoticeMs: 0` silences the notice only, never the kill. A tick that cannot see the tree
-  (no probe, no pid, a failure or a throw) is neither activity nor silence, so while the probe
-  is blind only the absolute cap can end the seat. CPU is evidence, never a threshold: measured
-  on this host a hung `claude -p` burns 125-547 ms of tree CPU per ~60 s and a working one
-  219-1219 (human ruling 2026-09-18, task-eca3780d), so a hung seat that still burns CPU is
-  bounded by the cap alone. A probe that cannot see the tree answers `{ ok: false, reason }` (a
-  bounded timeout / exit + stderr tail / thrown message), puts `tree unobserved: <reason>` in
-  every later notice, and the spawner's `warn` sink (teed at WARN as `SEAT_PROBE_FAILED`) says
-  so once per seat on the first failed tick. A silence kill line never carries that unobserved
-  reason. Any new `MOE_*` knob the wrapper reads must also join
+- **A seat is killed on observed stillness, and only backstopped by the cap.** Claude seats run
+  `--output-format stream-json --verbose --include-partial-messages`, so every event counts as
+  output; `seat-output-tail.ts` decodes the stream back to the text-mode report, and the console
+  sinks, the bounded tail and the SEAT_EXIT record see only that report (each `result` text, plus
+  non-event lines verbatim). A codex seat still prints nothing until it finishes.
+  `seat-liveness-probe.ts` looks at the OS once per tick (win32: PowerShell CIM `Win32_Process`;
+  POSIX: `ps`) for the seat's descendants and tree CPU; `seat-liveness.ts` calls a seat active on
+  output, on a live tool child (descendants above the smallest count seen — the launcher chain,
+  cmd.exe → model), or, for a codex seat only, on any CPU growth. `MOE_AGENT_SILENCE_MS` (20 min)
+  kills a streaming claude seat after a whole window of observed ticks with no event and no tool
+  child (its CPU is reported only), and a codex seat after no output, no tool child and no CPU
+  growth at all; `MOE_AGENT_TIMEOUT_MS` (2 h) kills regardless. Each kill line names which limit
+  fired and the last activity seen; the quiet notice carries the same three facts. The tick runs
+  at `min(quietNoticeMs || 60 s, silenceMs)`; `quietNoticeMs: 0` silences the notice only, never
+  the kill. A tick that cannot see the tree (no probe, no pid, a failure or a throw) is neither
+  activity nor silence, so while the probe is blind only the absolute cap can end the seat. CPU
+  is evidence, never a threshold: measured on this host a hung `claude -p` burns 125-547 ms of
+  tree CPU per ~60 s and a working one 219-1219 (human ruling 2026-09-18, task-eca3780d), so a
+  hung codex seat that still burns CPU is bounded by the cap alone, while a hung claude request
+  emits no event and is killed for silence (task-815f803d). A probe that cannot see the tree
+  answers `{ ok: false, reason }` (a bounded timeout / exit + stderr tail / thrown message), puts
+  `tree unobserved: <reason>` in every later notice, and the spawner's `warn` sink (teed at WARN
+  as `SEAT_PROBE_FAILED`) says so once per seat on the first failed tick. A silence kill line
+  never carries that unobserved reason. Any new `MOE_*` knob the wrapper reads must also join
   `PROJECT_STACK_ENVIRONMENT_KEYS` in `packages/runner` or the Windows broker drops it silently.
 - **The lease follows liveness.** `claimTtlMs` (30 min, not a knob) is the reap horizon for a
   DEAD child only: while the child lives, `orchestrator/agent-claim-renewal.ts` renews the claim

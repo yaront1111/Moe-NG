@@ -37,7 +37,7 @@ export interface AgentSpawnerOptions {
    */
   readonly quietNoticeMs?: number;
   /**
-   * What the wrapper can see of a seat that prints nothing: its descendants and the tree's CPU
+   * What the wrapper can see of the seat's process tree: its descendants and the tree's CPU
    * time. Absent, every notice says so and those ticks count no silence — only the absolute cap
    * can end the seat. A probe that answers `{ ok: false, reason }` (or throws) is neither
    * activity nor silence for that tick; the reason reaches the notice, and `warn` is called
@@ -45,8 +45,8 @@ export interface AgentSpawnerOptions {
    */
   readonly probeActivity?: SeatActivityProbe | undefined;
   /**
-   * Kill a seat that has shown NO ACTIVITY (no output, no tool child, no CPU growth) for a
-   * whole window of observed ticks. Distinct from `timeoutMs`, the absolute cap behind it.
+   * Kill a seat showing NO ACTIVITY (no output, no tool child, no CPU growth; a streaming claude
+   * seat's CPU never counts) for a whole observed window. Not `timeoutMs`, the cap behind it.
    */
   readonly silenceMs?: number;
   /**
@@ -57,9 +57,9 @@ export interface AgentSpawnerOptions {
   /** Fatal containment failures halt the owning runtime; they are never ordinary agent exits. */
   readonly onFatalContainment?: ((error: AgentProcessContainmentError) => void) | undefined;
   /**
-   * Where the seat's own stdout/stderr are TEED. Production writes the child's raw bytes
-   * straight to the wrapper's console, so the operator sees byte-identical output; a test
-   * substitutes collecting sinks to prove that identity.
+   * Where the seat's own stdout/stderr are TEED. A claude seat's stdout arrives decoded, as exactly
+   * what text mode prints (each result event's text, non-event lines verbatim); stderr and a codex
+   * seat's stdout arrive as raw bytes. A test substitutes collecting sinks to read them.
    */
   readonly output?: {
     readonly stderr: NodeJS.WritableStream;

@@ -18,7 +18,7 @@ import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } 
 import { spawnSeatFor } from "./agent-provider-resolve.js";
 import { createSeatLiveness, formatDuration } from "./seat-liveness.js";
 import type { SeatLivenessTick } from "./seat-liveness.js";
-import { createOutputTail } from "./seat-output-tail.js";
+import { createSeatOutput } from "./seat-output-tail.js";
 import { spawnWindowsTreeKill } from "./seat-tree-kill.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
@@ -38,17 +38,17 @@ const DAEMON_DIR = fileURLToPath(new URL("../..", import.meta.url));
 /**
  * The ABSOLUTE cap, mirrored in wrapper-knobs.ts (MOE_AGENT_TIMEOUT_MS). Two hours, not the
  * claim TTL it used to equal: this bounds a seat that is still ACTIVE and not finishing (a
- * tool loop that never converges, or a hung seat that still burns CPU). A working node's
+ * tool loop that never converges, or a hung codex seat that still burns CPU). A working node's
  * verification lane runs far longer than 30 minutes (UnAI 2026-09-18: node 6 killed at exactly
  * 30 min with a tool child alive, node 5 done with 59 s to spare). Observed stillness is the
- * silence watch; a hung seat that still burns CPU lives until this cap.
+ * silence watch; a hung NON-streaming (codex) seat that still burns CPU lives until this cap.
  */
 const DEFAULT_AGENT_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 /**
- * The SILENCE cap, mirrored in wrapper-knobs.ts (MOE_AGENT_SILENCE_MS): no output, no tool
- * child and no CPU growth, observed for a whole window. Twenty minutes clears the longest
- * single model turn seen live with room to spare, and is short of the old 30-minute cap that
- * was the only thing ending a hang before.
+ * The SILENCE cap, mirrored in wrapper-knobs.ts (MOE_AGENT_SILENCE_MS): no output and no tool
+ * child for a whole observed window, and for a codex seat no CPU growth either (a streaming
+ * claude seat prints an event while it works). Twenty minutes clears the longest single model
+ * turn seen live with room to spare, and is short of the old 30-minute cap that ended a hang.
  */
 const DEFAULT_AGENT_SILENCE_MS = 20 * 60 * 1000;
 const DEFAULT_KILL_GRACE_MS = 5_000;
@@ -61,7 +61,7 @@ const DEFAULT_KILL_GRACE_MS = 5_000;
  * produced one line saying it had timed out, which is the recorded live symptom. `outputSeen`
  * was computed on every chunk and read only at settlement, so the silence was knowable at every
  * instant and observed at none. The notice then said "0 bytes seen" for every seat's whole
- * life, because `claude -p` prints nothing until it finishes — see seat-liveness-probe.ts.
+ * life: a TEXT-mode `claude -p` prints nothing until it finishes (seat-liveness-probe.ts).
  */
 const DEFAULT_QUIET_NOTICE_MS = 60_000;
 /**
@@ -191,6 +191,9 @@ function spawnRuntime(
         "-",
       ] : [
         "-p",
+        // 2.1.277 refuses stream-json under -p without --verbose; partial messages make one long
+        // message speak as it is written (task-815f803d comment-7c263f1c).
+        "--output-format", "stream-json", "--verbose", "--include-partial-messages",
         // Not `--bare`: bare mode authenticates from the environment only and
         // never reads the operator's `claude` sign-in. The isolation bare mode
         // gave is restated flag by flag — no user/project/local settings (so no
@@ -255,8 +258,8 @@ function spawnRuntime(
             }
             : agentEnvironment(options.environment ?? process.env),
           shell: invocation.shell,
-          // All three PIPED: the seat's output is teed below, byte for byte, to the
-          // wrapper's own console AND to a bounded tail the exit is read from.
+          // All three PIPED: the seat's output is teed below to the wrapper's own console AND
+          // to a bounded tail the exit is read from.
           stdio: ["pipe", "pipe", "pipe"],
         });
       } catch (error) {
@@ -273,25 +276,17 @@ function spawnRuntime(
         return;
       }
       childPid = child.pid;
-      // Attached in the SAME TICK as the spawn: a chunk emitted before a listener
-      // exists is lost, and an unread pipe eventually blocks the child.
-      const tail = createOutputTail();
-      const sinks = options.output ?? { stderr: process.stderr, stdout: process.stdout };
-      // Set on the first byte from either stream, so the exit facts state directly whether
-      // the seat ever spoke rather than inferring it from a bounded tail.
-      let outputSeen = false;
-      // Output, tool children and CPU growth all feed one account of when the seat was last seen
-      // doing anything; the silence kill below reads it, the absolute cap ignores it.
+      // Output, tool children and (codex only) CPU growth feed one account of when the seat was
+      // last seen doing anything; the silence kill below reads it, the absolute cap ignores it.
       const startedAt = now();
-      const liveness = createSeatLiveness({ now, pid: child.pid, probe: options.probeActivity });
-      const tee = (sink: NodeJS.WritableStream) => (chunk: Buffer): void => {
-        outputSeen = true;
-        liveness.noteOutput(chunk.length);
-        sink.write(chunk);
-        tail.push(chunk);
-      };
-      child.stdout?.on("data", tee(sinks.stdout));
-      child.stderr?.on("data", tee(sinks.stderr));
+      const liveness = createSeatLiveness({ now, pid: child.pid, probe: options.probeActivity, streaming: !codexSeat });
+      // Attached in the SAME TICK as the spawn: a chunk emitted before a listener exists is lost,
+      // and an unread pipe eventually blocks the child. Every raw byte is activity; the console
+      // and the tail get what a text-mode seat printed (seat-output-tail.ts).
+      const output = createSeatOutput({ onBytes: liveness.noteOutput,
+        sinks: options.output ?? { stderr: process.stderr, stdout: process.stdout }, streamJson: !codexSeat });
+      child.stdout?.on("data", output.stdout);
+      child.stderr?.on("data", output.stderr);
       // The config file carries the agent's credential; it must not outlive the
       // owned process. Every settlement path removes it; a missing file is fine.
       let settled = false;
@@ -326,7 +321,7 @@ function spawnRuntime(
         settled = true;
         cleanup();
         resolve({
-          exitCode: lastClose.code, outputSeen, signal: lastClose.signal, tail: tail.lines(),
+          exitCode: lastClose.code, outputSeen: output.seen(), signal: lastClose.signal, tail: output.tail(),
           // `terminating` is set by beginTermination alone, from its four callers below: the
           // lifetime timer, failInput (an stdin error or a throwing write), a child `error`
           // event after a pid was assigned, and close() through terminateOwned.
@@ -341,7 +336,7 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new AgentProcessFailureError(reason, exitCode, signal, tail.lines(), outputSeen));
+        reject(new AgentProcessFailureError(reason, exitCode, signal, output.tail(), output.seen()));
       };
       const failContainment = (reason: AgentProcessContainmentReason): void => {
         if (settled) return;
@@ -412,10 +407,12 @@ function spawnRuntime(
       terminateOwned = beginTermination;
       const failInput = (): void => { beginTermination(); };
       child.on("close", (code, signal) => {
-        // The line names what the durable record carries: a seat killed at its timeout after
-        // printing nothing must read differently from one that failed on its own.
+        // FIRST: the pipes are closed, so a report line the seat never ended is settled before
+        // anything reads the output. The line names what the durable record carries: a seat
+        // killed at its timeout after printing nothing must read differently from one that failed.
+        output.close();
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`
-          + ` (signal ${signal ?? "none"}, output ${outputSeen ? "seen" : "none"}`
+          + ` (signal ${signal ?? "none"}, output ${output.seen() ? "seen" : "none"}`
           + `, ${terminating ? "terminated by wrapper" : "closed on its own"})`);
         childClosed = true;
         lastClose = { code, signal };
