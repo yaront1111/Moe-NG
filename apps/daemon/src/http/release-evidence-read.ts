@@ -32,7 +32,8 @@
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import { decisionsOf } from "../decision-ledger-memo.js";
-import { readPublishLedger } from "../repository/publish-ledger.js";
+import { readProjectRemote, readPublishLedger } from "../repository/publish-ledger.js";
+import { readRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import type { IntegratedCriterionArtifact } from "../criterion-evidence/criterion-contracts.js";
 import { criterionRows } from "../release/release-dossier.js";
 import type { CriterionRow } from "../release/release-dossier.js";
@@ -91,6 +92,8 @@ export interface ReleaseEvidenceProjection {
   readonly goalTitle: string;
   readonly preview: DossierPreviewDecision | null;
   readonly receipt: ReleaseReceiptProjection | null;
+  /** The default branch the remote itself reported; omitted when never measured or unreadable. */
+  readonly remoteDefaultBranch?: string;
   readonly reviewRounds: readonly DossierReviewRound[];
   /**
    * The PUSHED publication sha this evidence is re-measured at, and the one a decide names —
@@ -139,6 +142,14 @@ export type AncestryFactory = (sha: string) => AncestryPredicate | null;
 
 /** Nothing measured: every landing is UNMEASURABLE, which is what UNKNOWN already means. */
 const UNMEASURED: AncestryPredicate = () => "UNMEASURABLE";
+
+/** Present only as a string; null/unbound/unmeasured omit the key rather than sending null. */
+function remoteDefaultOf(store: SqliteEventStore, projectId: string): string | undefined {
+  const remote = readProjectRemote(store, projectId);
+  if (remote === null) return undefined;
+  const branch = readRemoteDefaultBranch(store, projectId, remote.remoteUrl);
+  return typeof branch === "string" ? branch : undefined;
+}
 
 /** Exported because the HTTP edge answers CAPABILITY_DENIED before it ever reaches the port. */
 export const releaseReadRefusal = (code: ReleaseReadCode): ReleaseReadAnswer =>
@@ -227,6 +238,7 @@ export function readReleaseForGoal(
   const receipt = sha === null ? null : receiptForGoal(store, input, sha);
   if (receipt === "UNREADABLE") return releaseReadRefusal("RELEASE_READ_RECEIPT_UNREADABLE");
   const ancestry = sha === null ? null : ancestryFor(sha);
+  const remoteDefaultBranch = remoteDefaultOf(store, input.projectId);
   return Object.freeze({
     evidence: Object.freeze({
       ancestryMeasured: ancestry !== null,
@@ -237,6 +249,7 @@ export function readReleaseForGoal(
       receipt,
       reviewRounds: facts.input.reviewRounds,
       sha,
+      ...(remoteDefaultBranch === undefined ? {} : { remoteDefaultBranch }),
     }),
     kind: "PRESENT" as const,
   });

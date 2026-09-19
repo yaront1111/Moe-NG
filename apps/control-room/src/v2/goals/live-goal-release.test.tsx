@@ -97,25 +97,28 @@ type ReceiptSeed = {
   readonly refusalCode: string | null;
 };
 
-/** The `/release/read` PRESENT body the daemon sends, decoded by the real exact-key decoder. */
-function presentBody(receipt: ReceiptSeed | null): Readonly<Record<string, unknown>> {
-  return {
-    evidence: {
-      ancestryMeasured: true,
-      criteria: [{
-        command: "pnpm test", criterionId: "crit-a", exitCode: "0", gaps: [], landing: SHA,
-        nodeKey: "node-a", receiptSha: "c".repeat(40), title: "Criterion A",
-      }],
-      goalId: GOAL_ID, goalTitle: "Ship the orders screen",
-      preview: { decidedAt: "2026-09-06T11:02:44.190Z", decisionId: "decision-preview-1", outcome: "APPROVED", url: null },
-      receipt: receipt === null ? null : {
-        dossierSha256: DOSSIER, outcome: receipt.outcome, prUrl: receipt.prUrl,
-        receiptId: "release-receipt-0123456789", refusalCode: receipt.refusalCode, sha: SHA,
-      },
-      reviewRounds: [], sha: SHA,
+/** The `/release/read` PRESENT body the daemon sends, decoded by the real exact-key decoder.
+ *  `remoteDefaultBranch` is omitted when null so the 8-key body stays valid. Existing decide
+ *  arms keep a measured "main" so Approve stays enabled without typing. */
+function presentBody(
+  receipt: ReceiptSeed | null, remoteDefaultBranch: string | null = "main",
+): Readonly<Record<string, unknown>> {
+  const evidence: Record<string, unknown> = {
+    ancestryMeasured: true,
+    criteria: [{
+      command: "pnpm test", criterionId: "crit-a", exitCode: "0", gaps: [], landing: SHA,
+      nodeKey: "node-a", receiptSha: "c".repeat(40), title: "Criterion A",
+    }],
+    goalId: GOAL_ID, goalTitle: "Ship the orders screen",
+    preview: { decidedAt: "2026-09-06T11:02:44.190Z", decisionId: "decision-preview-1", outcome: "APPROVED", url: null },
+    receipt: receipt === null ? null : {
+      dossierSha256: DOSSIER, outcome: receipt.outcome, prUrl: receipt.prUrl,
+      receiptId: "release-receipt-0123456789", refusalCode: receipt.refusalCode, sha: SHA,
     },
-    kind: "PRESENT",
+    reviewRounds: [], sha: SHA,
   };
+  if (remoteDefaultBranch !== null) evidence.remoteDefaultBranch = remoteDefaultBranch;
+  return { evidence, kind: "PRESENT" };
 }
 
 const NO_RECEIPT = presentBody(null);
@@ -307,6 +310,72 @@ const sendCount = async (wire: Wire): Promise<number> => {
   await drainUntil(() => wire.sends() > 0);
   return wire.sends();
 };
+
+describe("the Release card never defaults base to a branch the remote does not have", () => {
+  const baseInput = (): HTMLInputElement => screen.getByTestId("cr.release.base") as HTMLInputElement;
+
+  it("pre-fills base from a measured remote default by value", async () => {
+    const { setup, wire } = attach(async () => ({ ok: true }));
+    wire.setRead({ kind: "BODY", body: presentBody(null, "master") });
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    expect(baseInput().value).toBe("master");
+  });
+
+  it("pre-fills base when evidence arrives AFTER first render (the useState trap)", async () => {
+    const { setup, wire } = attach(async () => ({ ok: true }));
+    wire.setRead({ kind: "BODY", body: presentBody(null, null) });
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    expect(baseInput().value).toBe("");
+    wire.setRead({ kind: "BODY", body: presentBody(null, "master") });
+    await settle(5_000);
+    expect(baseInput().value).toBe("master");
+  });
+
+  it("does not overwrite an operator's typed base when evidence later refreshes", async () => {
+    const { setup, wire } = attach(async () => ({ ok: true }));
+    wire.setRead({ kind: "BODY", body: presentBody(null, "master") });
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    fireEvent.change(baseInput(), { target: { value: "release-train" } });
+    expect(baseInput().value).toBe("release-train");
+    wire.setRead({ kind: "BODY", body: presentBody(null, "trunk") });
+    await settle(5_000);
+    expect(baseInput().value).toBe("release-train");
+  });
+
+  it("leaves base empty, says the default is unknown, and keeps Approve disabled when unmeasured", async () => {
+    const { setup, wire } = attach(async () => ({ ok: true }));
+    wire.setRead({ kind: "BODY", body: presentBody(null, null) });
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    expect(baseInput().value).toBe("");
+    expect(screen.getByTestId("cr.release.base-unmeasured").textContent)
+      .toContain("default branch is not known yet");
+    expect(screen.getByTestId("cr.release.button").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("renders a RELEASE_HEAD_IS_BASE answer with both branch names in the detail", async () => {
+    const detail = 'head "master" equals base "master"; no pull request can exist between a branch and itself. Re-publish the goal, which now targets moe/release/goal-1 when the workspace is the remote\'s default branch.';
+    const { setup, wire } = attach(async () => ({
+      delivered: true,
+      response: {
+        ok: false,
+        refusal: { code: "RELEASE_HEAD_IS_BASE", detail, layer: "DAEMON_PREREQUISITE" },
+      },
+      status: 200,
+    }));
+    wire.setRead({ kind: "BODY", body: presentBody(null, "master") });
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    expect(baseInput().value).toBe("master");
+    await confirmRelease();
+    expect(await answerCode()).toBe("RELEASE_HEAD_IS_BASE @ DAEMON_PREREQUISITE");
+    expect(screen.getByTestId("cr.release.answer-detail").textContent).toContain('head "master"');
+    expect(screen.getByTestId("cr.release.answer-detail").textContent).toContain('base "master"');
+  });
+});
 
 describe("the refusal path is unchanged by the fix", () => {
   /**

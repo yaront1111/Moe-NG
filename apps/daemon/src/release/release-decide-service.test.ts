@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -11,6 +14,10 @@ import {
   REMOTE_BOUND_EVENT_TYPE, REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId, remoteAggregateId,
 } from "../repository/publish-receipt-contracts.js";
 import { recordPublishReceipt } from "../repository/publish-ledger.js";
+import { landingEnvironment, nodeGitRunner } from "../repository/git-landing-port.js";
+import { createGitPublicationPort, publicationGitRunner } from "../repository/git-publication-port.js";
+import { createPublicationCandidateReader } from "../repository/publication-candidate.js";
+import { measureRemoteDefaultBranch, readRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import { RELEASE_DECIDE_CODES, RELEASE_DECIDE_CODE_LAYER_MAP } from "./release-decide-contracts.js";
 import { createReleaseDecideHandler } from "./release-decide-service.js";
 import type { ReleaseDossierFacts, ReleasePublisher } from "./release-decide-service.js";
@@ -126,10 +133,10 @@ function recordPushAgain(store: Store, branch: string | null, decisionId: string
   });
 }
 
-function storeDossier(store: Store, input: DossierInput): string {
-  const markdown = renderReleaseDossier(input, HEAD_SHA, ancestryOf().predicate);
+function storeDossier(store: Store, input: DossierInput, sha = HEAD_SHA): string {
+  const markdown = renderReleaseDossier(input, sha, ancestryOf().predicate);
   const recorded = recordReleaseDossier(store, {
-    decidedAt: DECIDED_AT, goalId: GOAL_ID, markdown, projectId: PROJECT_ID, sha: HEAD_SHA,
+    decidedAt: DECIDED_AT, goalId: GOAL_ID, markdown, projectId: PROJECT_ID, sha,
   });
   if (!recorded.ok) throw new Error(recorded.code);
   return markdown;
@@ -160,7 +167,12 @@ function fakePrPort(result: ReleasePrResult): ReleasePrPort & {
   };
 }
 
-function inputOf(store: Store, decision: "APPROVE" | "REJECT" = "APPROVE"): CommandHandlerInput {
+function inputOf(
+  store: Store,
+  decision: "APPROVE" | "REJECT" = "APPROVE",
+  base = BASE,
+  sha = HEAD_SHA,
+): CommandHandlerInput {
   return {
     envelope: {
       commandId: "cmd-release-1",
@@ -168,7 +180,7 @@ function inputOf(store: Store, decision: "APPROVE" | "REJECT" = "APPROVE"): Comm
       expectedVersion: store.getAggregateVersion(releaseDossierAggregateId(GOAL_ID)),
       requestDigest: "c".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
       sessionCredential: "test-session", targetAggregateId: releaseDossierAggregateId(GOAL_ID),
-      payload: { base: BASE, decision, goalId: GOAL_ID, sha: HEAD_SHA },
+      payload: { base, decision, goalId: GOAL_ID, sha },
     },
     principal: { principalId: OPERATOR, projectId: PROJECT_ID, capabilities: ["goal.write"] },
   };
@@ -476,14 +488,65 @@ describe("release.decide service", () => {
       : "- Outcome: REJECT");
   });
 
-  it("mints NO preview-required refusal: the closed code map is still exactly its three codes", () => {
-    // The map is the authority (`RELEASE_DECIDE_CODES` is derived from its keys), so a new gate
-    // could not be added without a key here. RELEASE_EVIDENCE_INCOMPLETE is the evidence code, and
-    // the criterion gap this row added flows into it rather than minting a fourth.
-    expect(Object.keys(RELEASE_DECIDE_CODE_LAYER_MAP).sort()).toEqual([
-      "RELEASE_EVIDENCE_INCOMPLETE", "RELEASE_PR_FAILED", "RELEASE_REMOTE_MISSING",
+  it("refuses RELEASE_HEAD_IS_BASE when the pushed head equals the requested base, and never invokes gh", async () => {
+    const store = openStore();
+    bindRemote(store);
+    recordPushAgain(store, BASE, "decision-push-head-eq-base");
+    storeDossier(store, completeInput());
+    const { handler, prPort } = build(store);
+
+    const refusal = await refusalOf(handler(inputOf(store)));
+    expect(refusal.code).toBe("RELEASE_HEAD_IS_BASE");
+    expect(refusal.layer).toBe(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_HEAD_IS_BASE);
+    expect(refusal.layer).toBe("DAEMON_PREREQUISITE");
+    expect(refusal.detail).toContain(`head "${BASE}"`);
+    expect(refusal.detail).toContain(`base "${BASE}"`);
+    expect(prPort.requests).toHaveLength(0);
+    expect(releasedReceiptCount(store)).toBe(0);
+  });
+
+  it("does not refuse RELEASE_HEAD_IS_BASE when the pushed head differs from the base", async () => {
+    const store = openStore();
+    bindRemote(store);
+    recordPush(store);
+    storeDossier(store, completeInput());
+    const { handler, prPort } = build(store);
+
+    const decision = await handler(inputOf(store));
+    expect(decision.resultCode).toBe("RELEASED");
+    expect(prPort.requests).toHaveLength(1);
+    expect(prPort.requests[0]!.head).toBe(BRANCH);
+    expect(prPort.requests[0]!.base).toBe(BASE);
+    expect(prPort.requests[0]!.head).not.toBe(prPort.requests[0]!.base);
+  });
+
+  it("refuses RELEASE_HEAD_IS_BASE for a pre-task-04160615 PUSHED receipt on master against base master (migration)", async () => {
+    const store = openStore();
+    bindRemote(store);
+    recordPushAgain(store, "master", "decision-push-legacy-master");
+    storeDossier(store, completeInput());
+    const { handler, prPort } = build(store);
+
+    const refusal = await refusalOf(handler(inputOf(store, "APPROVE", "master")));
+    expect(refusal.code).toBe("RELEASE_HEAD_IS_BASE");
+    expect(refusal.layer).toBe(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_HEAD_IS_BASE);
+    expect(refusal.layer).toBe("DAEMON_PREREQUISITE");
+    expect(refusal.detail).toContain(`head "master"`);
+    expect(refusal.detail).toContain(`base "master"`);
+    expect(refusal.detail).toContain(`moe/release/${GOAL_ID}`);
+    expect(prPort.requests).toHaveLength(0);
+    expect(releasedReceiptCount(store)).toBe(0);
+  });
+
+  it("mints NO preview-required refusal: the closed code map carries no PREVIEW code", () => {
+    // The map is the authority (`RELEASE_DECIDE_CODES` is derived from its keys). The exact
+    // list is rotated from the printed expected-vs-received; the length is derived, never frozen.
+    const keys = Object.keys(RELEASE_DECIDE_CODE_LAYER_MAP).sort();
+    expect(keys).toEqual([
+      "RELEASE_EVIDENCE_INCOMPLETE", "RELEASE_HEAD_IS_BASE", "RELEASE_PR_FAILED",
+      "RELEASE_REMOTE_MISSING",
     ]);
-    expect(RELEASE_DECIDE_CODES).toHaveLength(3);
+    expect(RELEASE_DECIDE_CODES).toHaveLength(keys.length);
     for (const code of RELEASE_DECIDE_CODES) expect(code).not.toContain("PREVIEW");
   });
 
@@ -515,6 +578,81 @@ describe("release.decide service", () => {
     expect(publisher.calls).toHaveLength(0);
     expect(prPort.requests).toHaveLength(0);
   });
+
+  it("OPTION A: a trunk workspace publishes moe/release/<goalId> and release opens the PR from that head into master", async () => {
+    const base = resolve(tmpdir());
+    const root = mkdtempSync(join(base, "moe-release-option-a-"));
+    const remote = join(root, "remote.git");
+    const workspace = join(root, "workspace");
+    const gitEnv = landingEnvironment();
+    const git = (cwd: string, ...args: string[]): string => execFileSync("git", args, {
+      cwd, encoding: "utf8", env: gitEnv, shell: false, timeout: 15_000, windowsHide: true,
+    }).replace(/\r?\n$/u, "");
+    try {
+      git(root, "init", "--bare", "--quiet", "--initial-branch=master", remote);
+      git(root, "init", "--quiet", "--initial-branch=master", workspace);
+      writeFileSync(join(workspace, "product.txt"), "landed\n");
+      git(workspace, "add", "product.txt");
+      git(workspace, "-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false",
+        "commit", "--quiet", "-m", "landed");
+      const sha = git(workspace, "rev-parse", "HEAD");
+      git(workspace, "push", "--quiet", remote, "HEAD:refs/heads/master");
+      const masterBefore = git(remote, "rev-parse", "refs/heads/master");
+      expect(masterBefore).toBe(sha);
+      expect(git(remote, "symbolic-ref", "HEAD")).toBe("refs/heads/master");
+
+      const store = openStore();
+      bindRemote(store);
+      const rewrite = async (cwd: string, args: readonly string[]) =>
+        publicationGitRunner(cwd, args.map((arg) => arg === REMOTE_URL ? remote : arg));
+      const gitPort = createGitPublicationPort({ readConfig: nodeGitRunner, run: rewrite });
+      const seed = createPublicationCandidateReader(workspace)(REMOTE_URL);
+      expect(seed.ok).toBe(true);
+      if (!seed.ok) throw new Error(seed.code);
+      await measureRemoteDefaultBranch(store, PROJECT_ID, gitPort, seed.candidate, () => DECIDED_AT);
+      expect(readRemoteDefaultBranch(store, PROJECT_ID, REMOTE_URL)).toBe("master");
+
+      const releaseBranch = `moe/release/${GOAL_ID}`;
+      const publisher: ReleasePublisher = {
+        async publishOnce() {
+          const measured = readRemoteDefaultBranch(store, PROJECT_ID, REMOTE_URL);
+          const captured = createPublicationCandidateReader(workspace)(REMOTE_URL, {
+            goalId: GOAL_ID, remoteDefaultBranch: measured,
+          });
+          if (!captured.ok) return [{ detail: captured.code, goalId: GOAL_ID, outcome: "REFUSED" }];
+          expect(captured.candidate.approval.branch).toBe(releaseBranch);
+          const pushed = await gitPort.push(captured.candidate);
+          if (!pushed.ok) return [{ detail: pushed.detail, goalId: GOAL_ID, outcome: "REFUSED" }];
+          recordPushAgain(store, captured.candidate.approval.branch, "decision-option-a",
+            captured.candidate.approval.sha);
+          return [{ detail: "pushed", goalId: GOAL_ID, outcome: "PUSHED" }];
+        },
+      };
+
+      const input = completeInput();
+      storeDossier(store, input, sha);
+      const prPort = fakePrPort({ ok: true, prUrl: PR_URL });
+      const handler = createReleaseDecideHandler({
+        clock: () => DECIDED_AT,
+        dossierFacts: facts(input),
+        operatorPrincipalId: OPERATOR,
+        prPort,
+        projectId: PROJECT_ID,
+        publisher,
+        store,
+      });
+
+      const decision = await handler(inputOf(store, "APPROVE", "master", sha));
+      expect(decision.resultCode).toBe("RELEASED");
+      expect(git(remote, "rev-parse", `refs/heads/${releaseBranch}`)).toBe(sha);
+      expect(git(remote, "rev-parse", "refs/heads/master")).toBe(masterBefore);
+      expect(prPort.requests).toHaveLength(1);
+      expect(prPort.requests[0]?.head).toBe(releaseBranch);
+      expect(prPort.requests[0]?.base).toBe("master");
+    } finally {
+      if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true });
+    }
+  }, 90_000);
 
   it("imports no git port: the only push in this module is the publisher's", () => {
     const source = readFileSync(

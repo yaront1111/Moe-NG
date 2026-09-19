@@ -32,12 +32,14 @@ export const RELEASE_DECIDE_COMMAND_KIND = "release.decide" as const;
 
 /**
  * Every refusal the release.decide path can mint, mapped to the layer that mints it.
- * Exactly three keys, closed. `RELEASE_DECIDE_CODES` below is derived from these keys, so
+ * Exactly four keys, closed. `RELEASE_DECIDE_CODES` below is derived from these keys, so
  * the roster and the map can never disagree.
  */
 export const RELEASE_DECIDE_CODE_LAYER_MAP = Object.freeze({
   /** DAEMON_PREREQUISITE: the daemon's own prerequisite read found the release evidence short. */
   RELEASE_EVIDENCE_INCOMPLETE: "DAEMON_PREREQUISITE",
+  /** DAEMON_PREREQUISITE: the daemon's prerequisite read found the pull request's head is its base, so no pull request can exist between them. */
+  RELEASE_HEAD_IS_BASE: "DAEMON_PREREQUISITE",
   /** RUNNER_WORKSPACE: the runner's workspace attempted the pull request and it did not open. */
   RELEASE_PR_FAILED: "RUNNER_WORKSPACE",
   /** PROJECT_REDUCER: the project reducer holds the repository binding, and there is none. */

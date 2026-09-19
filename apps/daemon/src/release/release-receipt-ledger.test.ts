@@ -64,7 +64,7 @@ describe("release receipt durable bytes", () => {
   });
 
   it("records a REFUSED receipt per code, each carrying that code and NO prUrl", () => {
-    expect(RELEASE_DECIDE_CODES.length).toBe(3);
+    expect(RELEASE_DECIDE_CODES.length).toBe(4);
     for (const code of RELEASE_DECIDE_CODES) {
       const store = openStore();
       const recorded = recordReleaseReceipt(store, refused(code));

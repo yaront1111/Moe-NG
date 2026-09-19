@@ -86,6 +86,7 @@ function evidenceOf(
         receiptId: "release-receipt-0123456789", refusalCode: receipt.refusalCode, sha: SHA,
       },
       reviewRounds: [{ nodeKey: "node-a", outcome: "ACCEPTED", refusalCode: null, round: 1 }],
+      remoteDefaultBranch: "main",
       sha,
     },
     kind: "PRESENT",

@@ -26,8 +26,9 @@ import {
 import { recordLandingReceipt } from "../repository/landing-ledger.js";
 import { readPublishLedger, recordPublishReceipt } from "../repository/publish-ledger.js";
 import {
-  REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId,
+  REMOTE_BOUND_EVENT_TYPE, REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId, remoteAggregateId,
 } from "../repository/publish-receipt-contracts.js";
+import { recordRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import {
   calibration, envelope, packageItems, policyInput, submitPayload,
@@ -124,6 +125,27 @@ function land(store: SqliteEventStore, nodeRef: string, verifierReceiptId: strin
  * publication there is no sha, and with no sha nothing can be re-measured — so this is what
  * makes the covered/UNKNOWN split observable at all.
  */
+function bindRemote(store: SqliteEventStore): void {
+  const aggregateId = remoteAggregateId(PROJECT_ID);
+  store.commitExpectedVersionDecision({
+    commandKind: "repository.publish",
+    committedResultBytes: new TextEncoder().encode("{}"),
+    correlationId: "release-read-bind-remote",
+    decidedAt: NOW,
+    events: [{
+      eventId: "release-read-remote-bound",
+      eventType: REMOTE_BOUND_EVENT_TYPE,
+      payload: new TextEncoder().encode(JSON.stringify({
+        boundAt: NOW, boundBy: OPERATOR, remoteUrl: REMOTE_URL,
+      })),
+    }],
+    expectedVersion: store.getAggregateVersion(aggregateId),
+    key: { commandId: "release-read-bind-remote", principalId: OPERATOR, projectId: PROJECT_ID },
+    requestBytes: new TextEncoder().encode("{}"),
+    targetAggregateId: aggregateId,
+  });
+}
+
 function publish(store: SqliteEventStore): string {
   const encoder = new TextEncoder();
   const target = publishAggregateId(GOAL_ID);
@@ -204,6 +226,26 @@ it("keeps covered and UNKNOWN criteria DISTINGUISHABLE, per row, without any mar
   const clean = answer.evidence.criteria.find((row) => row.gaps.length === 0);
   expect(clean?.criterionId).toBe("crit-api");
   expect(clean?.landing).toBe(LANDING_SHA);
+});
+
+it("includes remoteDefaultBranch by value when the bound remote has been measured", () => {
+  const { apiRef, store } = twoNodeWorld();
+  land(store, apiRef, accept(store, apiRef));
+  bindRemote(store);
+  expect(recordRemoteDefaultBranch(store, {
+    defaultBranch: "master", measuredAt: NOW, projectId: PROJECT_ID, remoteUrl: REMOTE_URL,
+  })).toBe(true);
+  const answer = readReleaseForGoal(store, { goalId: GOAL_ID, projectId: PROJECT_ID }, ANCESTOR);
+  if (answer.kind !== "PRESENT") throw new Error(`expected PRESENT, got ${answer.kind}`);
+  expect(answer.evidence.remoteDefaultBranch).toBe("master");
+});
+
+it("omits remoteDefaultBranch rather than sending null when the default is unmeasured", () => {
+  const { apiRef, store } = twoNodeWorld();
+  land(store, apiRef, accept(store, apiRef));
+  const answer = readReleaseForGoal(store, { goalId: GOAL_ID, projectId: PROJECT_ID }, ANCESTOR);
+  if (answer.kind !== "PRESENT") throw new Error(`expected PRESENT, got ${answer.kind}`);
+  expect(answer.evidence).not.toHaveProperty("remoteDefaultBranch");
 });
 
 it("says when nothing measured the landings, so UNKNOWN is not read as failed evidence", () => {

@@ -58,3 +58,27 @@ describe("the release decoder admits every row and title the daemon can serve", 
     expect(mapReleaseAnswer(200, presentBody([criterion("crit-empty", "")])).status).toBe("ERROR");
   });
 });
+
+describe("the release decoder admits 8-key evidence and 9-key evidence with a measured default", () => {
+  it("still decodes today's 8-key body and leaves remoteDefaultBranch absent", () => {
+    const answer = mapReleaseAnswer(200, presentBody([criterion("crit-1", "Ship")]));
+    expect(answer.status).toBe("PRESENT");
+    if (answer.status !== "PRESENT") throw new Error("expected PRESENT");
+    expect(answer.evidence.goalId).toBe("goal-1");
+    expect(answer.evidence).not.toHaveProperty("remoteDefaultBranch");
+  });
+
+  it("decodes a 9-key body whose remoteDefaultBranch is the measured default by value", () => {
+    const eight = presentBody([criterion("crit-1", "Ship")]) as {
+      readonly evidence: Readonly<Record<string, unknown>>;
+      readonly kind: "PRESENT";
+    };
+    const answer = mapReleaseAnswer(200, {
+      evidence: { ...eight.evidence, remoteDefaultBranch: "master" },
+      kind: "PRESENT",
+    });
+    expect(answer.status).toBe("PRESENT");
+    if (answer.status !== "PRESENT") throw new Error("expected PRESENT");
+    expect(answer.evidence.remoteDefaultBranch).toBe("master");
+  });
+});
