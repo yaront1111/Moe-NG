@@ -65,7 +65,7 @@
     }
   ],
   "planRevision": 9,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -109,12 +109,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:33:41.593Z",
-  "updatedAt": "2026-09-19T03:29:01.606Z",
+  "updatedAt": "2026-09-19T03:40:16.064Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T13:01:04.723Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-19T03:40:16.064Z",
+    "wallClockMs": 52751341
   },
   "dependsOn": [
     "task-2c3f878ba94940428d34f204dc74de95",
@@ -136,7 +138,8 @@
   },
   "planApprovedAt": "2026-09-18T19:16:00.028Z",
   "contextFetchedBy": [
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-19T03:03:12.892Z",
   "reviewStartedAt": "2026-09-19T03:29:01.605Z",
@@ -149,7 +152,45 @@
   },
   "filesModified": [
     "apps/daemon/src/repository/publish-resolve-journey.test.ts",
+    "apps/daemon/CLAUDE.md",
+    ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+    ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json",
+    ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json"
+  ],
+  "completionSummary": "Integration parent. All 7 children are DONE and in HEAD. DoD 1, 2 and 4 map to their landed work by file:line (step-1 note). This row adds DoD 3 and DoD 5.\n\nDoD 3: NEW apps/daemon/src/repository/publish-resolve-journey.test.ts, one LIVE arm on real git through the production delivery runtime and the shipped provider registry.\n- The case: a bare remote whose hook refuses the push, with git's answer LOST, so the push is recorded INDETERMINATE, which task-78dea88b never auto-resolves.\n- The arm asserts, by value:\n  - UNKNOWN on two passes;\n  - the hold is publish:<id> in PUBLISHING;\n  - node.deliver admission is BUSY with the holder named, and start is BUSY with no spawn;\n  - the card shows the observation;\n  - a paired HUMAN is refused 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION at the entry fence;\n  - the operator's resolve gives one REFUSED receipt carrying the observation, and the card says REFUSED;\n  - the hold is released as PUBLISH_RESOLVED on the next pass, after which the delivery is admitted;\n  - a fresh decision is PUSHED: 2 pushes for 2 decisions.\n\nDoD 5: the apps/daemon/CLAUDE.md publisher bullet now states the whole exit.\n\nGates:\n- Journey plus node-publisher-approved: 2 files, 18 tests.\n- Daemon: 767/767 files, 12663 passed.\n- Control room: 195/195 files, 2610 tests.\n- typecheck: 19 Done. test:security: 12/12.\n- 6 in-memory drills all went red at their intended arms; the control stayed green and SHA256 was unchanged.\n\nAdversarial review (comment-87ba6c9f):\n- No MCP path to the resolve and no fence bypass.\n- No second transmission for a decision.\n- The REMOTE_HOLDS_SHA guard is dormant. The live arm shows NOT_UNKNOWN is what fires.\n\nFiled:\n- task-4f16c331 (HIGH): the owner's paired browser gets 403 on Resolve and there is no CLI or MCP path, so the exit is not reachable for the owner. It needs an owner ruling.\n- task-f4812f16: the resolve is offered while a push is still in flight.\n\nThe epic-size note is in comment-db003daa.",
+  "commits": [
+    {
+      "sha": "3232cbfa094d55cfb011f120e5eee2661af905f4",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-19T03:02:52Z",
+      "paths": [
+        ".moe/tasks/task-21be6e9055984413a651ce6ee331e2c8.json",
+        ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json",
+        ".moe/tasks/task-f4812f163d564e07add406ca27800e22.json",
+        "apps/daemon/CLAUDE.md",
+        "apps/daemon/src/repository/publish-resolve-journey.test.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-19T03:29:14.500Z",
+      "treeId": "98f56737ec9489a7479f0392faf5b5346273f735",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/repository/publish-resolve-journey.test.ts",
     "apps/daemon/CLAUDE.md"
   ],
-  "completionSummary": "Integration parent. All 7 children are DONE and in HEAD. DoD 1, 2 and 4 map to their landed work by file:line (step-1 note). This row adds DoD 3 and DoD 5.\n\nDoD 3: NEW apps/daemon/src/repository/publish-resolve-journey.test.ts, one LIVE arm on real git through the production delivery runtime and the shipped provider registry.\n- The case: a bare remote whose hook refuses the push, with git's answer LOST, so the push is recorded INDETERMINATE, which task-78dea88b never auto-resolves.\n- The arm asserts, by value:\n  - UNKNOWN on two passes;\n  - the hold is publish:<id> in PUBLISHING;\n  - node.deliver admission is BUSY with the holder named, and start is BUSY with no spawn;\n  - the card shows the observation;\n  - a paired HUMAN is refused 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION at the entry fence;\n  - the operator's resolve gives one REFUSED receipt carrying the observation, and the card says REFUSED;\n  - the hold is released as PUBLISH_RESOLVED on the next pass, after which the delivery is admitted;\n  - a fresh decision is PUSHED: 2 pushes for 2 decisions.\n\nDoD 5: the apps/daemon/CLAUDE.md publisher bullet now states the whole exit.\n\nGates:\n- Journey plus node-publisher-approved: 2 files, 18 tests.\n- Daemon: 767/767 files, 12663 passed.\n- Control room: 195/195 files, 2610 tests.\n- typecheck: 19 Done. test:security: 12/12.\n- 6 in-memory drills all went red at their intended arms; the control stayed green and SHA256 was unchanged.\n\nAdversarial review (comment-87ba6c9f):\n- No MCP path to the resolve and no fence bypass.\n- No second transmission for a decision.\n- The REMOTE_HOLDS_SHA guard is dormant. The live arm shows NOT_UNKNOWN is what fires.\n\nFiled:\n- task-4f16c331 (HIGH): the owner's paired browser gets 403 on Resolve and there is no CLI or MCP path, so the exit is not reachable for the owner. It needs an owner ruling.\n- task-f4812f16: the resolve is offered while a push is still in flight.\n\nThe epic-size note is in comment-db003daa."
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-952c612b@2026-09-19T03:02:52Z",
+    "at": "2026-09-19T03:29:14.500Z"
+  },
+  "completedAt": "2026-09-19T03:40:16.064Z",
+  "reviewCompletedAt": "2026-09-19T03:40:16.064Z",
+  "reviewSummary": "QA qa-09357cdf APPROVE at 3232cbfa (HEAD, pushed to origin/moe/work-2026-09-18; product diff vs 1ff70c9d is only this row's 2 paths).\nDoD1 (52682237): live-runs.ts:210 exact 9-key list with observation, arm at live-runs.test.ts:363. DoD2: the journey drives the operator resolve to a REFUSED PUBLISH_RESOLVED_NOT_TRANSMITTED receipt carrying the observation, a PUBLISH_RESOLVED release, then a fresh PUSHED decision. node-publisher-approved.test.ts is untouched by every chain commit (git log 46123b30^..HEAD = 0). DoD3: real-git LIVE arm; BUSY admission+start by value; paired human 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION; 2 pushes for 2 decisions. DoD4: port test :261 (PUBLISH_RESOLVED only from PUBLISHING, CONTROLLER_MISMATCH otherwise); vocabulary/registry census rows. DoD5: CLAUDE.md bullet claims checked against code.\nRe-run: verification cmd 2 files/18 passed; daemon suite under lease 767/767, 12663 passed | 22 skipped; control-room 195/195, 2610; test:security 12/12, 1009; daemon typecheck exit 0 (tsc lists the new file).\nQA drills (in-memory %TEMP% config, anchor once, hits logged, prod SHA256 unchanged, scaffolding deleted): control green; Q1 resolve entry unregistered red :153; Q2 card observation dropped red :141; Q3 resolved release reason swapped red :170; Q4 receipt detail without observation red :164.\nOutside this DoD (epic rail 4 = operator-only): owner's paired browser gets 403 on Resolve, filed task-4f16c331 HIGH (owner ruling); in-flight window task-f4812f16; receipt race task-978669b6."
 }
