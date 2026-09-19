@@ -340,20 +340,20 @@ describe("createNodeLander", () => {
     expect(receipt.ok && receipt.receipt.outcome).toBe("REFUSED");
   });
 
-  // Production wires `projectRoot` into EVERY lander, the single-tree ones included. Adoption
-  // (node-lander-adopt.test.ts, real Git) must leave a genuine no-op alone: a workspace that IS the
-  // project's checkout is never adopted and asks Git nothing. A workspace that is NOT, beside a
-  // project checkout Git cannot even run in (exit 128), proves nothing: this arm used to PIN that as
-  // NOTHING_TO_COMMIT, which is credited. It is reported, nothing is recorded, the next pass retries.
+  // Production wires `projectRoot` into EVERY lander. Adoption (node-lander-adopt.test.ts, real Git) asks
+  // Git ONLY about a node's own tree: any other workspace is a genuine no-op whatever root is wired (a
+  // foreign checkout answers 128 for its sha for good, stranding the reservation AWAITING_LANDING). A TREE
+  // whose project Git cannot run in proves nothing: reported, not recorded, retried, root wired or none.
   it.each([
-    ["the project's own checkout", WORKSPACE, "REFUSED"],
-    ["a workspace beside a project checkout that is not there", "D:/ws/moe-no-such-project-checkout", "LANDING_ADOPTION_UNPROVEN"],
-  ])("records NOTHING_TO_COMMIT with a project root wired only on proof: %s", async (_name, projectRoot, outcome) => {
+    ["the project's own checkout", WORKSPACE, WORKSPACE, "REFUSED"],
+    ["a separate repository beside a project checkout that is not there", "D:/ws/moe-no-such-project-checkout", WORKSPACE, "REFUSED"],
+    ["a node's tree whose project is not there, with no root wired", null, "D:/ws/moe-no-such-project-checkout/.moe-next/trees/x", "LANDING_ADOPTION_UNPROVEN"],
+  ])("records NOTHING_TO_COMMIT with a project root wired only on proof: %s", async (_name, projectRoot, root, outcome) => {
     const git = fakeGit(observation([]));
     const store = openStore();
     const made = createNodeLander({
-      readVerifiedBinding: () => BINDING, projectRoot,
-      verifiedWorkspace: { capture: async () => ({ binding: BINDING, ok: true as const }), commit: git.commit.bind(git) },
+      readVerifiedBinding: () => ({ ...BINDING, root }), projectRoot,
+      verifiedWorkspace: { capture: async () => ({ binding: { ...BINDING, root }, ok: true as const }), commit: git.commit.bind(git) },
       clock: () => "2026-09-03T12:00:00.000Z", git, nodeMission: () => brief,
       nodes: () => [{ nodeRef: NODE }], projectId: PROJECT_ID,
       readAccepted: () => ({ verifierReceiptId: VERIFIER_RECEIPT }), store,

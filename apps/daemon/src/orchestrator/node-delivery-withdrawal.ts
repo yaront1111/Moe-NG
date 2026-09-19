@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { REVIEW_ROUND_ABSOLUTE_CEILING } from "@moe/review";
 import type { SqliteEventStore } from "@moe/store";
 import { TRACKED_RUNTIME_METADATA_DIRTY, isMoeMetadata } from "../repository/git-landing-port.js";
@@ -18,6 +17,7 @@ import { integratorMerges } from "./node-landed-branches.js";
 import { adoptedSeatCommit, realPathOf } from "./node-lander-adopt.js";
 import { recordNodeVerifierFailure } from "./node-verifier-failure-record.js";
 import type { NodeVerifierConfig } from "./node-verifier.js";
+import { projectOfTree } from "./node-worktrees.js";
 import { ownNodeTree } from "./wrapper-node-trees.js";
 
 /**
@@ -53,6 +53,8 @@ import { ownNodeTree } from "./wrapper-node-trees.js";
  * genuine zero-byte delivery (no tree, or a clean tree the project PROVABLY already contains) keeps
  * its credit and is never withdrawn. A tree Git could not answer for is neither: only the lander's
  * NO_EFFECT answer finalises a receipt, and UNPROVEN is said once and asked again on the next pass.
+ * The one UNPROVEN Git itself settled (`workProven`: work on a detached HEAD, which only a landing
+ * RECEIPT cannot carry) is found work here, because this scan writes no receipt: it withdraws.
  *
  * The two refused rules ship with two readers the staffing path asks (below). Without the pin the
  * node is re-staffed in an empty tree of its own while its work sits where the landing was
@@ -136,8 +138,7 @@ export function ownsDirtIn(store: SqliteEventStore, projectId: string, nodeRef: 
     if (ledger === undefined || ledger.unreadable || ledger.accepted !== undefined || receipt === undefined || code === null) return false;
     const at = realPathOf(root);
     if (RECOVERABLE_LANDING_REFUSALS.includes(code) && at === realPathOf(receipt.workspace)) return true;
-    // A node's tree is <project>/.moe-next/trees/<name>: three levels under the project it belongs to.
-    return ownNodeTree(resolve(at, "..", "..", ".."), nodeRef) === at;
+    return ownNodeTree(projectOfTree(at), nodeRef) === at;
   } catch { return false; }
 }
 
@@ -308,8 +309,13 @@ export function createDeliveryWithdrawal(config: DeliveryWithdrawalConfig) {
     const branch = git(tree, ["symbolic-ref", "-q", "HEAD"]);
     const branchRef = branch.code === 0 ? branch.stdout.trim() : "";
     const answer = adoptedSeatCommit(git, workspace, { branchRef, headSha, root: tree }, "");
-    if (answer.kind === "UNPROVEN") return { unproven: answer.detail };
-    return { found: answer.kind === "NO_EFFECT" ? null
+    // `workProven` is the lander's own word that Git PROVED the work and only a RECEIPT is wanting (a
+    // branch name, a path list). This scan writes no receipt, so that is found, never "unproved": left
+    // as unproved, a seat that ran `git checkout <sha>` kept its no-effect credit and was re-asked for good.
+    if (answer.kind === "UNPROVEN" && answer.workProven !== true) return { unproven: answer.detail };
+    if (answer.kind === "NO_EFFECT") return { found: null };
+    return { found: branchRef === ""
+      ? `commits at ${headSha.slice(0, 10)} (detached HEAD) that the project's branch does not contain; name a branch for them (git switch -c <name>) before you submit, because a landing must name one`
       : `commits on ${cut(branchRef, 200)} at ${headSha} that the project's branch does not contain` };
   };
 

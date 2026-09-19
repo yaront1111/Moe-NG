@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { dependencySatisfied } from "../http/dependency-integration.js";
 import { createGitLandingPort } from "../repository/git-landing-port.js";
@@ -175,11 +175,16 @@ describe("the lander adopts a seat-authored commit", () => {
   // "Could not establish whether work remains" was recorded NOTHING_TO_COMMIT, which goal closure,
   // the dependency gate and publication all credit, while the commit sat in the tree unmerged.
   it("(5) records NOTHING while Git cannot say whether the commit is merged (a real exit 128), credits nothing, and adopts once Git answers", async () => {
-    const { root, tree } = scratch();
+    const { root } = scratch();
+    // A tree whose OWN project has never seen the seat's commit: a clone standing where a tree stands
+    // keeps its own objects, so `merge-base --is-ancestor` in the project exits 128, not 1. (A checkout
+    // that is not the tree's project is no longer asked at all: Git is asked where the tree belongs.)
+    const tree = join(root, ".moe-next", "trees", "y");
+    // Line endings are pinned AT the checkout: set afterwards, the host's own setting has already made base.txt dirt.
+    git(root, "clone", "--quiet", "-c", "core.autocrlf=false", root, tree);
+    git(tree, "switch", "--quiet", "-c", "moe/y");
     const seat = seatCommits(tree);
-    // A checkout that has never seen the seat's commit: `merge-base --is-ancestor` exits 128, not 1.
-    const stranger = scratch();
-    const w = await accepted(tree, stranger.root);
+    const w = await accepted(tree, root);
     const projectId = w.f.handle.owner.projectId;
 
     for (const pass of [1, 2]) {
@@ -191,9 +196,10 @@ describe("the lander adopts a seat-authored commit", () => {
       .toEqual({ code: "LANDING_RECEIPT_NOT_FOUND", ok: false });
     expect(w.credited()).toBe(false);
     expect(dependencySatisfied(w.f.store, projectId, w.nodeRef)).toBe(false);
-    // The acceptance was not consumed, so the pass on which Git answers lands it.
-    expect(await w.lander({ projectRoot: root }).landOnce()).toMatchObject([{ outcome: "COMMITTED" }]);
-    expect(w.receipt()).toMatchObject({ outcome: "COMMITTED", refusal: null, commit: { branch: "moe/x", sha: seat } });
+    // The acceptance was not consumed, so the pass on which Git answers lands it: the project fetches the commit.
+    git(root, "fetch", "--quiet", tree, "moe/y");
+    expect(await w.lander().landOnce()).toMatchObject([{ outcome: "COMMITTED" }]);
+    expect(w.receipt()).toMatchObject({ outcome: "COMMITTED", refusal: null, commit: { branch: "moe/y", sha: seat } });
     expect(w.effects.commits).toBe(0);
   }, 120_000);
 
@@ -213,7 +219,11 @@ describe("the lander adopts a seat-authored commit", () => {
     expect(readRepositoryLandingEvidence(w.f.store, w.f.handle)).toMatchObject({ ok: true });
   }, 120_000);
 
-  it("(7) keeps NOTHING_TO_COMMIT, and its credit, for a commit made in the project's OWN checkout and where no project checkout is configured", async () => {
+  // The truth from before node trees: a commit made in a workspace that is no node's tree is already on
+  // its own branch. A separate single-tree repository a spec names (`spec.workspace`) was asked about
+  // in the configured project's checkout, which cannot reach its sha: 128 on every pass, no receipt,
+  // the reservation AWAITING_LANDING for good, and every node briefed into that repository behind it.
+  it("(7) keeps NOTHING_TO_COMMIT, and its credit, for a commit made where no node tree is: the project's OWN checkout, and a separate repository", async () => {
     const shared = scratch();
     seatCommits(shared.root);
     const inProject = await accepted(shared.root, shared.root);
@@ -221,11 +231,26 @@ describe("the lander adopts a seat-authored commit", () => {
     expect(inProject.receipt()).toMatchObject({ commit: null, refusal: { code: "NOTHING_TO_COMMIT" } });
     expect(inProject.credited()).toBe(true);
 
-    const node = scratch();
-    seatCommits(node.tree);
-    const noProject = await accepted(node.tree, null);
-    expect(await noProject.lander().landOnce()).toMatchObject([{ outcome: "REFUSED", detail: expect.stringContaining("NOTHING_TO_COMMIT") }]);
-    expect(noProject.credited()).toBe(true);
+    const separate = scratch();
+    seatCommits(separate.root);
+    const elsewhere = await accepted(separate.root, shared.root);
+    expect(await elsewhere.lander().landOnce()).toMatchObject([{ outcome: "REFUSED", detail: expect.stringContaining("NOTHING_TO_COMMIT") }]);
+    expect(elsewhere.receipt()).toMatchObject({ commit: null, refusal: { code: "NOTHING_TO_COMMIT" } });
+    expect(elsewhere.credited()).toBe(true);
+  }, 120_000);
+
+  // Node trees do not depend on a configured project root (MOE_NODE_TREES cuts one under the mission's
+  // own workspace). "No root, so no trees" was an inference, and this arm used to PIN its wrong credit.
+  it("(8) adopts a seat commit in a real node tree with NO project root configured, asking Git in the project the tree belongs to", async () => {
+    const { base, tree } = scratch();
+    const seat = seatCommits(tree);
+    const w = await accepted(tree, null);
+
+    expect(await w.lander().landOnce()).toEqual([{ nodeRef: w.nodeRef, outcome: "COMMITTED",
+      detail: `${seat.slice(0, 10)} on moe/x, 1 file(s), adopted from the seat's own commit` }]);
+    expect(w.receipt()).toMatchObject({ outcome: "COMMITTED", refusal: null, commit: { branch: "moe/x", files: ["feature.txt"], parentSha: base, sha: seat } });
+    expect(w.credited()).toBe(false);
+    expect(w.effects.commits).toBe(0);
   }, 120_000);
 });
 
@@ -234,11 +259,11 @@ describe("adoptedSeatCommit", () => {
   const PARENT = "b".repeat(40);
   const binding: VerifiedWorkspaceBinding = { branchRef: "refs/heads/moe/x", dirtySha256: "d".repeat(64), headSha: SHA,
     root: "D:/ws/project/.moe-next/trees/x", treeSha: "2".repeat(40), version: "moe-verified-workspace/1" };
-  /** Git answering `merge-base` with `ancestry`, the diff with `names`, and `rev-parse` with the parent. */
+  /** Git answering `merge-base` with `ancestry`, `diff --quiet` by whether `names` is empty, the name list with `names`, and `rev-parse` with the parent. */
   const answering = (ancestry: number, names: string, calls: string[][] = []): IntegrationGit => (cwd, args) => {
     calls.push([cwd, ...args]);
     if (args[0] === "merge-base") return { code: ancestry, stdout: "" };
-    if (args[0] === "diff") return { code: 0, stdout: names };
+    if (args[0] === "diff") return args[1] === "--quiet" ? { code: names === "" ? 0 : 1, stdout: "" } : { code: 0, stdout: names };
     return { code: 0, stdout: `${PARENT}\n` };
   };
 
@@ -249,9 +274,10 @@ describe("adoptedSeatCommit", () => {
     const calls: string[][] = [];
     expect(adoptedSeatCommit(answering(1, "a.ts\0dir/b c.ts\0", calls), "D:/ws/project", binding, "message\n"))
       .toEqual({ kind: "ADOPT", commit: { branch: "moe/x", files: ["a.ts", "dir/b c.ts"], message: "message\n", parentSha: PARENT, sha: SHA } });
-    // Asked in the PROJECT's checkout, against its HEAD, with the three-dot diff.
+    // Asked in the PROJECT's checkout, as configured, against its HEAD: `--quiet` decides, then the three-dot names.
     expect(calls).toEqual([
       ["D:/ws/project", "merge-base", "--is-ancestor", SHA, "HEAD"],
+      ["D:/ws/project", "diff", "--quiet", `HEAD...${SHA}`],
       ["D:/ws/project", "diff", "--name-only", "-z", "--no-renames", `HEAD...${SHA}`],
       ["D:/ws/project", "rev-parse", "--verify", "--quiet", `${SHA}^`],
     ]);
@@ -268,17 +294,30 @@ describe("adoptedSeatCommit", () => {
   it("reads a Git that never answered as 128, never as merge-base's own 1", () => {
     const missing = join(tmpdir(), "moe-adopt-no-such-directory");
     expect(runGit(missing, ["merge-base", "--is-ancestor", SHA, "HEAD"]).code).toBe(128);
-    expect(adoptedSeatCommit(runGit, missing, binding, "m")).toEqual(UNPROVEN_128);
+    expect(adoptedSeatCommit(runGit, missing, { ...binding, root: join(missing, ".moe-next", "trees", "x") }, "m")).toEqual(UNPROVEN_128);
   });
 
   // Each of these answered null, and every null was recorded NOTHING_TO_COMMIT and credited.
-  it("answers NO_EFFECT only on proof: an empty diff that RAN, the project's own checkout, or no project checkout at all", () => {
+  it("answers NO_EFFECT only on proof: a diff Git called identical, or a workspace that is no node's tree, which asks Git nothing", () => {
     expect(adoptedSeatCommit(answering(1, ""), "D:/ws/project", binding, "m"))
       .toEqual({ kind: "NO_EFFECT", detail: `${SHA} adds no path to the project's branch` });
-    // Where no node tree is involved a clean workspace is the whole truth, and Git is not asked.
-    expect(adoptedSeatCommit(noGit, null, binding, "m")).toMatchObject({ kind: "NO_EFFECT", detail: expect.stringContaining("no project checkout is configured") });
-    expect(adoptedSeatCommit(noGit, "D:/ws/project/.moe-next/trees/../trees/x", binding, "m"))
-      .toMatchObject({ kind: "NO_EFFECT", detail: expect.stringContaining("the project's own checkout") });
+    // ONE RULE: the project's own checkout, a separate single-tree repository, with a root configured
+    // or none. A commit made there is already on its own branch, and a foreign checkout could only answer 128.
+    for (const [projectRoot, root] of [["D:/ws/project", "D:/ws/./project"], ["D:/ws/project", "D:/ws/other"], [null, "D:/ws/other"]] as const) {
+      expect(adoptedSeatCommit(noGit, projectRoot, { ...binding, root }, "m"))
+        .toMatchObject({ kind: "NO_EFFECT", detail: expect.stringContaining("no node's own tree") });
+    }
+  });
+
+  // "No root configured, so no trees" and "the configured root is this tree's project" were both
+  // inferences: a tree says where it belongs by its own path, three levels up.
+  it("asks Git in the project the tree belongs to when no root is configured, or the configured one is another project", () => {
+    for (const projectRoot of [null, "D:/ws/another-project"]) {
+      const calls: string[][] = [];
+      expect(adoptedSeatCommit(answering(1, "a.ts\0", calls), projectRoot, binding, "m")).toMatchObject({ kind: "ADOPT", commit: { files: ["a.ts"], sha: SHA } });
+      expect(calls.map(([cwd]) => cwd)).toEqual(Array.from({ length: 4 }, () => resolve("D:/ws/project")));
+      expect(adoptedSeatCommit(answering(128, "a.ts\0"), projectRoot, binding, "m")).toEqual(UNPROVEN_128);
+    }
   });
 
   it("answers UNPROVEN, naming what could not be established, for a failed diff, an unborn HEAD and unmerged work on no branch", () => {
@@ -287,8 +326,12 @@ describe("adoptedSeatCommit", () => {
     expect(adoptedSeatCommit(noGit, "D:/ws/project", { ...binding, headSha: null }, "m"))
       .toEqual({ kind: "UNPROVEN", detail: "the node's tree has an unborn HEAD, so nothing says where its work is" });
     // A detached HEAD (the withdrawal scan reads one as ""): no receipt can carry it, and it is never no-effect.
-    expect(adoptedSeatCommit(answering(1, "a.ts\0"), "D:/ws/project", { ...binding, branchRef: "" }, "m"))
-      .toEqual({ kind: "UNPROVEN", detail: `${SHA} holds work the project lacks but HEAD names no branch, and a landing receipt must name one` });
+    // Git DID prove the work, and says so: the withdrawal, which writes no receipt, reads `workProven` as found.
+    const detached: string[][] = [];
+    expect(adoptedSeatCommit(answering(1, "a.ts\0", detached), "D:/ws/project", { ...binding, branchRef: "" }, "m"))
+      .toEqual({ kind: "UNPROVEN", workProven: true, detail: `${SHA} holds work the project lacks but HEAD names no branch, and a landing receipt must name one` });
+    // Decided on `--quiet` alone: no name is read for an answer that names none.
+    expect(detached.map(([, verb, flag]) => `${verb ?? ""} ${flag ?? ""}`)).toEqual(["merge-base --is-ancestor", "diff --quiet"]);
     // Exit 0 is proof whatever HEAD is called.
     expect(adoptedSeatCommit(answering(0, ""), "D:/ws/project", { ...binding, branchRef: "" }, "m")).toMatchObject({ kind: "NO_EFFECT" });
   });
@@ -302,10 +345,33 @@ describe("adoptedSeatCommit", () => {
 
   it("records a root commit with no parent, and caps the names it records at 2000", () => {
     const rootless: IntegrationGit = (_cwd, args) => args[0] === "rev-parse" ? { code: 1, stdout: "" }
-      : { code: args[0] === "merge-base" ? 1 : 0, stdout: Array.from({ length: 2001 }, (_unused, index) => `f${String(index)}.ts`).join("\0") };
+      : { code: args[0] === "merge-base" || args[1] === "--quiet" ? 1 : 0, stdout: Array.from({ length: 2001 }, (_unused, index) => `f${String(index)}.ts`).join("\0") };
     const adopted = adoptedSeatCommit(rootless, "D:/ws/project", binding, "m");
     if (adopted.kind !== "ADOPT") throw new Error(adopted.detail);
     expect(adopted.commit.parentSha).toBeNull();
     expect(adopted.commit.files).toHaveLength(2000);
+  });
+
+  // A commit naming more than runGit's 4 MiB buffer (vendored code, build output) fails the name read
+  // with no exit status, which reads as 128: that was UNPROVEN "git diff exited 128" on every pass, for
+  // good. The DECISION is `--quiet`'s; the names are best-effort, and a name is never invented.
+  it("adopts on Git's own 'differs' when the full name list cannot be read, naming the top-level paths instead", () => {
+    const BASE = "c".repeat(40);
+    const calls: string[][] = [];
+    const overflowing = (topLevel: { readonly code: number; readonly stdout: string }): IntegrationGit => (_cwd, args) => {
+      calls.push([...args]);
+      if (args[0] === "merge-base") return args[1] === "--is-ancestor" ? { code: 1, stdout: "" } : { code: 0, stdout: `${BASE}\n` };
+      // The buffer overflowed mid-name: what did arrive is never used.
+      if (args[0] === "diff") return args[1] === "--quiet" ? { code: 1, stdout: "" } : { code: 128, stdout: "vendor/a.ts\0vendor/b" };
+      return args[0] === "diff-tree" ? topLevel : { code: 0, stdout: `${PARENT}\n` };
+    };
+    expect(adoptedSeatCommit(overflowing({ code: 0, stdout: "README.md\0vendor\0" }), "D:/ws/project", binding, "m"))
+      .toEqual({ kind: "ADOPT", commit: { branch: "moe/x", files: ["README.md", "vendor"], message: "m", parentSha: PARENT, sha: SHA } });
+    // The fallback asks for the top level only: no `-r`, between the merge base and the seat's commit.
+    expect(calls.slice(3, 5)).toEqual([["merge-base", "HEAD", SHA], ["diff-tree", "--name-only", "-z", BASE, SHA]]);
+    // No list at all: work is proven, no receipt can be written, and the reason names the limit, not "exited 128".
+    const answer = adoptedSeatCommit(overflowing({ code: 128, stdout: "" }), "D:/ws/project", binding, "m");
+    expect(answer).toMatchObject({ kind: "UNPROVEN", workProven: true, detail: expect.stringContaining("4 MiB output limit") });
+    expect(answer.kind === "UNPROVEN" && answer.detail).not.toContain("exited 128");
   });
 });

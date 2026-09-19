@@ -24,6 +24,8 @@ import { isRepositoryWorkflowRef } from "../repository/repository-workflow-ref.j
  */
 export const NODE_TREES_DIRECTORY = join(".moe-next", "trees");
 export const NODE_BRANCH_PREFIX = "moe/";
+/** The project a node's tree belongs to: a tree is `<project>/.moe-next/trees/<name>`, three levels under it. */
+export const projectOfTree = (tree: string): string => resolve(tree, "..", "..", "..");
 const NAME_LIMIT = 40;
 
 export interface NodeTree {

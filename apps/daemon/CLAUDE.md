@@ -132,17 +132,25 @@ its own: a caller that injects no dependency provider is refused, never served a
   a new verifier receipt and a new landing receipt. A terminal landing receipt is never retried in
   place: the accepted binding pins `headSha`, `treeSha` and `dirtySha256` together.
 - **A clean accepted workspace gets one of THREE answers** (`node-lander-adopt.ts`), and only
-  positive evidence earns credit. ADOPT: a seat-authored commit made in a node's own tree (decided by
-  WHERE, the workspace's real path against the project root, never by the branch's spelling: a seat
-  may `git switch -c wip`) that `merge-base --is-ancestor` answers EXACTLY 1 for, with a three-dot
-  diff that ran and names paths; it is recorded COMMITTED with no Git effect, because a merge that
-  resolves a conflict must be a real two-parent commit, which the plumbing commit cannot make.
-  NO_EFFECT, proven: exit EXACTLY 0, or exit 1 with a diff that ran and is empty, or the workspace IS
-  the project's checkout / no project root is configured; only this records `NOTHING_TO_COMMIT`,
-  the code `landedWithNoEffect` credits. UNPROVEN (128, a failed diff, an unborn HEAD, unmerged work
-  on no branch): the lander REPORTS `LANDING_ADOPTION_UNPROVEN` and records nothing, `land` answers
-  RETRY, and the line repeats each pass like `GIT_FAILED`; the withdrawal scan says
-  `WITHDRAWAL_DELIVERY_UNPROVED` once and never finalises the receipt. `integratorMerges`
+  positive evidence earns credit. ONE RULE decides whether Git is asked at all: ONLY when the workspace
+  is a node's own tree, real path `<project>/.moe-next/trees/<name>` (`landedFromTree`, the predicate
+  every consumer of the receipt uses), and then in the configured project root when the tree is that
+  root's own, else in the root derived from the tree's path (`projectOfTree`), which covers no
+  configured root. ADOPT: a seat-authored commit there (decided by WHERE, never by the branch's
+  spelling: a seat may `git switch -c wip`) that `merge-base --is-ancestor` answers EXACTLY 1 for and
+  `diff --quiet HEAD...<sha>` answers EXACTLY 1 for; it is recorded COMMITTED with no Git effect,
+  because a merge that resolves a conflict must be a real two-parent commit, which the plumbing commit
+  cannot make. The receipt's paths are best-effort and never invented: the recursive name list, else
+  the top-level names (`diff-tree` without `-r`), so a commit naming more than runGit's 4 MiB buffer
+  still lands. NO_EFFECT, proven: either exit EXACTLY 0, or ANY workspace that is not a node's tree
+  (the project's checkout, a separate single-tree repository a spec names) without asking Git, the
+  truth from before node trees, which never strands a reservation in AWAITING_LANDING; only this
+  records `NOTHING_TO_COMMIT`, the code `landedWithNoEffect` credits. UNPROVEN (128, a failed diff,
+  an unborn HEAD, and, flagged `workProven`, work Git proved on no branch or with no listable path):
+  the lander REPORTS `LANDING_ADOPTION_UNPROVEN` and records nothing, `land` answers RETRY, and the
+  line repeats each pass like `GIT_FAILED`; the withdrawal scan says `WITHDRAWAL_DELIVERY_UNPROVED`
+  once and never finalises the receipt, except for `workProven`, which it reads as found and withdraws
+  `DELIVERED_NOTHING` (it writes no `LandingCommit`, so a detached HEAD costs it nothing). `integratorMerges`
   (`node-landed-branches.ts`) offers the integrator, and the withdrawal's conflict rule, every tree
   landing whatever its branch is called. Adoption at the SAME sha is deliberate: a do-nothing
   resolution conflicts and is withdrawn again instead of being credited as owing no bytes.

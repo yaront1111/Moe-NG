@@ -58,7 +58,7 @@ export interface NodeLanderConfig {
   readonly nodeMission: (nodeRef: string) => NodeMission | null;
   readonly nodes: () => readonly { nodeRef: string }[];
   readonly projectId: string;
-  /** The project's own checkout, whose HEAD decides whether a seat's commit is still unmerged. Absent or null = no node trees: a clean workspace owes nothing. */
+  /** The project's own checkout, whose HEAD decides whether a seat's commit in a node's tree is still unmerged. Absent, null, or not that tree's own project: the project is derived from the tree's path (node-lander-adopt.ts). */
   readonly projectRoot?: string | null;
   /** INJECTED in tests; production reads the node's review ledger. */
   readonly readAccepted?: (nodeRef: string) => { readonly verifierReceiptId: string } | null;

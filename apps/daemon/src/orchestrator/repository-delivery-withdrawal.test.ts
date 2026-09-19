@@ -321,6 +321,30 @@ it("returns a node credited with nothing to a seat in the tree that holds its wo
   expect(readFileSync(join(f.workspace, "c.txt"), "utf8")).toBe("c\n");
 }, 600_000);
 
+// A seat that ran `git checkout <sha>` leaves its tree on no branch. Git still PROVES the tree holds
+// work; only a landing RECEIPT needs a branch name, and the withdrawal writes none. Read as "unproved",
+// it was re-asked on every pass for good and the no-effect credit stayed.
+it("returns a node credited with nothing to a seat when its tree holds commits on a detached HEAD", async (context) => {
+  const f = await fixture();
+  context.onTestFailed(() => { console.error(f.logs.join("\n")); });
+  const tree = f.trees.get("c")!;
+  f.placed.set("c", f.workspace);
+  await f.seat("c", () => {
+    writeFileSync(join(tree.path, "c.txt"), "c\n");
+    git(tree.path, "add", "--", "c.txt"); git(tree.path, "commit", "--quiet", "-m", "seat: c");
+    git(tree.path, "checkout", "--quiet", "--detach");
+  });
+  const sha = git(tree.path, "rev-parse", "HEAD");
+
+  await f.runtime.advance();
+  expect(linesOf(f, "c").at(-1)).toContain("[lander] c: REFUSED (NOTHING_TO_COMMIT");
+  await f.runtime.advance();
+
+  expect(linesOf(f, "c").at(-1)).toBe(`[withdrawal] c: DELIVERED_NOTHING (the landing found nothing in ${f.workspace} while ${tree.path} holds commits at ${sha.slice(0, 10)} (detached HEAD) that the project's branch does not contain; name a branch for them (git switch -c <name>) before you submit, because a landing must name one; the acceptance was withdrawn and the node returns to a seat)`);
+  expect(f.logs.join("\n")).not.toContain("WITHDRAWAL_DELIVERY_UNPROVED");
+  expect(f.facts("c")).toBe("READY");
+}, 600_000);
+
 // The sync's brief read is the FIRST the staffing chain makes. Thrown past the sync it lands in the
 // coordinator's catch: the hold goes BLOCKED and start() rejects, a staffing failure only a restart clears.
 it("staffs the seat without its head start when the node's brief cannot be read during the sync", async (context) => {

@@ -127,7 +127,7 @@ const treeGit = (status: string, merged: boolean, asked: string[][] = []): Integ
     : args[0] === "symbolic-ref" ? { code: 0, stdout: `${TREE_BRANCH}\n` }
       : args[0] === "rev-parse" ? { code: 0, stdout: `${SHA}\n` }
         : args[0] === "merge-base" ? { code: merged ? 0 : 1, stdout: "" }
-          : args[0] === "diff" ? { code: 0, stdout: "src/seat.ts\0" } : { code: 1, stdout: "" };
+          : args[0] === "diff" ? { code: args[1] === "--quiet" ? 1 : 0, stdout: "src/seat.ts\0" } : { code: 1, stdout: "" };
 };
 const noGit: IntegrationGit = () => { throw new Error("no rule here asks Git anything"); };
 const findingOf = (w: World): string => w.ledger().rounds.at(-1)?.lineage.records.at(-1)?.finding.detail ?? "";
