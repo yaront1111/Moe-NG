@@ -28,7 +28,17 @@
       "affectedFiles": [
         "apps/daemon/src/release/release-decide-contracts.ts",
         "apps/daemon/src/release/release-decide-contracts.test.ts"
-      ]
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "RED then GREEN — the new refusal code. In apps/daemon/src/release/release-decide-contracts.test.ts first update the pins so they FAIL against today's map: add `RELEASE_HEAD_IS_BASE` to the exact list at :55 in its sorted position, change the hard-coded `toHaveLength(3)` at :63 to 4, and add a per-code layer assertion beside :44-46 that it maps to `GOAL_PREREQUISITE_LAYER`. ALSO (amend-1): the same file's `expect(checked).toBe(3)` at :76 moves to 4 — the original text missed it, and it is owned, not drift. Keep the bidirectional set-equality arm at :60-61 exactly as it is — it is what proves the derived roster and the map still agree. Confirm RED.\n\nAMEND-1, THE UNNAMED PIN THE CENSUS FOUND — this step now OWNS apps/daemon/src/release/release-receipt-ledger.test.ts. Its `expect(RELEASE_DECIDE_CODES.length).toBe(3)` at :67 and the per-code REFUSED-receipt loop under it both red the moment the fourth code joins the map. Rotate them from the PRINTED expected-vs-received; do not freeze 3 or 4 in advance, and change nothing else in that file. Report it in complete_step.modifiedFiles. That makes 11 distinct files for the row, inside the enforced cap of settings.taskSizing.maxDistinctFiles = 20 — the \"10-file cap\" in the epic rails is stale text, and submit_plan does not enforce it.\n\nThen in apps/daemon/src/release/release-decide-contracts.ts add `RELEASE_HEAD_IS_BASE` to `RELEASE_DECIDE_CODE_LAYER_MAP` with a one-line doc comment in the same register as its neighbours (the daemon's prerequisite read found the pull request's head is its base, so no pull request can exist between them), using the declared layer constant rather than a bare string — a bare layer literal at a refusal site is known to red the TASK-LV security census arms. Update the 'Exactly three keys, closed' doc comment to four. `RELEASE_DECIDE_CODES` derives from the map and needs no edit. Confirm GREEN.",
+          "reason": "Governor ruling comment-f084efe2 on worker-07e6de2a's step-1 census (comment-28a325e7): this step now OWNS release-receipt-ledger.test.ts, whose whole-set pin reds the moment the code joins the map, and names the contracts.test.ts `checked` pin the original text missed. 11 distinct files is inside this project's cap of 20 (settings.taskSizing.maxDistinctFiles) — the \"10-file cap\" the block cites is stale rail text, so this is an amendment, not a split. Made by the governor because the row is HIGH, unassigned and blocked.",
+          "amendedBy": "governor-f32726f9",
+          "amendedAt": "2026-09-19T01:06:44.265Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-3",
@@ -37,7 +47,17 @@
       "affectedFiles": [
         "apps/daemon/src/release/release-decide-service.ts",
         "apps/daemon/src/release/release-decide-service.test.ts"
-      ]
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "RED then GREEN — the guard (DoD 1). In apps/daemon/src/release/release-decide-service.test.ts first add arms asserting the refusal BY VALUE — exact code `RELEASE_HEAD_IS_BASE`, exact layer, and a detail containing BOTH branch names — never merely that the release did not succeed: (1) the pushed head equals the requested base, so the release refuses; (2) the pushed head differs from the base, so the guard does not fire; (3) THE MIGRATION CASE the guard exists for: a goal whose PUSHED receipt was written BEFORE task-04160615, with branch `master`, released against base `master`. Assert on the injected PR port that `gh` was NEVER invoked in the refusing arms — the guard must fire before any spawn, or it is only renaming a gh failure. Confirm RED.\n\nAMEND-1, PINS THE ORIGINAL TEXT MISSED, in this same already-owned file: :483-486 carries an exact `Object.keys` list plus `toHaveLength(3)` over the refusal map. The fourth code moves both. Rotate them from the PRINTED expected-vs-received (epic rail 3) — never freeze the number — and say in the step note that you did. This is owned work, not drift.\n\nThen in apps/daemon/src/release/release-decide-service.ts add the check immediately after `pushedBranchOf` resolves the head and BEFORE the PR port is called: if head equals base, throw `domainRefusalOf(releaseRefusal(\"RELEASE_HEAD_IS_BASE\", <detail>))` in the pattern :162-176 already uses. The detail names both branches and says what to do: re-publish the goal, which now targets `moe/release/<goalId>` for a workspace on the remote's default branch. Compare branch names exactly as git does — case-sensitive. Confirm GREEN, then MUTATION-VERIFY arm (1): back up release-decide-service.ts to %TEMP%/moe-task-4ba1e00a-release-decide-service-<workerId>.ts recording its SHA256 (task id in the path, because seat ids are reused and a seat-only backup can hold the wrong vintage), delete the guard, confirm arm (1) goes RED and quote the line, restore by copying the backup back — never `git checkout --` on this shared tree — and prove the restore by SHA256 equality in a call SEPARATE from the restore.",
+          "reason": "Governor ruling comment-f084efe2, finding 2: name the whole-set pins at release-decide-service.test.ts:483-486 that the original step text missed, so rotating them is owned work and not graded as drift. The file is already this step's.",
+          "amendedBy": "governor-f32726f9",
+          "amendedAt": "2026-09-19T01:06:59.264Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-4",
@@ -47,7 +67,17 @@
         "apps/daemon/src/http/release-evidence-read.ts",
         "apps/daemon/src/http/release-read.test.ts",
         "apps/control-room/src/live/live-release.ts"
-      ]
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "Serve the measured default to the card (DoD 2, daemon side). In apps/daemon/src/http/release-evidence-read.ts call task-baefab32's `readRemoteDefaultBranch(store, projectId, remoteUrl)` for the project's bound remote and include `remoteDefaultBranch` in the response WHEN IT IS A STRING, OMITTING the key entirely when it is null — absent means unmeasured, which is what keeps every existing ReleaseEvidenceView fixture valid under `exactOptionalPropertyTypes`. It is a local store read with no network call, so it is safe on this polled path.\n\nAMEND-1, A FALSE PREMISE THE CENSUS CAUGHT — the planning note that said there is no exact-key decoder on this path is WRONG. apps/control-room/src/live/live-release.ts:149 `evidenceOf` reads through `effectRecord` with an exact 8-key list, and apps/control-room/src/live/live-effect-read.ts:8-13 refuses any record whose `ownKeys.length !== keys.length`. So serving a ninth key to today's decoder makes the card answer RELEASE_RESPONSE_INVALID and show nothing — the opposite of this row's DoD 2. WIDEN THE DECODER IN THE SAME STEP: accept 8 OR 9 keys, with `remoteDefaultBranch` optional and absent-not-null when unmeasured, and assert both shapes by value. Add `readonly remoteDefaultBranch?: string` to `ReleaseEvidenceView` (:66) with a one-line doc comment: the default branch the remote itself reported, absent when it has never been measured or could not be.\n\nAdd arms to apps/daemon/src/http/release-read.test.ts, which is where release-evidence-read's tests already live: a measured default appears by value; an unmeasured one leaves the key ABSENT rather than null — assert with `not.toHaveProperty`, because `toEqual` treats a missing key and an undefined value alike and would pass either way. Put the decoder's own 8-key and 9-key arms in the control-room tests this step already names; do not add a new file.",
+          "reason": "Governor ruling comment-f084efe2, finding 3: the plan's premise was false. live-release.ts:149 evidenceOf DOES pass through an exact-key decoder (live-effect-read.ts:8-13 requires ownKeys.length === keys.length), so an unconditional ninth key would make the card answer RELEASE_RESPONSE_INVALID. The decoder must accept 8-or-9 keys, with the field omitted when unmeasured. The file is already this step's.",
+          "amendedBy": "governor-f32726f9",
+          "amendedAt": "2026-09-19T01:07:14.686Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-5",
@@ -74,7 +104,7 @@
       "affectedFiles": []
     }
   ],
-  "planRevision": 3,
+  "planRevision": 6,
   "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
@@ -101,7 +131,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:08:47.382Z",
-  "updatedAt": "2026-09-19T00:43:36.810Z",
+  "updatedAt": "2026-09-19T01:07:14.686Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:09:47.523Z",
     "plannedStepCount": 7,

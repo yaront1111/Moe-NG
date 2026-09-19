@@ -75,6 +75,26 @@ export function publishLine(publish: RunGoalPublishView | null): string {
   return `Publish refused ${MIDDOT} ${code} ${MIDDOT} ${REFUSAL_INSTRUCTIONS[code] ?? "decide again to retry"}`;
 }
 
+/** The push outcome the publisher journaled, as the reason an unresolved publish gives. */
+const REASON_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  ACCEPTED: "git accepted the push",
+  INDETERMINATE: "git's answer to the push was lost",
+  REJECTED: "git refused the push",
+  UNRECORDED: "no record of how the push ended",
+});
+
+/**
+ * What the publisher last saw for a PENDING or UNKNOWN publish: where the remote branch is against
+ * where it should be, and why. Null when there is no observation, or once the publish resolved.
+ */
+export function observationLine(publish: RunGoalPublishView | null): string | null {
+  const seen = publish?.observation ?? null;
+  if (publish === null || seen === null || (publish.outcome !== "PENDING" && publish.outcome !== "UNKNOWN")) return null;
+  const branch = publish.branch ?? "the approved branch";
+  const where = seen.observedSha === null ? `${branch} does not exist` : `${branch} is at ${seen.observedSha.slice(0, 10)}`;
+  return `On the remote, ${where}; expected ${seen.expectedSha.slice(0, 10)} ${MIDDOT} ${REASON_WORDS[seen.reason] ?? seen.reason}`;
+}
+
 interface LandedCommit { readonly nodeKey: string; readonly sha: string }
 
 /** The commits this publish would push, as the runs read landed them. */
@@ -100,6 +120,7 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
   const publish = goal?.publish ?? null;
   const commits = landedCommits(goal);
   const bound = boundRemoteUrl(remote);
+  const observed = observationLine(publish);
   // Nothing landed means no offer and no receipt: the card is not a thing on this screen at all.
   if (offer === null && publish === null) return null;
   // ALSO binding while something has been typed. The bound remote arrives from a POLL, so it can
@@ -143,6 +164,7 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
         </ul>
       )}
       <p className="cr2-needs-detail" data-testid="cr.publish.state">{publishLine(publish)}</p>
+      {observed === null ? null : <p className="cr2-needs-detail" data-testid="cr.publish.observed">{observed}</p>}
       {publish?.url === null || publish === null ? null : (
         <a className="cr2-link" data-testid="cr.publish.link" href={publish.url} rel="noreferrer" target="_blank">{publish.url}</a>
       )}

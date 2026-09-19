@@ -104,6 +104,9 @@ export interface RunGoalPublish {
   readonly branch: string | null;
   readonly code: string | null;
   readonly decisionId: string;
+  /** An unresolved publish's last observation: the remote tip (null when the branch is absent there), the
+   * sha it should hold, and the push outcome as the reason. Always on the wire, null when there is none. */
+  readonly observation: { readonly observedSha: string | null; readonly expectedSha: string; readonly reason: string; readonly observedAt: string } | null;
   readonly outcome: "PENDING" | "PUSHED" | "REFUSED" | "UNKNOWN";
   readonly remoteUrl: string;
   readonly requestedAt: string;

@@ -84,6 +84,10 @@ export interface RunGoalPublishView {
   readonly branch: string | null;
   readonly code: string | null;
   readonly decisionId: string;
+  /** An unresolved publish's last observation: the remote tip (null when the branch is absent there), the sha
+   * it should hold, and the push outcome as the reason. Optional for existing view constructors; REQUIRED on
+   * the exact daemon wire, null when there is none. */
+  readonly observation?: { readonly expectedSha: string; readonly observedAt: string; readonly observedSha: string | null; readonly reason: string } | null;
   readonly outcome: "PENDING" | "PUSHED" | "REFUSED" | "UNKNOWN";
   readonly remoteUrl: string;
   readonly requestedAt: string;
@@ -203,13 +207,21 @@ function nodeOf(value: unknown): RunNodeView | null {
 }
 
 function publishOf(value: unknown): RunGoalPublishView | null {
-  const record = exactDataRecord(value, ["branch", "code", "decisionId", "outcome", "remoteUrl", "requestedAt", "sha", "url"]);
+  const record = exactDataRecord(value, ["branch", "code", "decisionId", "observation", "outcome", "remoteUrl", "requestedAt", "sha", "url"]);
   if (record === null || !nullableString(record.branch) || !nullableString(record.code) || !nonEmptyString(record.decisionId)
     || !nonEmptyString(record.remoteUrl) || !nonEmptyString(record.requestedAt) || !nullableString(record.sha)
     || !nullableString(record.url)
     || (record.outcome !== "PENDING" && record.outcome !== "PUSHED" && record.outcome !== "REFUSED" && record.outcome !== "UNKNOWN")) return null;
+  let observation: RunGoalPublishView["observation"] = null;
+  if (record.observation !== null) {
+    // Its OWN exact key set: the nested object is held to the same standard as the body around it.
+    const row = exactDataRecord(record.observation, ["expectedSha", "observedAt", "observedSha", "reason"]);
+    if (row === null || !nonEmptyString(row.expectedSha) || !nonEmptyString(row.observedAt) || !nullableString(row.observedSha)
+      || !nonEmptyString(row.reason)) return null;
+    observation = Object.freeze({ expectedSha: row.expectedSha, observedAt: row.observedAt, observedSha: row.observedSha, reason: row.reason });
+  }
   return Object.freeze({
-    branch: record.branch, code: record.code, decisionId: record.decisionId, outcome: record.outcome,
+    branch: record.branch, code: record.code, decisionId: record.decisionId, observation, outcome: record.outcome,
     remoteUrl: record.remoteUrl, requestedAt: record.requestedAt, sha: record.sha, url: record.url,
   });
 }

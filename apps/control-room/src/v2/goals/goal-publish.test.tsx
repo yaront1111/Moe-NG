@@ -10,7 +10,7 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import type { RunGoalView } from "../../live/live-runs.js";
 import type { OfferWire } from "../approvals/offer-wire.js";
-import { GoalPublish, boundRemoteUrl, landedCommits, publishLine, publishOffer } from "./goal-publish.js";
+import { GoalPublish, boundRemoteUrl, landedCommits, observationLine, publishLine, publishOffer } from "./goal-publish.js";
 import { createPublishPort as createRealPublishPort } from "./publish-port.js";
 const preparedApproval = { branch: "approved-branch", sha: "b".repeat(40), repositoryId: "c".repeat(64), remoteUrl: "https://github.com/owner/unai.git" };
 const createPublishPort = (wire: OfferWire) => createRealPublishPort(wire, async (goalId, remoteUrl) => ({ ok: true,
@@ -233,5 +233,43 @@ describe("the card keeps NO remote of its own", () => {
     expect(source).not.toContain(retiredKey);
     expect(source).not.toContain("localStorage");
     expect(source).not.toContain("sessionStorage");
+  });
+});
+
+describe("the last observation of an unresolved publish", () => {
+  const EXPECTED = "9ca01b31".padEnd(40, "0"); const TIP = "2ce84e5a".padEnd(40, "0");
+  const SEEN = Object.freeze({ expectedSha: EXPECTED, observedAt: "2026-09-19T08:00:00.000Z", observedSha: TIP, reason: "REJECTED" });
+  const STUCK = Object.freeze({ branch: "main", code: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED", decisionId: "d", observation: SEEN,
+    outcome: "UNKNOWN" as const, remoteUrl: "https://github.com/o/r.git", requestedAt: "t", sha: EXPECTED, url: null });
+
+  it("says on the card where the remote is, where it should be, and why", () => {
+    render(<GoalPublish frame={NO_OFFER} goal={goal({ publish: STUCK })} goalId="goal-1" port={null} remote={BOUND} />);
+    expect(screen.getByTestId("cr.publish.observed").textContent).toBe("On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · git refused the push");
+    expect(screen.getByTestId("cr.publish.state").textContent).toContain("Publication outcome unknown");
+  });
+
+  it("says the branch is absent on the remote, and words every recorded reason, a PENDING publish's too", () => {
+    expect(observationLine({ ...STUCK, observation: { ...SEEN, observedSha: null } }))
+      .toBe("On the remote, main does not exist; expected 9ca01b3100 · git refused the push");
+    const words: [string, string][] = [["ACCEPTED", "git accepted the push"], ["INDETERMINATE", "git's answer to the push was lost"],
+      ["UNRECORDED", "no record of how the push ended"], ["SOMETHING_NEW", "SOMETHING_NEW"]];
+    for (const [reason, said] of words) {
+      expect(observationLine({ ...STUCK, observation: { ...SEEN, reason } })).toBe(`On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · ${said}`);
+    }
+    expect(words).toHaveLength(4);
+    expect(observationLine({ ...STUCK, outcome: "PENDING", code: null })).toBe("On the remote, main is at 2ce84e5a00; expected 9ca01b3100 · git refused the push");
+  });
+
+  it("renders without the line when there is no observation, or once the publish resolved", () => {
+    const { observation: _absent, ...older } = STUCK;
+    for (const publish of [{ ...STUCK, observation: null }, older]) {
+      render(<GoalPublish frame={NO_OFFER} goal={goal({ publish })} goalId="goal-1" port={null} remote={BOUND} />);
+      expect(screen.getByTestId("cr.publish.state").textContent).toContain("Publication outcome unknown");
+      expect(screen.queryByTestId("cr.publish.observed")).toBeNull();
+      cleanup();
+    }
+    expect(observationLine(null)).toBeNull();
+    expect(observationLine({ ...STUCK, outcome: "PUSHED", code: null })).toBeNull();
+    expect(observationLine({ ...STUCK, outcome: "REFUSED", code: "PUBLISH_NOT_LANDED" })).toBeNull();
   });
 });

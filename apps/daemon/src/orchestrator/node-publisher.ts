@@ -2,15 +2,12 @@ import type { SqliteEventStore } from "@moe/store";
 import { PUBLISH_PUSH_REJECTED } from "../repository/git-publication-port.js";
 import type { PublicationGitPort } from "../repository/publication-effect-contracts.js";
 import type { RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
-import { readPublishLedger, recordPublishReceipt } from "../repository/publish-ledger.js";
-import type { PublishRequest } from "../repository/publish-ledger.js";
-import { publishLinkFor } from "../repository/publish-receipt-contracts.js";
-import type { PublishRefusal } from "../repository/publish-receipt-contracts.js";
-import { samePublicationApproval } from "../repository/publication-approval-contracts.js";
+import { readPublishLedger, recordPublishReceipt, type PublishRequest } from "../repository/publish-ledger.js";
+import { publishLinkFor, type PublishRefusal } from "../repository/publish-receipt-contracts.js";
+import { publicationRepositoryId, samePublicationApproval } from "../repository/publication-approval-contracts.js";
 import type { PublicationCandidate, PublicationRefusal } from "../repository/publication-approval-contracts.js";
-import { publicationRepositoryId } from "../repository/publication-approval-contracts.js";
-import { PUBLICATION_TIP_UNREADABLE, publicationOwnerDigest, readPublicationIntent, readPublicationTransmission, recordPublicationIntent,
-  recordPublicationTransmission } from "../repository/publication-effect-ledger.js";
+import { PUBLICATION_TIP_UNREADABLE, notePublicationObservation, publicationOwnerDigest, readPublicationIntent, readPublicationTransmission,
+  recordPublicationIntent, recordPublicationTransmission } from "../repository/publication-effect-ledger.js";
 import type { PublicationPushOutcome } from "../repository/publication-effect-ledger.js";
 import { measureRemoteDefaultBranch } from "../repository/remote-default-branch.js";
 import { publicationReservation } from "./node-publisher-reservation.js";
@@ -206,8 +203,11 @@ export function createNodePublisher(config: NodePublisherConfig) {
       const observed = await config.git.observe(candidate);
       if (!observed.ok) return unknown(`remote unreadable ${observed.code}: ${observed.detail}; ${transmission}`);
       if (observed.sha !== candidate.approval.sha) {
-        return notLanded(request, candidate, config.workspace, handle, observed.sha)
-          ?? unknown(`remote ${candidate.approval.branch} is at ${short(observed.sha)}, expected ${short(candidate.approval.sha)}; ${transmission}`);
+        const resolved = notLanded(request, candidate, config.workspace, handle, observed.sha); if (resolved !== null) return resolved;
+        // What the card says about this UNKNOWN: written only when it changes, and a failed write changes nothing here.
+        notePublicationObservation(config.store, { projectId: config.projectId, goalId, decisionId, observedSha: observed.sha,
+          expectedSha: candidate.approval.sha, observedAt: clock() });
+        return unknown(`remote ${candidate.approval.branch} is at ${short(observed.sha)}, expected ${short(candidate.approval.sha)}; ${transmission}`);
       }
       const receipt = recordPublishReceipt(config.store, { branch: candidate.approval.branch,
         decidedAt: clock(), decisionId, goalId, projectId: config.projectId, refusal: null,

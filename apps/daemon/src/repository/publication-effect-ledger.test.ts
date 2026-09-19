@@ -2,9 +2,9 @@ import { afterEach, expect, it } from "vitest";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 import { PROJECT_ID, closeStores, openStore } from "../review/review-test-fixtures.js";
 import { publicationRepositoryId } from "./publication-approval-contracts.js";
-import { PUBLICATION_TIP_UNREADABLE, readPublicationIntent, readPublicationTransmission, recordPublicationIntent,
-  recordPublicationTransmission } from "./publication-effect-ledger.js";
-import type { PublicationTransmission } from "./publication-effect-ledger.js";
+import { PUBLICATION_TIP_UNREADABLE, readPublicationIntent, readPublicationObservation, readPublicationTransmission, recordPublicationIntent,
+  recordPublicationObservation, recordPublicationTransmission } from "./publication-effect-ledger.js";
+import type { PublicationObservation, PublicationTransmission } from "./publication-effect-ledger.js";
 import type { PublicationEffectIntent } from "./publication-effect-contracts.js";
 afterEach(closeStores);
 const identity = { root: "D:/publication", gitDirectory: "D:/publication/.git" };
@@ -105,4 +105,71 @@ it("reads a malformed transmission record as ABSENT, so bad evidence can never r
   ];
   for (const change of changes) expect(readPublicationTransmission(tampered(change), PROJECT_ID, "goal-1", "decision-1")).toBeNull();
   expect(changes).toHaveLength(13);
+});
+
+const seen = (decisionId: string, observedSha: string | null, observedAt: string): PublicationObservation =>
+  ({ projectId: PROJECT_ID, goalId: "goal-1", decisionId, observedSha, expectedSha: "a".repeat(40), reason: "REJECTED", observedAt });
+const observations = (store: SqliteEventStore): number =>
+  store.readEvents("publish:goal-1").filter((event) => event.eventType === "RepositoryPublicationObserved").length;
+const latest = (store: SqliteEventStore, decisionId = "decision-1") => readPublicationObservation(store, PROJECT_ID, "goal-1", decisionId);
+
+it("records an observation only when it CHANGES and reads back the latest one by value", () => {
+  const store = openStore(); const first = seen("decision-1", "c".repeat(40), "2026-09-06T00:00:02.000Z");
+  expect(latest(store)).toBeNull();
+  recordPublicationObservation(store, first);
+  for (const observedAt of ["2026-09-06T00:00:03.000Z", "2026-09-06T00:00:04.000Z"]) recordPublicationObservation(store, { ...first, observedAt });
+  expect(observations(store)).toBe(1);
+  expect(latest(store)).toEqual(first);
+  const absent = seen("decision-1", null, "2026-09-06T00:00:05.000Z");
+  recordPublicationObservation(store, absent);
+  expect(observations(store)).toBe(2);
+  expect(latest(store)).toEqual(absent);
+  // Back to the first observation, byte for byte: a change against the latest, so a new write, never a replay of the first.
+  recordPublicationObservation(store, first);
+  expect(observations(store)).toBe(3);
+  expect(latest(store)).toEqual(first);
+  recordPublicationObservation(store, { ...first, reason: "INDETERMINATE" });
+  recordPublicationObservation(store, { ...first, reason: "INDETERMINATE", expectedSha: "d".repeat(40) });
+  expect(observations(store)).toBe(5);
+  expect(latest(store)).toEqual({ ...first, reason: "INDETERMINATE", expectedSha: "d".repeat(40) });
+  expect(latest(store, "decision-2")).toBeNull();
+  expect(readPublicationObservation(store, "project-other", "goal-1", "decision-1")).toBeNull();
+});
+
+it("keeps each decision's observations apart: the same tip under another decision is its own first observation", () => {
+  const store = openStore(); const first = seen("decision-1", "c".repeat(40), "2026-09-06T00:00:02.000Z");
+  recordPublicationObservation(store, first);
+  recordPublicationObservation(store, { ...first, decisionId: "decision-2" });
+  recordPublicationObservation(store, first);
+  expect(observations(store)).toBe(2);
+  expect(latest(store)).toEqual(first);
+  expect(latest(store, "decision-2")).toEqual({ ...first, decisionId: "decision-2" });
+});
+
+it("HAZARD: the intent and the transmission decode unchanged with an observation beside them", () => {
+  const store = openStore(); recordPublicationIntent(store, input);
+  const recorded = sent("decision-1", "c".repeat(40), "REJECTED"); recordPublicationTransmission(store, recorded);
+  const before = onGoal(store).map((decision) => decision.resultBytes);
+  recordPublicationObservation(store, seen("decision-1", "c".repeat(40), "2026-09-06T00:00:02.000Z"));
+  const decisions = onGoal(store);
+  expect(decisions.map((decision) => decision.commandKind)).toEqual(["internal.repository.publication_intent",
+    "internal.repository.publication_transmission", "internal.repository.publication_observation"]);
+  expect(decisions.slice(0, 2).map((decision) => decision.resultBytes)).toEqual(before);
+  expect(Object.keys(json(decisions[0])).sort()).toEqual(INTENT_KEYS);
+  expect(readPublicationIntent(store, PROJECT_ID, "goal-1", "decision-1")).toEqual(input);
+  expect(readPublicationTransmission(store, PROJECT_ID, "goal-1", "decision-1")).toEqual(recorded);
+});
+
+it("never writes an observation it could not read back, and writes nothing when the aggregate is unreadable", () => {
+  const store = openStore(); const first = seen("decision-1", "c".repeat(40), "2026-09-06T00:00:02.000Z");
+  for (const bad of [{ ...first, observedSha: "not-a-sha" }, { ...first, expectedSha: "C".repeat(40) },
+    { ...first, reason: "MAYBE" as PublicationObservation["reason"] }, { ...first, observedAt: "" }]) recordPublicationObservation(store, bad);
+  expect(observations(store)).toBe(0);
+  const blind = new Proxy(store, { get(target, key) {
+    if (key === "readEvents") return () => { throw new Error("STORE_READ_LIMIT_EXCEEDED"); };
+    const value: unknown = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value;
+  } });
+  expect(readPublicationObservation(blind, PROJECT_ID, "goal-1", "decision-1")).toBeNull();
+  expect(() => recordPublicationObservation(blind, first)).toThrow("STORE_READ_LIMIT_EXCEEDED");
+  expect(observations(store)).toBe(0);
 });
