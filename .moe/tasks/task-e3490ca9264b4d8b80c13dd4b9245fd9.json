@@ -46,7 +46,7 @@
     }
   ],
   "planRevision": 7,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -66,16 +66,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-19T00:45:10.102Z",
-  "updatedAt": "2026-09-19T07:01:04.833Z",
+  "updatedAt": "2026-09-19T07:05:18.690Z",
   "metrics": {
     "firstClaimAt": "2026-09-19T06:48:08.409Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 3
+    "executedStepCount": 3,
+    "doneAt": "2026-09-19T07:05:18.690Z",
+    "wallClockMs": 1030281
   },
   "contextFetchedBy": [
     "architect-0f009933",
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "stepsCompleted": [
     "step-1",
@@ -107,7 +110,39 @@
     "source": "agent-reported"
   },
   "filesModified": [
+    "tests/integration/distribution/pack-artifact-sweep.test.ts",
+    ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json"
+  ],
+  "completionSummary": "Census pin moved in tests/integration/distribution/pack-artifact-sweep.test.ts only (+36/-4, 154 lines). No production byte changed; TEST_VOCABULARY and isTestArtifact are untouched (git diff HEAD -- tools/packaging is empty).\n- PRODUCTION_EXCEPTIONS gains apps/daemon/src/node-spec-loader.{js,ts}, in alphabetical order. The roster comment now names both readers (node-spec listing + spec loader) and their .js bridges.\n- New arm \"every production exception has a production importer, which a test-only module never has\". It checks that each .ts/.js entry has a non-isTestArtifact importer: a relative specifier `/<basename>` followed by a quote. It also asserts the skipped set equals exactly the .rs entries. POSITIVE CONTROL: the same predicate over NAMED_TEST_DRIVER finds importers, none of them production.\nMeasured production importer: daemon-store-foundation-composition.ts:14.\nGATES, run on the delivered tree:\n(A) The verification command gives `Test Files 1 passed (1)` and `Tests 10 passed (10)`, exit 0.\n(B) `pnpm test` (root lane, under the full-suite-gate lease) gives `Test Files 1 failed | 467 passed | 1 skipped (469)` and `Tests 1 failed | 10733 passed | 52 skipped (10786)`. The one red is foreign: tests/e2e/foundation/j3-crash-recovery.e2e.test.ts:317, a killed PID still alive under load. That file was untouched since 2026-09-01 and does not reference this file. Run alone it gives `Tests 4 passed (4)`. Its intersection with this row's owned path is empty. The root lane covers no apps/** test; the app suites were not re-run because no production byte changed.\n(C) `pnpm typecheck` exit 0. A hand tsc strict run over the changed file also exits 0 (positive control TS2322).\n(D) In-memory drills, SHA256 unchanged before and after:\n- M1 (drop the loader.ts entry): refusal arm reds naming it.\n- M2 (excuse a test-only script): the new arm reds naming it.\n- M3 (always-true predicate): the positive control reds.\n- M4 (.mjs entry): the skipped-set equality reds.\n(E) Epic-fin",
+  "commits": [
+    {
+      "sha": "5f236ee6eef674b79eee7a10ae48ecce5587dd73",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-19T06:51:27Z",
+      "paths": [
+        ".moe/tasks/task-e3490ca9264b4d8b80c13dd4b9245fd9.json",
+        "tests/integration/distribution/pack-artifact-sweep.test.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-19T07:01:27.681Z",
+      "treeId": "f906a3ba4f009e9c2427c93a371d61c2c0dfc744",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
     "tests/integration/distribution/pack-artifact-sweep.test.ts"
   ],
-  "completionSummary": "Census pin moved in tests/integration/distribution/pack-artifact-sweep.test.ts only (+36/-4, 154 lines). No production byte changed; TEST_VOCABULARY and isTestArtifact are untouched (git diff HEAD -- tools/packaging is empty).\n- PRODUCTION_EXCEPTIONS gains apps/daemon/src/node-spec-loader.{js,ts}, in alphabetical order. The roster comment now names both readers (node-spec listing + spec loader) and their .js bridges.\n- New arm \"every production exception has a production importer, which a test-only module never has\". It checks that each .ts/.js entry has a non-isTestArtifact importer: a relative specifier `/<basename>` followed by a quote. It also asserts the skipped set equals exactly the .rs entries. POSITIVE CONTROL: the same predicate over NAMED_TEST_DRIVER finds importers, none of them production.\nMeasured production importer: daemon-store-foundation-composition.ts:14.\nGATES, run on the delivered tree:\n(A) The verification command gives `Test Files 1 passed (1)` and `Tests 10 passed (10)`, exit 0.\n(B) `pnpm test` (root lane, under the full-suite-gate lease) gives `Test Files 1 failed | 467 passed | 1 skipped (469)` and `Tests 1 failed | 10733 passed | 52 skipped (10786)`. The one red is foreign: tests/e2e/foundation/j3-crash-recovery.e2e.test.ts:317, a killed PID still alive under load. That file was untouched since 2026-09-01 and does not reference this file. Run alone it gives `Tests 4 passed (4)`. Its intersection with this row's owned path is empty. The root lane covers no apps/** test; the app suites were not re-run because no production byte changed.\n(C) `pnpm typecheck` exit 0. A hand tsc strict run over the changed file also exits 0 (positive control TS2322).\n(D) In-memory drills, SHA256 unchanged before and after:\n- M1 (drop the loader.ts entry): refusal arm reds naming it.\n- M2 (excuse a test-only script): the new arm reds naming it.\n- M3 (always-true predicate): the positive control reds.\n- M4 (.mjs entry): the skipped-set equality reds.\n(E) Epic-fin"
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-952c612b@2026-09-19T06:51:27Z",
+    "at": "2026-09-19T07:01:27.681Z"
+  },
+  "completedAt": "2026-09-19T07:05:18.690Z",
+  "reviewCompletedAt": "2026-09-19T07:05:18.690Z",
+  "reviewSummary": "Reviewed completion commit 5f236ee6 (moe/work-2026-09-18, pushed), which carries the sweep test (+36/-4, 154 lines) and the task JSON. The tree blob equals the commit blob (af05371e).\nDoD1: re-ran `pnpm exec vitest run tests/integration/distribution/pack-artifact-sweep.test.ts`: `Test Files  1 passed (1)`, `Tests  10 passed (10)`, exit 0.\nDoD2: PRODUCTION_EXCEPTIONS gains node-spec-loader.{js,ts}. TEST_VOCABULARY is unchanged, and `git diff 7b4c6302 5f236ee6 -- tools/packaging` is empty.\nFix direction: the production importer is daemon-store-foundation-composition.ts:14 (tracked).\nIn-memory drills: out-of-tree vitest config, pre transform, anchor throws if absent, APPLIED printed once. No disk writes; the file SHA256 is unchanged.\n- D0, the pre-row blob: 1 failed | 8 passed (9). The refusal arm :76 receives exactly [loader.js, loader.ts], matching the recorded red.\n- D1, drop the loader.js entry: the refusal arm :81 reds naming only that path.\n- D2, hide the production importer: the new arm :127 reds, receiving [loader.js].\n- D3, predicate weakened to \"any importer\": the positive control :130 reds (`expected true to be false`).\nSuperset: `vitest run tests/integration/distribution tests/integration/release/release-version-surfaces.test.ts` (that census pins this file): 6 files, 557 tests passed, exit 0. A strict hand tsc of the file exits 0, and --listFiles includes it.\nRoot lane not re-run: the change is test-only and nothing imports the file. The worker's single foreign red (j3-crash-recovery:317, 4/4 alone) does not intersect the owned path. apps/** suites were not run because no production byte changed. The row is epic-final by position only; plan (E) scopes out the whole-epic regression."
 }
