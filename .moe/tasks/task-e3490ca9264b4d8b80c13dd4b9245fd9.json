@@ -15,7 +15,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Re-announce to wake a waiting architect: unclaimed for 27 minutes with both architects IDLE. This row is in epic-fbe4, architect-0f009933's own epic.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -23,5 +23,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-19T00:45:10.102Z",
-  "updatedAt": "2026-09-19T00:45:10.102Z"
+  "updatedAt": "2026-09-19T02:12:59.128Z"
 }

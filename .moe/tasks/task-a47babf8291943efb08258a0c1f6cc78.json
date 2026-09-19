@@ -106,7 +106,7 @@
     }
   ],
   "planRevision": 13,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -138,7 +138,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:14:31.019Z",
-  "updatedAt": "2026-09-19T02:02:09.891Z",
+  "updatedAt": "2026-09-19T02:15:50.125Z",
   "dependsOn": [
     "task-2c3f878ba94940428d34f204dc74de95",
     "task-78dea88bfd1f491b9a0b0c3f9c0519fe",
@@ -148,7 +148,9 @@
     "firstClaimAt": "2026-09-18T19:37:18.631Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-19T02:15:50.125Z",
+    "wallClockMs": 23911494
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -168,7 +170,8 @@
   },
   "planApprovedAt": "2026-09-18T19:39:57.880Z",
   "contextFetchedBy": [
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-19T01:25:56.128Z",
   "reviewStartedAt": "2026-09-19T02:02:09.889Z",
@@ -190,7 +193,63 @@
     "apps/daemon/src/orchestrator/node-publisher.test.ts",
     "apps/daemon/src/repository/publish-resolve-command.ts",
     "apps/daemon/src/daemon-command-async-entries.ts",
-    "apps/daemon/src/daemon-command-registry.test.ts"
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+    ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json",
+    ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json"
   ],
-  "completionSummary": "repository.publish_resolve is now served. CORRECTION (6D): the command cannot release the wrapper-owned hold (port.ts:100 CONTROLLER_MISMATCH, now pinned). So the command records ONE REFUSED receipt as a fact, and the OWNING publisher releases the hold as PUBLISH_RESOLVED, the repository.recover pattern.\n\nPRODUCTION\n- NEW publish-resolve-service.ts (+ .js bridge). It writes PUBLISH_RESOLVED_{NOT_TRANSMITTED|ABANDON}, whose detail carries the LATEST observation. It refuses with row 2's codes: DECISION_NOT_FOUND; NOT_UNKNOWN (a receipt already exists, there is no intent, or a concurrent receipt won); REMOTE_HOLDS_SHA. A failed write throws DurableStoreError.\n- publish-resolve-command.ts swaps the stub (+1 path, see step 5): fence unchanged, then 422 INPUT_INVALID@DAEMON_COMMAND_SEAM, then the service.\n- PUBLISH_RESOLVED is added to the port, legal only from PUBLISHING.\n- node-publisher.ts, still 249 lines, releases a resolved hold with no push, no observe and no second receipt.\n\nTESTS\nArms for DoD 1-4, each asserting the code and the layer:\n- a real persisted hold stays untouched on every service arm;\n- the port sweep visits the phase list (visited > 1);\n- release after resolve, and a delivery BUSY before it, ADMITTED after;\n- restart (claim a dead controller);\n- both window orders, each pushing exactly once. The deviation: WAITING, not UNKNOWN (M3);\n- 4 foreign codes never release;\n- DoD 3 in the registry is re-aimed, and a malformed-payload arm is added.\nnode-publisher-approved.test.ts is UNCHANGED.\n\nGATES\n- Scoped suite: 62/62 files, 1143 passed.\n- Full daemon suite: 766/766 files, 12650 passed | 22 skipped.\n- typecheck 19/19, test:security 12/12 (1009).\n- One FOREIGN root-lane red: pack-artifact-sweep, node-spec-loader. It is already fixed on main.\n- 13 in-memory mutants, all red (comment-5d12ed2f).\n\nREVIEW: comment-87c8360f. The NOT_TRANSMITTED guard is dormant against today's publisher, but a landed push re-pushed is a git no-op. A wrapper that is down releases "
+  "completionSummary": "repository.publish_resolve is now served. CORRECTION (6D): the command cannot release the wrapper-owned hold (port.ts:100 CONTROLLER_MISMATCH, now pinned). So the command records ONE REFUSED receipt as a fact, and the OWNING publisher releases the hold as PUBLISH_RESOLVED, the repository.recover pattern.\n\nPRODUCTION\n- NEW publish-resolve-service.ts (+ .js bridge). It writes PUBLISH_RESOLVED_{NOT_TRANSMITTED|ABANDON}, whose detail carries the LATEST observation. It refuses with row 2's codes: DECISION_NOT_FOUND; NOT_UNKNOWN (a receipt already exists, there is no intent, or a concurrent receipt won); REMOTE_HOLDS_SHA. A failed write throws DurableStoreError.\n- publish-resolve-command.ts swaps the stub (+1 path, see step 5): fence unchanged, then 422 INPUT_INVALID@DAEMON_COMMAND_SEAM, then the service.\n- PUBLISH_RESOLVED is added to the port, legal only from PUBLISHING.\n- node-publisher.ts, still 249 lines, releases a resolved hold with no push, no observe and no second receipt.\n\nTESTS\nArms for DoD 1-4, each asserting the code and the layer:\n- a real persisted hold stays untouched on every service arm;\n- the port sweep visits the phase list (visited > 1);\n- release after resolve, and a delivery BUSY before it, ADMITTED after;\n- restart (claim a dead controller);\n- both window orders, each pushing exactly once. The deviation: WAITING, not UNKNOWN (M3);\n- 4 foreign codes never release;\n- DoD 3 in the registry is re-aimed, and a malformed-payload arm is added.\nnode-publisher-approved.test.ts is UNCHANGED.\n\nGATES\n- Scoped suite: 62/62 files, 1143 passed.\n- Full daemon suite: 766/766 files, 12650 passed | 22 skipped.\n- typecheck 19/19, test:security 12/12 (1009).\n- One FOREIGN root-lane red: pack-artifact-sweep, node-spec-loader. It is already fixed on main.\n- 13 in-memory mutants, all red (comment-5d12ed2f).\n\nREVIEW: comment-87c8360f. The NOT_TRANSMITTED guard is dormant against today's publisher, but a landed push re-pushed is a git no-op. A wrapper that is down releases ",
+  "commits": [
+    {
+      "sha": "2e62bb544dd14b611864a2003755a8cd11efaf2c",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-952c612b@2026-09-19T01:25:42Z",
+      "paths": [
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+        ".moe/tasks/task-978669b6b2e84e299ded1632126d77f4.json",
+        ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/orchestrator/node-publisher.test.ts",
+        "apps/daemon/src/orchestrator/node-publisher.ts",
+        "apps/daemon/src/repository/publish-resolve-command.ts",
+        "apps/daemon/src/repository/publish-resolve-service.js",
+        "apps/daemon/src/repository/publish-resolve-service.test.ts",
+        "apps/daemon/src/repository/publish-resolve-service.ts",
+        "apps/daemon/src/repository/repository-execution-contracts.ts",
+        "apps/daemon/src/repository/repository-execution-port.test.ts",
+        "apps/daemon/src/repository/repository-execution-port.ts"
+      ],
+      "recordedBy": "worker-952c612b",
+      "recordedAt": "2026-09-19T02:02:29.179Z",
+      "treeId": "2f231116386bb9792949fd3185ffd9c006c3212e",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/repository/publish-resolve-service.js",
+    "apps/daemon/src/repository/publish-resolve-command.ts",
+    "apps/daemon/src/repository/publish-resolve-service.ts",
+    "apps/daemon/src/orchestrator/node-publisher.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/src/repository/publish-resolve-service.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/repository/repository-execution-port.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-952c612b@2026-09-19T01:25:42Z",
+    "at": "2026-09-19T02:02:29.179Z"
+  },
+  "completedAt": "2026-09-19T02:15:50.125Z",
+  "reviewCompletedAt": "2026-09-19T02:15:50.125Z",
+  "reviewSummary": "APPROVED. Reviewed completion commit 2e62bb54, pushed; product tree clean.\n\nGATES, re-run by me:\n- (A) scoped vitest: 62/62 files, 1143 passed | 15 skipped.\n- Full `pnpm --filter @moe/daemon test`, under lease: 766/766 files, 12650 passed | 22 skipped.\n- `pnpm typecheck`: 19 Done, 0 errors.\n- test:security: 12/12 files, 1009 tests.\n- Plain node loads the new bridges.\n\nDoD:\n1. The receipt is asserted by value, with the latest observation, and the card goes REFUSED. The publisher arms assert phase null and releases == [PUBLISH_RESOLVED].\n2. Every refusal has toStrictEqual on code and layer, and each asserts a real PUBLISHING reservation is unchanged.\n3. The port sweep asserts visited > 1 and TRANSITION_INVALID from every other phase; a foreign controller gets CONTROLLER_MISMATCH.\n4. The service has no git port, and the publisher's push count does not move. node-publisher-approved.test.ts diff: 0 lines.\n5. Gates quoted above.\n\nDRILLS: my own 6 in-memory mutants, 1 hit each, all red at the intended assertion; control 491 green.\n- N1, settled widening dropped: 5 red.\n- P1, port reason dropped: red.\n- P2, reason admitted from any phase: red.\n- S3, guard deleted: red.\n- S4, observation dropped from the detail: red.\n- C1, fence moved after the payload check: red (403 became 422).\nsha256sum -c OK.\n\nnode-publisher.ts is 249 lines. The design correction matches planningNotes. The dormant guard and the docs are deferred to epic-final (comment-87c8360f). The race is filed as task-978669b6."
 }
