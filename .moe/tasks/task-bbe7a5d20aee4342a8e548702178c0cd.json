@@ -122,7 +122,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T19:14:42.516Z",
-  "updatedAt": "2026-09-19T03:02:45.214Z",
+  "updatedAt": "2026-09-19T03:03:11.315Z",
   "dependsOn": [
     "task-a47babf8291943efb08258a0c1f6cc78",
     "task-52682237c158403b83fcf54b3b0bb2bd"
@@ -174,7 +174,8 @@
     "apps/control-room/src/v2/goals/goal-publish.test.tsx",
     "apps/control-room/src/v2/goals/publish-port.ts",
     ".moe/tasks/task-a47babf8291943efb08258a0c1f6cc78.json",
-    ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json"
+    ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json",
+    ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json"
   ],
   "completionSummary": "The repository.publish_resolve offer and the Publish card's control are done. This is task-21be6e90's DoD 2, operator half.\n\nDAEMON\n- affordance-planning-offers.ts adds the kind to the closed union and a lazy fact, unknownPublishDecision(goalId). It is asked only when the goal is landed, or CANCELLED (no landing walk). It mints repository.publish_resolve@publish-resolve:<decisionId>.\n- CANCELLED is offered only the resolve. The publisher ignores goal lifecycle, so a cancelled goal's UNKNOWN publish would otherwise strand the project's hold.\n- affordance-read.ts answers the fact with the card's own readRunGoalPublication: the decisionId only while the outcome is UNKNOWN. The publish ledger is still walked once per poll.\n\nCARD\n- goal-publish.tsx adds a resolveOffer matcher, keyed on the same target, and two choices beside the observation, shown only for UNKNOWN with an offer: NOT_TRANSMITTED and ABANDON.\n- A refusal shows its code @ layer and the detail. The buttons lock after a recorded resolve.\n- publish-port.ts resolve() spends the offer verbatim with exactly {decisionId, resolution}.\n\nDoD\n1. Real surface: the roster is PENDING plus exactly publish_resolve@publish-resolve:<card decisionId>. The target is not the goal or publish:<goal>. Two survival arms keep the goal intact: one at the offered target, one through the served entry.\n2. The set is exact in both directions: the offer is absent for PENDING, PUSHED and REFUSED (each state asserted). No step carries the kind, and compilerSteps is [].\n3. The fact is lazy: 6-goal arm, asked=[c,d,e], walked=[b,c,d].\n4. The card arms check the payload toStrictEqual, the refusal code@layer and the detail.\n5. Gates are in the verification.\n\nDRILLS (in memory, disk SHA unchanged): daemon T1 (publish:<goal>) is red at :1650 and T2 (goal id) at :1647; L1, L2 and F1 are also red. Card mutants C1 to C5 are all red.\n\nPLAN DEVIATION (step 1): the async entry never commits at the envelope target. A served-entry arm cannot see a retarge",
   "commits": [
@@ -200,6 +201,22 @@
       "treeId": "c656f42487c384ed3bcbd1f218c1327a60beaeb0",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "1ff70c9d2681e7880530f22b429f8c32b5ecf8c4",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T02:48:48Z",
+      "paths": [
+        ".moe/tasks/task-bbe7a5d20aee4342a8e548702178c0cd.json",
+        ".moe/tasks/task-e0e3d704cebe45a7b458bef5841d3bc5.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T03:03:11.315Z",
+      "treeId": "c9df177c113f94c32fab69bd7f0ab2e7e4462cb4",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -211,14 +228,12 @@
     "apps/daemon/src/http/affordance-planning-offers.test.ts",
     "apps/daemon/src/http/affordance-planning-offers.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/CLAUDE.md"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-69773bc1@2026-09-19T02:15:56Z",
-    "at": "2026-09-19T02:48:26.561Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-19T02:48:48Z",
+    "at": "2026-09-19T03:03:11.315Z"
   },
   "completedAt": "2026-09-19T03:02:45.214Z",
   "reviewCompletedAt": "2026-09-19T03:02:45.214Z",

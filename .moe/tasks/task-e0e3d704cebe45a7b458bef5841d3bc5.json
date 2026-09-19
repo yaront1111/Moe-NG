@@ -87,7 +87,7 @@
     }
   ],
   "planRevision": 11,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -107,16 +107,24 @@
       "author": "worker-952c612b",
       "content": "FOLLOW-UP (delivery-bias rail: recorded here, not as a new row). There is one detection this row gives up, as step-3 of the plan directed.\n\nThe deleted `{ delegable: 15, never: 15 }` pin (mcp-tool-allowlist.test.ts partition arm) was the only thing that caught a single MOVE of a kind between the two production lists, MCP_DELEGABLE_OPERATOR_KINDS and MCP_NEVER_DELEGATED_KINDS (mcp-tool-allowlist.ts). It never caught a swap, because one kind each way stays 15/15.\n\nWhat still holds:\n- The partition arm catches an unclassified or double-classified kind: classified == excluded, plus uniqueness.\n- registry.test's publish_resolve arm (`operatorDelegateMcpToolKinds()` not.toContain PUBLISH_RESOLVE_COMMAND_KIND) catches that one kind turning delegable.\n- For the other 29 excluded kinds, a NEVER -> DELEGABLE move is caught by nothing. That direction widens the owner's `moe mcp --as-operator` session.\n\nIf the epic-final hardening row wants the classification pinned, two cheap options:\n- (a) a DERIVED invariant with no hand list: every MCP_DELEGABLE kind has no `asyncHandler` in the composed registry. The production comment says delegable kinds are \"served by the synchronous registry\" and \"WHOLE in that one write\", so a move of any async-served kind (deployment.*, preview.start, release.decide, repository.bootstrap, product_contract.sync_env_example, repository.publish_resolve) reds by name.\n- (b) a hand census of the 15 delegable kinds. It would move only when the owner classifies a kind delegable.\n\nNot done here: (b) is a second hand list the plan's step-5(A) census rule forbids, and (a) is a new arm outside this row's scope.",
       "timestamp": "2026-09-19T02:38:34.649Z"
+    },
+    {
+      "id": "comment-c6395cdfc5e34859bbc38dca54fceb27",
+      "author": "qa-09357cdf",
+      "content": "QA FOLLOW-UP (delivery-bias rail: recorded here, not as a row; not blocking). Doc drift in an UNOWNED production file, measured at HEAD 1ff70c9d:\n- apps/daemon/src/daemon-command-payload-keys.ts:214-217 still says \"two suites transcribe that order by hand (`daemon-command-registry.test.ts`'s REGISTRATION_ORDER, `daemon-command-vocabulary.test.ts`'s ROWS). Inserting mid-table would rewrite both\". The comment below it, at ~:222, says \"two suites transcribe it by hand\".\n- Since 2835aabd, REGISTRATION_ORDER no longer exists (`git grep -n REGISTRATION_ORDER` finds only that comment). registry.test now pins `[...deps.registry.keys()]` toEqual `Object.keys(PAYLOAD_KEYS)`, and only vocabulary.test's ROWS transcribes the order by hand.\n- The append-don't-insert rule is still right, because ROWS is ordered. Only the \"two suites\" / REGISTRATION_ORDER wording is stale.\n- Fix: a two-line comment edit, for whichever row next touches daemon-command-payload-keys.ts (the next kind-publishing row appends there anyway).",
+      "timestamp": "2026-09-19T03:16:17.388Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:47:15.589Z",
-  "updatedAt": "2026-09-19T02:53:42.916Z",
+  "updatedAt": "2026-09-19T03:16:33.750Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:11:11.476Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-19T03:16:33.750Z",
+    "wallClockMs": 18322274
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -149,7 +157,8 @@
   },
   "planApprovedAt": "2026-09-18T22:15:10.434Z",
   "contextFetchedBy": [
-    "worker-952c612b"
+    "worker-952c612b",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-19T02:16:33.846Z",
   "declaredFiles": [
@@ -225,5 +234,8 @@
     "kind": "completion",
     "sessionId": "worker-952c612b@2026-09-19T02:16:14Z",
     "at": "2026-09-19T02:53:42.916Z"
-  }
+  },
+  "completedAt": "2026-09-19T03:16:33.750Z",
+  "reviewCompletedAt": "2026-09-19T03:16:33.750Z",
+  "reviewSummary": "qa-09357cdf reviewed 2835aabd (pushed, moe/work-2026-09-18). apps/daemon at HEAD 1ff70c9d is identical to it; owned paths clean. Test-only: 8 daemon tests plus one CLAUDE.md bullet (contested with task-21be6e90, but only this row's hunk).\nDoD1: own census, operator literals per file across 766 daemon tests. Whole sets only in registry.test (per-kind ROWS) and vocabulary.test (ROWS plus OPERATOR_ONLY). preview-start is the HUMAN_ONLY_STEPS census, a different fact. The rest are single-kind arms. Census: vocab.test:464, sorted toEqual both ways.\nDoD2: own in-memory drill (out-of-tree config, throwing anchors, hits-logged) with a different kind than the worker's. qualification.replan added to OPERATOR_PRINCIPAL_KINDS and NEVER_DELEGATED: the 8 files give 1 failed | 7 passed, Tests 1 failed | 773 passed. The only red is the census, '+ \"qualification.replan\"'. On the pre-row test blobs: 6 files / 8 tests red. Control: 8/8 files, 774 passed.\nDoD3: dropping goal.cancel reds the census with '- \"goal.cancel\"'.\nDoD4: pnpm typecheck exit 0, 19 Done, 0 'error TS'. Full pnpm --filter @moe/daemon test under the lease: Test Files 766 passed (766), Tests 12662 passed | 22 skipped, exit 0. The row paths hashed the same before and after. Drill files deleted and proven gone.\nNo derived arm compares production to itself. noUnusedLocals is on and typecheck is green.\nNon-blocking follow-ups:\n- comment-6a24fa8a: a single NEVER<->DELEGABLE move is now caught only for publish_resolve (the plan and DoD2 mandated the deletion).\n- comment-c6395cdf: stale REGISTRATION_ORDER comment at daemon-command-payload-keys.ts:214."
 }

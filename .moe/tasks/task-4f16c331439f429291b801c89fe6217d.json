@@ -1,0 +1,30 @@
+{
+  "id": "task-4f16c331439f429291b801c89fe6217d",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: the Publish card's Resolve control is refused 403 from the owner's paired browser, so a stuck UNKNOWN publish still has no exit the owner can reach",
+  "description": "Found by worker-952c612b on parent task-21be6e9055984413a651ce6ee331e2c8 (step 1, measured in step 2).\n\nTHE GAP. The owner's browser authenticates as a paired session: session-authenticator.ts:139 sets principal = sessionId, a durable HUMAN. repository.publish_resolve is operator-only and fences itself (publish-resolve-command.ts:39). It is NOT among the paired-human widenings at daemon-command-registry.ts:441-445, although its sibling repository.publish is. affordance-read.ts still offers it to every reader.\n\nTHE EFFECT. A Resolve click answers 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION with \"this command requires the configured operator principal\". This is pinned, with a production pairing mint, by the paired-browser dispatch in apps/daemon/src/repository/publish-resolve-journey.test.ts. No other surface reaches the operator principal either:\n- the moe CLI's KNOWN_COMMANDS has no resolve command;\n- `moe mcp --as-operator` classifies the kind MCP_NEVER_DELEGATED.\n\nTHE FIX needs an OWNER ruling. The candidate is to admit a paired durable HUMAN holding ADMIN, on the pattern of release.decide's releaseByPairedAdmin (release-decide-command.ts:77) or goal.cancel's pairedHumanKind, with MCP exclusion unchanged. The fix then flips the journey's paired-browser arm to ACCEPTED.",
+  "definitionOfDone": [
+    "An owner ruling on the widening is recorded on this row before any code changes.",
+    "If widened: a paired durable HUMAN holding ADMIN resolves an UNKNOWN publish through the production registry, and publish-resolve-journey.test.ts's paired-browser arm asserts ACCEPTED. A paired HUMAN without ADMIN, and an agent session, are still refused 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION, each asserted with its code, layer and detail. The kind stays in MCP_EXCLUDED_COMMAND_KINDS and MCP_NEVER_DELEGATED_KINDS."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "planRevision": 0,
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-21be6e9055984413a651ce6ee331e2c8"
+  ],
+  "priority": "HIGH",
+  "order": 1029.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-19T03:16:33.626Z",
+  "updatedAt": "2026-09-19T03:16:33.626Z"
+}
