@@ -109,7 +109,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T21:38:49.493Z",
-  "updatedAt": "2026-09-19T00:05:51.023Z",
+  "updatedAt": "2026-09-19T00:06:44.727Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T22:07:10.239Z",
     "plannedStepCount": 5,
@@ -310,6 +310,21 @@
       "treeId": "e42e7257651bf30a204616773ad0a4143d8b6f0b",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "b399000f81d43ff3c25390cbb2b75e0155d01264",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-18T23:52:36Z",
+      "paths": [
+        ".moe/tasks/task-b94b92d70a684d82b2ff71a9abae18cc.json"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T00:06:44.727Z",
+      "treeId": "f52ff8f7311c98ea3ecf3800e2321e33a7635a62",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -321,7 +336,8 @@
     "tests/e2e/control-room/release-approval.spec.ts",
     "tests/e2e/control-room/release-approval-live.spec.ts",
     "tests/e2e/control-room/live-proof-release.ts",
-    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json"
+    ".moe/tasks/task-2c3f878ba94940428d34f204dc74de95.json",
+    ".moe/tasks/task-b94b92d70a684d82b2ff71a9abae18cc.json"
   ],
   "touchedFiles": [
     "tests/e2e/control-room/release-approval.spec.ts",
@@ -336,9 +352,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-69773bc1@2026-09-18T23:44:42Z",
-    "at": "2026-09-18T23:52:24.359Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-09357cdf@2026-09-18T23:52:36Z",
+    "at": "2026-09-19T00:06:44.727Z"
   },
   "reviewStartedAt": "2026-09-18T23:51:47.330Z",
   "verification": {

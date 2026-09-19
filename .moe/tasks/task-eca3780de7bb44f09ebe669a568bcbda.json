@@ -100,7 +100,7 @@
     }
   ],
   "planRevision": 20,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -176,16 +176,24 @@
       "author": "worker-07e6de2a",
       "content": "FOLLOW-UP (comment, not a row; POSIX is outside the v0.1 scope freeze). On Linux, `ps time=` reports whole seconds, so a seat under ~50 ms of tree CPU per minute can read \"cpu unchanged\" for a whole observed window and be killed for silence. Windows CIM quanta (15.625 ms) do not have this rounding. No production change in this row.",
       "timestamp": "2026-09-18T22:26:09.788Z"
+    },
+    {
+      "id": "comment-78aeefcfb2b7429b90ee21840cacb289",
+      "author": "qa-09357cdf",
+      "content": "QA EVIDENCE (qa-09357cdf, 2026-09-19). Graded against comment-0c006e8a as amended by ceb591d0 (governor comment-73c3bbf3).\n\n1. DELIVERED BYTES. `git show 96c3b203` carried 8 of the 9 owned product paths. Its trailer reads `Moe-Contested: apps/daemon/CLAUDE.md (task-21be6e90)`. task-21be6e90 is WORKING but unassigned, has no commits, and every step is PENDING; its step-3 only plans a publisher-bullet edit. So at HEAD b399000f, CLAUDE.md :102/:107/:110 still claimed `CPU_ACTIVITY_FLOOR_MS` and \"grants no liveness (fail-closed) ... in the notice and the kill line\". Both claims are false against the delivered code.\n- The dirty diff was 1 hunk (+15/-11): the step-5 liveness bullet.\n- The path recipe residue was empty with the row vocabulary plus \"calibration\".\n- Nothing was staged, and the branch was confirmed as moe/work-2026-09-18 right before the commit.\n- QA committed it by explicit pathspec as 8c6490da (tree 69caa95d), pushed fast-forward b399000f..8c6490da, and recorded it with record_commit.\n\n2. GATES, re-run by QA:\n- Focused 4 files: `Test Files 4 passed (4)`, `Tests 97 passed | 1 skipped (98)`.\n- MOE_SEAT_PROBE_REAL=1 on seat-liveness.test.ts: `Tests 10 passed (10)`; \"probes the test runner's own pid on the real host\" ran in 337ms.\n- `pnpm --filter @moe/daemon test` under the full-suite-gate lease: `Test Files 765 passed (765)`, `Tests 12601 passed | 22 skipped (12623)`, 326s. Lease released.\n- `pnpm typecheck` exit 0 (apps/daemon typecheck: Done); `pnpm exec tsc -p tests/security/tsconfig.json` exit 0.\n\n3. IN-MEMORY DRILLS. The config was %TEMP%/qa-drill-eca3780d-qa-09357cdf.config.ts: enforce pre, count-checked anchors that throw when absent, one `[qa-drill] Mx transforming` line per run. It is now deleted (ls: No such file), and src is clean.\n- M1, both `lastUnobservedAt = at;` removed: 8 red. Unit: no-probe, fail/throw, mid-silence restart (:150), no-pid. Spawner: no-probe cap, fail-every-tick (:464), throw (:496), tick-6 (:516).\n- M2, `>= 250` in the label and activity branches: 3 red. Unit :77 at the +16ms tick; spawner :328 and :350.\n- M3, stillness `since` from lastActivityAt only: 4 red (3 unit arms plus spawner tick-6).\n- M4, sub-second label removed: 3 red (same arms as M2).\n- M5, Math.floor instead of ceil: 1 red, unit :77.\n\n4. CENSUS AT 8c6490da:\n- C1: only seat-liveness.ts:17 and the two unrelated hits.\n- C2: only runbook :1319.\n- C3: none.\n- `git grep CPU_ACTIVITY_FLOOR|cpuActivityFloor HEAD -- apps docs tests packages tools`: zero hits.\n- Consumers of the kill, notice and warn texts exist only in agent-spawner-quiet.test.ts.\n\n5. ADVERSARIAL:\n- An unobserved tick sets lastUnobservedAt = at, so silentMs = min(at - lastActivityAt, 0), which is never >= silenceMs. The kill line's since and silentMs share one anchor.\n- The cap line keeps the real last activity.\n- Residue, pre-existing and inside map 2(c): the first observed tick after seat start, or after a never-observed stretch, only takes the CPU baseline, so the first interval of a window has no CPU comparison.\n- The quiet notice shows \"1200000ms to silence kill\" while the probe is blind. The map pins this; it is follow-up (8) of comment-fb9a0da2.",
+      "timestamp": "2026-09-19T00:19:27.357Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T12:03:48.372Z",
-  "updatedAt": "2026-09-18T22:27:11.416Z",
+  "updatedAt": "2026-09-19T00:19:34.654Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:06:50.602Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-19T00:19:34.654Z",
+    "wallClockMs": 43964052
   },
   "stepsCompleted": [
     "step-1",
@@ -219,7 +227,8 @@
     "architect-aa92f84f",
     "architect-c7fb990e",
     "worker-07e6de2a",
-    "architect-0f009933"
+    "architect-0f009933",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-18T12:14:07.739Z",
   "blockedReason": null,
@@ -302,6 +311,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "8c6490dae9d6c4d072330efbe4f82775d7e772b1",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T00:07:15Z",
+      "paths": [
+        "apps/daemon/CLAUDE.md"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T00:18:55.707Z",
+      "treeId": "69caa95d94a9fca244c8c8bb0d859ef199d9e64e",
+      "status": "REVIEW",
+      "pushed": true,
+      "message": "QA self-land of the one owned path the completion commit 96c3b203 left out: apps/daemon/CLAUDE.md, held back as contested by task-21be6e90. That row has no commits and every step PENDING. The diff is one hunk, this row's step-5 liveness bullet, and the path recipe left no residue."
     }
   ],
   "filesModified": [
@@ -320,8 +345,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-07e6de2a@2026-09-18T22:02:28Z",
-    "at": "2026-09-18T22:27:11.416Z"
+    "sessionId": "qa-09357cdf@2026-09-19T00:07:15Z",
+    "at": "2026-09-19T00:18:55.707Z"
   },
   "priorBlockedReason": "STEP-2 FLOOR UNDECIDABLE on this host: per-interval CPU cannot tell hung from working. Production probe, shell:true cmd.exe root, descendants=1 every sample. Full lists: comment-a96f4b63e32d4f948a223dbabb6dcd4d.\nHUNG deltaMs/60s (10): 156.25, 281.25, 125, 250, 234.375, 187.5, 546.875, 218.75, 468.75, 218.75; max=546.875 (retry POST at minute 6).\nWORKING deltaMs/60s (10, live generating -p, no tool child): 1218.75, 468.75, 328.125, 687.5, 468.75, 328.125, 515.625, 312.5, 218.75, 437.5; min=218.75 median=453.125.\nRule: 1.5*max(hung)=820.3. Branch1 (820.3<=min working)? NO. Branch2 (821 below working median 453)? NO. Overlap is real, not a short sample: a generating -p seat had minutes at 219-328 inside the hung band, with 0 stdout (buffered until finish). Prior figures (hung max 328, working min 766) did not reproduce. Deciding which failure to accept (kill working lulls vs spare hung retries) is not this row's call.",
   "blockedOnTaskIds": null,
@@ -336,5 +361,8 @@
     "reportedAt": "2026-09-18T22:26:55.441Z",
     "source": "agent-reported"
   },
-  "completionSummary": "Unobserved ticks no longer count as silence; any CPU growth is activity; hung CPU-burning seats live to the 2h cap (human ruling comment-6d395077).\n\nProduction: lastUnobservedAt; silentMs = at - max(lastActivityAt, lastUnobservedAt); CPU_ACTIVITY_FLOOR_MS deleted; sub-second labels ceil to ms. Spawner warn: no silence is counted until the probe sees the tree; only the absolute cap can kill while blind.\n\nVerification (fresh): pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/seat-liveness.test.ts src/orchestrator/agent-spawner-quiet.test.ts src/orchestrator/seat-liveness-probe.test.ts src/orchestrator/agent-spawner.test.ts → Test Files 4 passed, Tests 97 passed | 1 skipped (98). Real host MOE_SEAT_PROBE_REAL=1: Tests 10 passed (0 skipped). Full daemon under full-suite-gate: Test Files 765 passed, Tests 12594 passed | 22 skipped. typecheck 0; security tsc 0. Lines: liveness 182, probe 215, spawner 551, contract 448, wrapper-main 552.\n\nM1/M2 in-memory drills red as specified; temp config deleted. Adversarial: comment-2402009f. POSIX ps-seconds follow-up: comment-320419d8. Stream-json hang signal: task-815f803d. Grade against comment-0c006e8a/ceb591d0, not the withdrawn tracker DoD text."
+  "completionSummary": "Unobserved ticks no longer count as silence; any CPU growth is activity; hung CPU-burning seats live to the 2h cap (human ruling comment-6d395077).\n\nProduction: lastUnobservedAt; silentMs = at - max(lastActivityAt, lastUnobservedAt); CPU_ACTIVITY_FLOOR_MS deleted; sub-second labels ceil to ms. Spawner warn: no silence is counted until the probe sees the tree; only the absolute cap can kill while blind.\n\nVerification (fresh): pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/seat-liveness.test.ts src/orchestrator/agent-spawner-quiet.test.ts src/orchestrator/seat-liveness-probe.test.ts src/orchestrator/agent-spawner.test.ts → Test Files 4 passed, Tests 97 passed | 1 skipped (98). Real host MOE_SEAT_PROBE_REAL=1: Tests 10 passed (0 skipped). Full daemon under full-suite-gate: Test Files 765 passed, Tests 12594 passed | 22 skipped. typecheck 0; security tsc 0. Lines: liveness 182, probe 215, spawner 551, contract 448, wrapper-main 552.\n\nM1/M2 in-memory drills red as specified; temp config deleted. Adversarial: comment-2402009f. POSIX ps-seconds follow-up: comment-320419d8. Stream-json hang signal: task-815f803d. Grade against comment-0c006e8a/ceb591d0, not the withdrawn tracker DoD text.",
+  "completedAt": "2026-09-19T00:19:34.654Z",
+  "reviewCompletedAt": "2026-09-19T00:19:34.654Z",
+  "reviewSummary": "APPROVED against comment-0c006e8a as amended by ceb591d0 (governor comment-73c3bbf3). Full evidence: comment-78aeefcf.\n\nDelivered bytes: 96c3b203 carried 8 of the 9 owned paths. The wrapper held back apps/daemon/CLAUDE.md as contested by task-21be6e90, which has no commits and every step PENDING. So HEAD still claimed CPU_ACTIVITY_FLOOR_MS and a fail-closed silence kill. The dirty diff was one hunk, this row's step-5 bullet, and the path recipe left no residue. QA self-landed it by explicit pathspec as 8c6490da (fast-forward push; record_commit ok).\n\nGates re-run by QA:\n- Focused 4 files: `Test Files 4 passed (4)`, `Tests 97 passed | 1 skipped (98)`.\n- MOE_SEAT_PROBE_REAL=1: `Tests 10 passed (10)`, real-host arm ran.\n- Full daemon suite under full-suite-gate: `Test Files 765 passed (765)`, `Tests 12601 passed | 22 skipped`.\n- pnpm typecheck 0; security tsc 0.\n\nIn-memory drills, each red on exactly its targeted arms:\n- M1, lastUnobservedAt writes dropped: 8 red.\n- M2, 250 floor restored: 3 red.\n- M3, `since` anchor: 4 red.\n- M4, toFixed label: 3 red.\n- M5, floor instead of ceil: 1 red.\nThe drill config is deleted.\n\nCensus at 8c6490da: only the allowed hits remain; CPU_ACTIVITY_FLOOR has zero hits.\n\nLines: liveness 182, probe 215, spawner 551, contract 448, wrapper-main 552.\n\nDoD 1-5 are met. An unobserved tick gives silentMs <= 0, so it can never kill; unit and spawner texts are pinned by value; the real-host arm is observed.\n\nFollow-ups: task-815f803d, comment-320419d8, and the notice countdown while the probe is blind."
 }
