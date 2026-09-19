@@ -151,7 +151,7 @@
     }
   ],
   "planRevision": 18,
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -185,16 +185,24 @@
       "author": "worker-07e6de2a",
       "content": "Follow-up (governor/owner, not this row): this epic is past the advisory ceiling of 40 non-archived rows (plan cited 63). That is an epic re-slice signal, not work for this release-head-is-base row.",
       "timestamp": "2026-09-19T01:34:14.411Z"
+    },
+    {
+      "id": "comment-072452b097c64de181a1893f5c189164",
+      "author": "qa-09357cdf",
+      "content": "QA follow-ups (qa-09357cdf). Test-strength gaps only; the delivered code is correct by reading. Filed as comments under the DELIVERY BIAS rail, not as a reject or new rows.\n\n1. BOUND BUT UNMEASURED REMOTE IS UNPINNED (release-read.test.ts). The arm \"omits remoteDefaultBranch rather than sending null when the default is unmeasured\" binds NO remote, so `remoteDefaultOf` returns at `remote === null` and never reaches `readRemoteDefaultBranch`. In-memory mutant D6 (release-evidence-read.ts: `return typeof branch === \"string\" ? branch : undefined;` -> `return (branch ?? \"\") as string;`) survived all 4 owned daemon files (48/48 green). In production that mutant would send `remoteDefaultBranch: \"\"` for every project that has a bound remote and no measurement yet, which is UnAI before its first fresh publish after task-baefab32. The card decoder would then answer RELEASE_RESPONSE_INVALID. Cheap fix: one arm that calls bindRemote() without recordRemoteDefaultBranch and asserts not.toHaveProperty(\"remoteDefaultBranch\").\n\n2. CASE-SENSITIVITY IS UNPINNED (release-decide-service.test.ts). Mutant D10 (`head === base` -> `head.toLowerCase() === base.toLowerCase()`) survived. The step-3 text says to compare case-sensitively, as git does, and the code does. A regression to case-insensitive would falsely refuse a real `Master` -> `master` PR. Cheap fix: an arm where head `Master` and base `master` reach the PR port.\n\nEvery other mutant went red at its intended arm: daemon D1-D5, D7-D9 and control-room C1-C7 (details in the approve summary). The config lived in %TEMP% and was applied in memory; no repo bytes were mutated.",
+      "timestamp": "2026-09-19T01:47:57.500Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:08:47.382Z",
-  "updatedAt": "2026-09-19T01:34:50.288Z",
+  "updatedAt": "2026-09-19T01:48:15.866Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:09:47.523Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-19T01:48:15.866Z",
+    "wallClockMs": 49108343
   },
   "dependsOn": [
     "task-baefab32f1264daf8f173efc0c1fe2c0",
@@ -219,7 +227,8 @@
   },
   "planApprovedAt": "2026-09-18T13:00:46.158Z",
   "contextFetchedBy": [
-    "worker-07e6de2a"
+    "worker-07e6de2a",
+    "qa-09357cdf"
   ],
   "workStartedAt": "2026-09-19T00:37:56.717Z",
   "blockedReason": null,
@@ -242,6 +251,56 @@
       "treeId": "48f2afcabf9ec5710f2618f79faa141184a87e29",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "0d54df3c86a6c01dfc23b2c419edf8e698379b7c",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-07e6de2a@2026-09-19T01:07:48Z",
+      "paths": [
+        ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+        ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json",
+        "apps/control-room/src/live/live-release.test.ts",
+        "apps/control-room/src/live/live-release.ts",
+        "apps/control-room/src/v2/goals/goal-release.test.tsx",
+        "apps/control-room/src/v2/goals/goal-release.tsx",
+        "apps/control-room/src/v2/goals/live-goal-release.test.tsx",
+        "apps/daemon/src/http/release-evidence-read.ts",
+        "apps/daemon/src/http/release-read.test.ts",
+        "apps/daemon/src/release/release-decide-contracts.test.ts",
+        "apps/daemon/src/release/release-decide-contracts.ts",
+        "apps/daemon/src/release/release-decide-service.test.ts",
+        "apps/daemon/src/release/release-decide-service.ts",
+        "apps/daemon/src/release/release-receipt-ledger.test.ts"
+      ],
+      "recordedBy": "worker-07e6de2a",
+      "recordedAt": "2026-09-19T01:35:07.898Z",
+      "treeId": "64f8f57b971d66326bface38817d122ef92ca046",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/CLAUDE.md",
+          "taskId": "task-21be6e9055984413a651ce6ee331e2c8"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "cf468a86dc2d054a85777d1b7a0058886bebe908",
+      "ref": "refs/heads/moe/work-2026-09-18",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-09357cdf@2026-09-19T01:35:15Z",
+      "paths": [
+        "apps/daemon/CLAUDE.md"
+      ],
+      "recordedBy": "qa-09357cdf",
+      "recordedAt": "2026-09-19T01:47:43.129Z",
+      "treeId": "af916168b07a44293b317dfba0841205a2076465",
+      "status": "REVIEW",
+      "pushed": true,
+      "message": "docs(task-4ba1e00a): land the trunk-workspace release bullet in apps/daemon/CLAUDE.md that completion 0d54df3c left out (contested by task-21be6e90, which has no commits)"
     }
   ],
   "filesModified": [
@@ -257,14 +316,16 @@
     "apps/control-room/src/v2/goals/goal-release.tsx",
     "apps/control-room/src/v2/goals/live-goal-release.test.tsx",
     "apps/control-room/src/v2/goals/goal-release.test.tsx",
-    "apps/daemon/CLAUDE.md"
+    "apps/daemon/CLAUDE.md",
+    ".moe/tasks/task-4ba1e00a3aa64a83a1b883566377e3ab.json",
+    ".moe/tasks/task-52682237c158403b83fcf54b3b0bb2bd.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-07e6de2a@2026-09-19T00:37:16Z",
-    "at": "2026-09-19T00:43:23.543Z"
+    "kind": "completion",
+    "sessionId": "qa-09357cdf@2026-09-19T01:35:15Z",
+    "at": "2026-09-19T01:47:43.129Z"
   },
   "priorBlockedReason": "Step 1 census STOP — unnamed pin + false plan premise. No product files edited. Prerequisites baefab32 and 04160615 are DONE/merged with the expected contracts; that is not the block.\n\n1. UNNAMED PIN (step 1 stop rule: if a pin appears outside release-decide-contracts.test.ts, stop rather than take the path). apps/daemon/src/release/release-receipt-ledger.test.ts:67 `expect(RELEASE_DECIDE_CODES.length).toBe(3)` then writes a REFUSED receipt per code. Adding RELEASE_HEAD_IS_BASE reds this file. It is in no step's affectedFiles. Unique plan paths are already 10; adding it is 11 and submit_plan hard-rejects past 10. Split or swap; do not append. Comment comment-28a325e7 has the full census.\n\n2. Amend named-file step text so the worker is not graded as drift: contracts.test.ts:76 `expect(checked).toBe(3)` (step 2 missed it); service.test.ts:483-486 exact Object.keys list + toHaveLength(3) (step 3 owns the file).\n\n3. PLAN PREMISE FALSE: live-release.ts:149 evidenceOf uses effectRecord with an exact 8-key list (live-effect-read.ts:8-13 requires ownKeys.length === keys.length). Serving remoteDefaultBranch when measured would make the card RELEASE_RESPONSE_INVALID. Planning notes said there was no exact-key decoder. File is already in step 4; amend that step to accept 8-or-9 keys and omit the field when unmeasured. Decoder arms can stay in already-named tests.",
   "blockedOnTaskIds": null,
@@ -276,5 +337,8 @@
     "reportedAt": "2026-09-19T01:34:50.286Z",
     "source": "agent-reported"
   },
-  "completionSummary": "OPTION A: when workspace branch is the remote default (or unmeasured), publish pushes moe/release/<goalId>, never that default. Release opens the PR from that head into the measured default. RELEASE_HEAD_IS_BASE @ DAEMON_PREREQUISITE (exact ===, before gh) when they still coincide — the migration path for pre-task-04160615 master receipts; detail names both branches and says re-publish. Card derives base from remoteDefaultBranch until the operator edits; empty + one line when unmeasured; no useState(\"main\"). Decoder accepts 8 or 9 keys; the ninth is omitted (not null) when unmeasured.\n\nGates: control-room Test Files 195 passed, Tests 2604 passed. Daemon full Test Files 765 passed, Tests 12633 passed | 22 skipped. typecheck exit 0. Parallel A-leg 1 fail was runtime-metadata-excludes.test.ts 5s timeout (not owned); alone 16 passed. Owned src/release+release-read: 16 files, 221 tests passed.\n\nAdversarial: case/slash/refs/heads prefix bypasses to gh (not UnAI). Auto-decide uses the same handler. Rebind without remeasure omits the key. Null 9th key is RELEASE_RESPONSE_INVALID."
+  "completionSummary": "OPTION A: when workspace branch is the remote default (or unmeasured), publish pushes moe/release/<goalId>, never that default. Release opens the PR from that head into the measured default. RELEASE_HEAD_IS_BASE @ DAEMON_PREREQUISITE (exact ===, before gh) when they still coincide — the migration path for pre-task-04160615 master receipts; detail names both branches and says re-publish. Card derives base from remoteDefaultBranch until the operator edits; empty + one line when unmeasured; no useState(\"main\"). Decoder accepts 8 or 9 keys; the ninth is omitted (not null) when unmeasured.\n\nGates: control-room Test Files 195 passed, Tests 2604 passed. Daemon full Test Files 765 passed, Tests 12633 passed | 22 skipped. typecheck exit 0. Parallel A-leg 1 fail was runtime-metadata-excludes.test.ts 5s timeout (not owned); alone 16 passed. Owned src/release+release-read: 16 files, 221 tests passed.\n\nAdversarial: case/slash/refs/heads prefix bypasses to gh (not UnAI). Auto-decide uses the same handler. Rebind without remeasure omits the key. Null 9th key is RELEASE_RESPONSE_INVALID.",
+  "completedAt": "2026-09-19T01:48:15.866Z",
+  "reviewCompletedAt": "2026-09-19T01:48:15.866Z",
+  "reviewSummary": "APPROVED, OPTION A. BYTES: completion 0d54df3c carried 12 of 13 owned paths. CLAUDE.md (DoD5) was held back as contested by task-21be6e90 (0 commits); its diff was only this row's bullet with no recipe residue, so QA SELF-LANDED it as cf468a86 (pushed ff, record_commit ok). At HEAD cf468a86 all owned paths are clean.\nDoD1: service.ts:211 guard (head===base, after pushedBranchOf, before prPort.open) throws RELEASE_HEAD_IS_BASE @ DAEMON_PREREQUISITE, naming both branches and saying re-publish. Arms assert code, layer, names and 0 PR requests. Migration path is real: a re-publish is a new decision the publisher pushes, and pushedBranchOf takes the last PUSHED receipt. Auto-decide uses the same handler.\nDoD2: card base derives from remoteDefaultBranch until the operator edits it; unmeasured means an empty field, the base-unmeasured line and Approve off. `git grep 'useState(\"main\")' HEAD` exits 1. The daemon omits the key when unmeasured; the decoder accepts 8 or 9 keys.\nDoD3: OPTION A arm uses real git plus production measure, reader and push: moe/release/<goal> pushed, master unmoved, PR head moe/release/<goal> -> base master.\nDoD4, QA re-run: (A) release+repository+release-read: Files 73 passed (73), Tests 843 passed | 15 skipped. Control-room: Files 195 passed (195), Tests 2604 passed. Full daemon: Files 1 failed | 765 passed (766). The red, repository-execution-port.test.ts, is peer in-flight dirt (task-21be6e90 publish-resolve); it passes 18/18 alone and this row touches none of its paths. typecheck: exit 0, 19/19.\nDRILLS, in memory (NONE controls 48/48 and 28/28 green): daemon D1-D5 and D7-D9 red; control-room C1-C7 red (trap, \"main\" fallback, overwrite, unmeasured line, decoder x2, detail). D6 (bound but unmeasured remote sends \"\") and D10 (case-insensitive guard) survive: test gaps, not defects, in comment-072452b0."
 }
