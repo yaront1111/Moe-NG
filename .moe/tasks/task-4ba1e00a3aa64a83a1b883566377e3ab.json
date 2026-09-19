@@ -15,8 +15,11 @@
     {
       "stepId": "step-1",
       "description": "CONFIRM BOTH PREREQUISITES LANDED WITH THE CONTRACTS THIS ROW CONSUMES, and census the shapes it changes. (a) Read task-baefab32 and task-04160615's completionSummaries via get_context.epicSiblings. Grep `readRemoteDefaultBranch` in apps/daemon/src/repository/ and confirm its signature is `(store, projectId, remoteUrl): string | null`; confirm a trunk workspace now publishes to `moe/release/<goalId>` (task-04160615's arms). If either contract differs, stop and report — do not guess around it. (b) CENSUS `ReleaseEvidenceView` whole-tree: `git grep -n \"ReleaseEvidenceView\" -- apps packages tests`, listing every literal construction. The plan adds an OPTIONAL field so these stay valid — confirm none uses a pattern an optional field would break (a spread checked with `toEqual` against a full object literal, say). (c) CENSUS the refusal map's consumers: `git grep -n \"RELEASE_DECIDE_CODES\\|RELEASE_DECIDE_CODE_LAYER_MAP\" -- apps packages tests`. Planning found every pin inside release-decide-contracts.test.ts; if a pin appears in any other file, stop and report rather than taking an unnamed path.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Census complete. STOP: unnamed pin outside the plan. No product files edited.\n\n(a) PREREQUISITES LANDED (get_context.epicSiblings, not HEAD greps).\n- task-baefab32 DONE landed=true merged=true. completionSummary: additive RepositoryRemoteDefaultMeasured; readRemoteDefaultBranch(store, projectId, remoteUrl): string | null. Disk: remote-default-branch.ts:105 matches that signature; null when never measured / other remoteUrl / malformed.\n- task-04160615 DONE landed=true merged=true. completionSummary: publish to moe/release/<goalId> when recorded default is UNKNOWN or EQUALS workspace branch (case-sensitive). Disk: publication-candidate.ts:17-19 releaseBranch returns moe/release/${goalId} unless target undefined or (default !== null && default !== workspaceBranch). git-publication-native.test.ts / publication-approval.test.ts pin that branch.\n- dependsOnUnmet=[]. Contracts match the plan. Do not guess around them.\n\n(b) ReleaseEvidenceView constructions (git grep + ancestryMeasured shape, not only the type name).\nLiteral constructions (all omit any extra field; optional would keep them valid under exactOptionalPropertyTypes; none toEqual a full evidence object):\n- live-release.ts:66 interface + :149 evidenceOf\n- live-release.test.ts:28 presentBody\n- goal-release.tsx / goal-release.test.tsx:81 (through mapReleaseAnswer)\n- live-goal-release.tsx / live-goal-release.test.tsx:103 presentBody (8 keys)\n- product-workspace-state.test.tsx:14\n- product-model-adapter.test.ts:82,91\n- product-artifact.test.tsx:17, product-artifact-history.test.ts:18\n- live-product-workspace.test.tsx:40, live-product-workspace-lifetime.test.tsx:19\n- fixture-product-data.ts:62\n- needs-you-model.test.ts:383\nPLAN PREMISE FALSE: planningNotes said live-release.ts is NOT decoded with an exact key set. evidenceOf at live-release.ts:149 calls effectRecord(value, [\"ancestryMeasured\",\"criteria\",\"goalId\",\"goalTitle\",\"preview\",\"receipt\",\"reviewRounds\",\"sha\"]) and effectRecord (live-effect-read.ts:8-13) requires ownKeys.length === keys.length — extra keys REJECT the whole PRESENT body as RELEASE_RESPONSE_INVALID. Serving remoteDefaultBranch when measured without also teaching evidenceOf 8-or-9 keys would make the card unreadable. File is already in step 4; the step TEXT only says add an optional interface field. Architect must amend step 4 to update the decoder (try 9-key then 8-key). Decoder tests can live in named files (release-read.test.ts / live-goal-release.test.tsx); live-release.test.ts 8-key bodies stay valid if 8-key still decodes.\n\n(c) Refusal-map consumers (git grep RELEASE_DECIDE_CODES|RELEASE_DECIDE_CODE_LAYER_MAP).\nNAMED (plan already owns):\n- release-decide-contracts.test.ts:55 exact list, :63 toHaveLength(3), :76 expect(checked).toBe(3) — step 2 missed :76; same file, bump to 4.\n- release-decide-service.test.ts:483-486 exact Object.keys list + toHaveLength(3) — step 3 owns this file; must update those pins (step 3 text does not mention them).\nUNNAMED — STOP per this step:\n- apps/daemon/src/release/release-receipt-ledger.test.ts:67 expect(RELEASE_DECIDE_CODES.length).toBe(3) then iterates every code into a REFUSED receipt. Adding RELEASE_HEAD_IS_BASE reds this file. NOT in any step affectedFiles.\nAlso uses the roster without freezing count: release-receipt-contracts.ts:153 membership include (auto-admits a new code; no edit).\nNo packages/** copy of the map.\n\nFile-cap: unique affectedFiles across steps is already 10. Adding the ledger test = 11, and submit_plan hard-rejects past 10. Architect must split or swap, not just append.\n\nPeer dirt (not touched): apps/daemon/CLAUDE.md (this row's step 6 path — already dirty), apps/daemon/src/orchestrator/{agent-spawn*,seat-liveness*,seat-output-tail*,agent-wrapper-main.ts}, docs/agent-stack-runbook.md, plus .moe/*.\nNo amendments on any step (activeAmendmentId null).",
+      "startedAt": "2026-09-19T00:37:56.717Z",
+      "completedAt": "2026-09-19T00:42:42.691Z"
     },
     {
       "stepId": "step-2",
@@ -71,8 +74,8 @@
       "affectedFiles": []
     }
   ],
-  "planRevision": 1,
-  "status": "WORKING",
+  "planRevision": 3,
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -82,14 +85,22 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1012.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-28a325e7eb524420a85416727cc0d1a9",
+      "author": "worker-07e6de2a",
+      "content": "Step 1 census STOP (worker-07e6de2a). Prerequisites landed with the expected contracts (baefab32 + 04160615, both DONE/merged). Cannot start step 2.\n\nUNNAMED PIN (this step's stop rule): apps/daemon/src/release/release-receipt-ledger.test.ts:67 `expect(RELEASE_DECIDE_CODES.length).toBe(3)` then records a REFUSED receipt per code. Adding RELEASE_HEAD_IS_BASE reds that file. It is not in any step's affectedFiles. Unique plan paths are already 10; adding it is 11 and submit_plan hard-rejects past 10. Split or swap, do not append.\n\nAlso in NAMED files (amend the step text so the worker is not grading as drift):\n- release-decide-contracts.test.ts:76 `expect(checked).toBe(3)` (step 2 missed this; same file as the :63 pin).\n- release-decide-service.test.ts:483-486 exact Object.keys list + toHaveLength(3) (step 3 owns the file; text does not mention the pins).\n\nPLAN PREMISE FALSE on the card shape: live-release.ts:149 evidenceOf uses effectRecord with an exact 8-key list. live-effect-read.ts:8-13 requires ownKeys.length === keys.length, so a measured remoteDefaultBranch on the wire makes the whole PRESENT body RELEASE_RESPONSE_INVALID. Planning notes said there was no exact-key decoder. File is already in step 4; amend that step to teach evidenceOf 8-or-9 keys (omit when unmeasured). Decoder arms can stay in the already-named test files.\n\nNo product files were edited. Peer dirt includes apps/daemon/CLAUDE.md (this row's step 6 path).",
+      "timestamp": "2026-09-19T00:43:05.180Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-18T09:08:47.382Z",
-  "updatedAt": "2026-09-18T13:00:46.159Z",
+  "updatedAt": "2026-09-19T00:43:14.962Z",
   "metrics": {
     "firstClaimAt": "2026-09-18T12:09:47.523Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 1
   },
   "dependsOn": [
     "task-baefab32f1264daf8f173efc0c1fe2c0",
@@ -98,11 +109,21 @@
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-18T13:00:43.963Z",
   "planningNotes": {
     "codebaseInsights": "RE-MEASURED AT HEAD 2026-09-18. The OWNER CHOSE OPTION A (asked twice, confirmed after being told it is ~3 rows). Option A measured ~15+ files, so it is SPLIT in build order and this row is the FINAL of three: task-baefab32f1264daf8f173efc0c1fe2c0 measures and records a remote's default branch as an ADDITIVE event (exporting `readRemoteDefaultBranch(store, projectId, remoteUrl): string | null`); task-0416061566de49939e91bbd6351be79e makes publish push `moe/release/<goalId>` when the workspace branch is the recorded default or the default is unknown. dependsOn on THIS row is [task-baefab32, task-04160615], and task-04160615 itself waits on task-baefab32.\n\n(1) THE DEFECT CHAIN (source reads). publication-candidate.ts:21 takes the workspace's `symbolic-ref HEAD` as the publish branch; git-publication-port.ts:66 pushes `${sha}:refs/heads/${approval.branch}`; release-decide-service.ts:85-108 `pushedBranchOf` takes the last PUSHED receipt's branch as the PR head; goal-release.tsx:78 hard-codes `useState(\"main\")` as base. On UnAI the default is `master`: base `main` does not exist on the remote, and base `master` equals head.\n\n(2) THE REFUSAL VOCABULARY IS DAEMON-LOCAL, SO NO DIGEST ROTATES. `RELEASE_DECIDE_CODE_LAYER_MAP` lives only in apps/daemon/src/release/release-decide-contracts.ts (`git grep -n \"RELEASE_REMOTE_MISSING\\|RELEASE_PR_FAILED\" -- 'packages/**'` returns nothing), documented 'Exactly three keys, closed', with `RELEASE_DECIDE_CODES` DERIVED from its keys. The epic's four-row / digest-mirror rail governs new command KINDS on the shared runtime roster, not a code added to this daemon-local map.\n\n(3) THE PINS ON THAT MAP — all in ONE file, apps/daemon/src/release/release-decide-contracts.test.ts: per-code layer assertions at :44-46; the EXACT list `expect(RELEASE_DECIDE_CODES).toEqual([...])` at :55; bidirectional set equality at :60-61; a HARD-CODED COUNT `toHaveLength(3)` at :63; an iteration at :69. Control-room tests (offer-wire.test.ts:56-58, live-goal-release.test.tsx:230) use literal codes and hold no copy of the map.\n\n(4) THE LAYER CONSTANT. :45 asserts `RELEASE_EVIDENCE_INCOMPLETE` maps to `GOAL_PREREQUISITE_LAYER`, a declared constant whose value is \"DAEMON_PREREQUISITE\". A bare layer literal at a refusal site is known to red the TASK-LV security census arms; use the declared constant.\n\n(5) THE CARD'S DATA PATH. `GoalRelease({ evidence, frame, goalId, port })` (goal-release.tsx:77) receives `evidence: ReleaseEvidenceView` from `LiveGoalRelease` (live-goal-release.tsx:95/:102), which reads apps/daemon/src/http/release-evidence-read.ts. That module's tests live in apps/daemon/src/http/release-read.test.ts (there is NO release-evidence-read.test.ts). `ReleaseEvidenceView` is declared at apps/control-room/src/live/live-release.ts:66 and is NOT decoded with an exact key set (no exactDataRecord / Object.keys / KEYS check in that file), so adding a field cannot red a strict client decoder. Literal fixtures DO construct it (e.g. apps/control-room/src/v2/workspace/product-workspace-state.test.tsx:14), and tsconfig.base sets `exactOptionalPropertyTypes: true`.\n\n(6) THE REACT TRAP. `useState(\"main\")` runs its initializer ONCE. Evidence may arrive AFTER first render, so `useState(evidence?.remoteDefaultBranch ?? \"\")` would capture the pre-load value and never update. The default must re-derive until the operator edits the field.\n\n(7) WHY DoD 1 IS NOT MERELY A THEORETICAL GUARD. Goals UnAI published BEFORE task-04160615 hold PUSHED receipts whose branch is `master`. Once the card defaults base to the measured default (`master`), releasing one of those goals gives head == base. The guard turns that from an opaque `gh` stderr dump into a named refusal that tells the operator to re-publish — which, under task-04160615's rule, now targets `moe/release/<goalId>`. That is the migration path for the owner's in-flight goals."
   },
-  "planApprovedAt": "2026-09-18T13:00:46.158Z"
+  "planApprovedAt": "2026-09-18T13:00:46.158Z",
+  "contextFetchedBy": [
+    "worker-07e6de2a"
+  ],
+  "workStartedAt": "2026-09-19T00:37:56.717Z",
+  "blockedReason": "Step 1 census STOP — unnamed pin + false plan premise. No product files edited. Prerequisites baefab32 and 04160615 are DONE/merged with the expected contracts; that is not the block.\n\n1. UNNAMED PIN (step 1 stop rule: if a pin appears outside release-decide-contracts.test.ts, stop rather than take the path). apps/daemon/src/release/release-receipt-ledger.test.ts:67 `expect(RELEASE_DECIDE_CODES.length).toBe(3)` then writes a REFUSED receipt per code. Adding RELEASE_HEAD_IS_BASE reds this file. It is in no step's affectedFiles. Unique plan paths are already 10; adding it is 11 and submit_plan hard-rejects past 10. Split or swap; do not append. Comment comment-28a325e7 has the full census.\n\n2. Amend named-file step text so the worker is not graded as drift: contracts.test.ts:76 `expect(checked).toBe(3)` (step 2 missed it); service.test.ts:483-486 exact Object.keys list + toHaveLength(3) (step 3 owns the file).\n\n3. PLAN PREMISE FALSE: live-release.ts:149 evidenceOf uses effectRecord with an exact 8-key list (live-effect-read.ts:8-13 requires ownKeys.length === keys.length). Serving remoteDefaultBranch when measured would make the card RELEASE_RESPONSE_INVALID. Planning notes said there was no exact-key decoder. File is already in step 4; amend that step to accept 8-or-9 keys and omit the field when unmeasured. Decoder arms can stay in already-named tests.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-19T00:43:14.962Z"
 }
